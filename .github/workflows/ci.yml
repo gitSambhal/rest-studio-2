@@ -54,26 +54,21 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: RestStudio-Linux-Binaries
-          path: |
-            dist/reststudio/RestStudio-Linux-x64
-            dist/reststudio/RestStudio-Linux-ARM64
-            dist/reststudio/RestStudio-Linux-ARMhf
+          path: dist/reststudio/RestStudio-Linux-*
+          if-no-files-found: ignore
 
       - name: Upload macOS Binaries
         if: matrix.name == 'macos'
         uses: actions/upload-artifact@v4
         with:
           name: RestStudio-macOS-Binaries
-          path: |
-            dist/reststudio/RestStudio-Mac-ARM64.zip
-            dist/reststudio/RestStudio-Mac-x64.zip
-            dist/reststudio/RestStudio-Mac-Universal.zip
+          path: dist/reststudio/RestStudio-Mac-*
+          if-no-files-found: ignore
 
       - name: Upload Windows Binaries
         if: matrix.name == 'windows'
         uses: actions/upload-artifact@v4
         with:
           name: RestStudio-Windows-Binaries
-          path: |
-            dist/reststudio/RestStudio-Windows-x64.exe
-            dist/reststudio/RestStudio-Windows-x64.zip
+          path: dist/reststudio/RestStudio-Windows-*
+          if-no-files-found: ignore
