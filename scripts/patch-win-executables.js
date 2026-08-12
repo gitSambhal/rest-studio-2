@@ -9,6 +9,7 @@ import sevenZipBin from '7zip-bin';
  */
 function processWindowsExecutables(distDir) {
   const winExePath = path.join(distDir, 'reststudio-win_x64.exe');
+  const resourcesPath = path.join(distDir, 'resources.neu');
 
   if (!fs.existsSync(winExePath)) {
     console.warn('[Win Build] Windows binary reststudio-win_x64.exe missing.');
@@ -17,7 +18,21 @@ function processWindowsExecutables(distDir) {
 
   try {
     const finalWinExePath = path.join(distDir, 'RestStudio-Windows-x64.exe');
-    fs.copyFileSync(winExePath, finalWinExePath);
+
+    if (fs.existsSync(resourcesPath)) {
+      const exeBuf = fs.readFileSync(winExePath);
+      const resBuf = fs.readFileSync(resourcesPath);
+      const sizeBuf = Buffer.alloc(4);
+      sizeBuf.writeUInt32BE(resBuf.length, 0);
+      const magicBuf = Buffer.from('NEUR', 'ascii');
+
+      const combined = Buffer.concat([exeBuf, resBuf, sizeBuf, magicBuf]);
+      fs.writeFileSync(finalWinExePath, combined);
+      console.log(`[Win Build] Embedded resources.neu into Windows executable.`);
+    } else {
+      fs.copyFileSync(winExePath, finalWinExePath);
+    }
+
     const exeStats = fs.statSync(finalWinExePath);
     console.log(`[Win Build] Created standalone Windows executable with embedded resources (${(exeStats.size / (1024 * 1024)).toFixed(2)} MB): ${finalWinExePath}`);
 

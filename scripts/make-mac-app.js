@@ -171,25 +171,12 @@ if (fs.existsSync(binDir)) {
     fs.mkdirSync(macOSDir, { recursive: true });
     fs.mkdirSync(resourcesDir, { recursive: true });
 
-    // 1. Copy pristine native Neutralino binary to Contents/MacOS/RestStudio-bin
-    const binaryTarget = path.join(macOSDir, 'RestStudio-bin');
-    fs.copyFileSync(binaryPath, binaryTarget);
-    fs.chmodSync(binaryTarget, 0o755);
+    // 1. Copy pristine native Neutralino binary directly to Contents/MacOS/RestStudio as the primary executable
+    const executableTarget = path.join(macOSDir, 'RestStudio');
+    fs.copyFileSync(binaryPath, executableTarget);
+    fs.chmodSync(executableTarget, 0o755);
 
-    // 2. Create shell script launcher at Contents/MacOS/RestStudio
-    // Ensures current directory is always Contents/MacOS, passes --res-mode=bundle and --path="$DIR" to load resources.neu, and strips quarantine flags automatically
-    const launcherScript = `#!/bin/bash
-DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$DIR"
-chmod +x "$DIR/RestStudio-bin" 2>/dev/null
-xattr -dr com.apple.quarantine "$DIR/../.." 2>/dev/null
-exec "$DIR/RestStudio-bin" --res-mode=bundle --path="$DIR" "$@"
-`;
-    const launcherPath = path.join(macOSDir, 'RestStudio');
-    fs.writeFileSync(launcherPath, launcherScript, { mode: 0o755 });
-    fs.chmodSync(launcherPath, 0o755);
-
-    // 3. Copy resources.neu if present
+    // 2. Copy resources.neu if present directly into Contents/MacOS/ and Contents/Resources/
     const resNeuPaths = [
       path.join(distRestStudioDir, 'resources.neu'),
       path.resolve('resources.neu'),
@@ -209,15 +196,15 @@ exec "$DIR/RestStudio-bin" --res-mode=bundle --path="$DIR" "$@"
       console.warn(`[Mac App Bundler] WARNING: resources.neu NOT found in any search path for ${appName}!`);
     }
 
-    // 4. Copy icon
+    // 3. Copy icon
     if (fs.existsSync('public/icon.png')) {
       fs.copyFileSync('public/icon.png', path.join(resourcesDir, 'icon.png'));
     }
 
-    // 5. Create PkgInfo
+    // 4. Create PkgInfo
     fs.writeFileSync(path.join(contentsDir, 'PkgInfo'), 'APPL????');
 
-    // 6. Create Info.plist
+    // 5. Create Info.plist
     const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -262,28 +249,17 @@ exec "$DIR/RestStudio-bin" --res-mode=bundle --path="$DIR" "$@"
 
     console.log(`[Mac App Bundler] Created native macOS App bundle: ${appDir}`);
 
-    // 7. Create POSIX 0755 Zip Package
+    // 6. Create POSIX 0755 Zip Package
     const zipPath = path.join(distRestStudioDir, zipName);
     fs.rmSync(zipPath, { force: true });
     createZipWithPosixPermissions(appDir, zipPath);
     console.log(`[Mac App Bundler] Created POSIX 0755 macOS ZIP package: ${zipPath}`);
 
-    // 8. Create standalone Mac executable binary & launcher in dist/reststudio/
-    const actualBinPath = path.join(distRestStudioDir, `${binName}-bin`);
-    fs.copyFileSync(binaryPath, actualBinPath);
-    fs.chmodSync(actualBinPath, 0o755);
-
-    const standaloneLauncherScript = `#!/bin/bash
-DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$DIR"
-chmod +x "$DIR/${binName}-bin" 2>/dev/null
-xattr -dr com.apple.quarantine "$DIR/.." 2>/dev/null
-exec "$DIR/${binName}-bin" --res-mode=bundle --path="$DIR" "$@"
-`;
-    const standaloneLauncherPath = path.join(distRestStudioDir, binName);
-    fs.writeFileSync(standaloneLauncherPath, standaloneLauncherScript, { mode: 0o755 });
-    fs.chmodSync(standaloneLauncherPath, 0o755);
-    console.log(`[Mac App Bundler] Created standalone Mac launcher executable: ${standaloneLauncherPath}`);
+    // 7. Create standalone Mac executable binary in dist/reststudio/
+    const standaloneBinPath = path.join(distRestStudioDir, binName);
+    fs.copyFileSync(binaryPath, standaloneBinPath);
+    fs.chmodSync(standaloneBinPath, 0o755);
+    console.log(`[Mac App Bundler] Created standalone Mac executable: ${standaloneBinPath}`);
 
     totalCreated++;
   });
