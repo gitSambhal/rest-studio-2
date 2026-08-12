@@ -55,12 +55,14 @@ console.log(`[Test Pass] Windows executable found: ${winExe} (${(fs.statSync(win
     process.exit(1);
   }
 
-  // Verify neutralino.config.json inside app bundle
+  // Verify neutralino.config.json and resources.neu inside app bundle
   const macMacOSConfig = path.join(appDir, 'Contents/MacOS/neutralino.config.json');
   const macResConfig = path.join(appDir, 'Contents/Resources/neutralino.config.json');
+  const macMacOSResNeu = path.join(appDir, 'Contents/MacOS/resources.neu');
+  const macResResNeu = path.join(appDir, 'Contents/Resources/resources.neu');
 
-  if (!fs.existsSync(macMacOSConfig) || !fs.existsSync(macResConfig)) {
-    console.error(`[Test Error] Missing neutralino.config.json inside macOS bundle ${target}.app`);
+  if (!fs.existsSync(macMacOSConfig) || !fs.existsSync(macResConfig) || !fs.existsSync(macMacOSResNeu) || !fs.existsSync(macResResNeu)) {
+    console.error(`[Test Error] Missing neutralino.config.json or resources.neu inside macOS bundle ${target}.app`);
     process.exit(1);
   }
 

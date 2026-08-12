@@ -157,7 +157,29 @@ function createZipWithPosixPermissions(sourceDir, zipFilePath) {
 
 let totalCreated = 0;
 
+function ensureResourcesNeu() {
+  const resNeuPath = path.resolve('.neu/resources.neu');
+  if (fs.existsSync(resNeuPath)) return resNeuPath;
+  
+  const tempDir = path.resolve('.neu_temp_res');
+  fs.rmSync(tempDir, { recursive: true, force: true });
+  fs.mkdirSync(path.join(tempDir, 'dist'), { recursive: true });
+  
+  if (fs.existsSync('dist')) {
+    fs.cpSync('dist', path.join(tempDir, 'dist'), { recursive: true });
+  }
+  if (fs.existsSync('neutralino.config.json')) {
+    fs.copyFileSync('neutralino.config.json', path.join(tempDir, 'neutralino.config.json'));
+  }
+  
+  fs.mkdirSync(path.dirname(resNeuPath), { recursive: true });
+  createZipWithPosixPermissions(tempDir, resNeuPath);
+  fs.rmSync(tempDir, { recursive: true, force: true });
+  return resNeuPath;
+}
+
 if (fs.existsSync(binDir)) {
+  ensureResourcesNeu();
   targets.forEach(({ appName, zipName, binName, binary }) => {
     const binaryPath = path.join(binDir, binary);
     if (!fs.existsSync(binaryPath)) return;
@@ -176,7 +198,27 @@ if (fs.existsSync(binDir)) {
     fs.copyFileSync(binaryPath, executableTarget);
     fs.chmodSync(executableTarget, 0o755);
 
-    // 2. Copy neutralino.config.json into Contents/MacOS/ and Contents/Resources/
+    // 2. Copy resources.neu into Contents/MacOS/ and Contents/Resources/
+    const resNeuPaths = [
+      path.resolve('.neu/resources.neu'),
+      path.resolve('resources.neu'),
+      path.join(distRestStudioDir, 'resources.neu'),
+      path.resolve('dist/resources.neu')
+    ];
+    let copiedResNeu = false;
+    for (const p of resNeuPaths) {
+      if (fs.existsSync(p)) {
+        fs.copyFileSync(p, path.join(macOSDir, 'resources.neu'));
+        fs.copyFileSync(p, path.join(resourcesDir, 'resources.neu'));
+        copiedResNeu = true;
+        break;
+      }
+    }
+    if (!copiedResNeu) {
+      console.warn(`[Mac App Bundler] WARNING: resources.neu not found for ${appName}!`);
+    }
+
+    // 3. Copy neutralino.config.json into Contents/MacOS/ and Contents/Resources/
     if (fs.existsSync('neutralino.config.json')) {
       fs.copyFileSync('neutralino.config.json', path.join(macOSDir, 'neutralino.config.json'));
       fs.copyFileSync('neutralino.config.json', path.join(resourcesDir, 'neutralino.config.json'));
