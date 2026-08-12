@@ -172,11 +172,10 @@ if (fs.existsSync(binDir)) {
     fs.mkdirSync(resourcesDir, { recursive: true });
 
     // 1. Create a robust shell wrapper script as the primary executable in Contents/MacOS/RestStudio
-    // This ensures Neutralino runs from its Resources/app directory or finds resources.neu correctly.
-    const wrapperContent = `#!/bin/bash
-DIR="$( cd "$( dirname "\${BASH_SOURCE[0]}" )" && pwd )"
+    // This ensures Neutralino runs from its Contents/MacOS directory and finds resources.neu correctly.
+    const wrapperContent = `#!/bin/sh
+DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
-# If resources.neu is in Resources/, link or copy if needed, or run binary
 if [ -f "../Resources/resources.neu" ]; then
   cp -n "../Resources/resources.neu" ./resources.neu 2>/dev/null || true
 fi

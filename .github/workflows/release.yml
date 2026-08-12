@@ -57,24 +57,52 @@ jobs:
           echo "=== Generated files in dist/reststudio ==="
           find dist/reststudio -type f -ls
 
-      - name: Upload Linux Binaries
+      - name: Upload Linux x64
         uses: actions/upload-artifact@v4
         with:
-          name: RestStudio-Linux-Binaries
-          path: dist/reststudio/RestStudio-Linux-*
+          name: RestStudio-Linux-x64
+          path: dist/reststudio/RestStudio-Linux-x64
           if-no-files-found: warn
 
-      - name: Upload macOS Archives
+      - name: Upload Linux ARM64
         uses: actions/upload-artifact@v4
         with:
-          name: RestStudio-macOS-Archives
-          path: dist/reststudio/RestStudio-Mac-*.zip
+          name: RestStudio-Linux-ARM64
+          path: dist/reststudio/RestStudio-Linux-ARM64
+          if-no-files-found: warn
+
+      - name: Upload Linux ARMhf
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestStudio-Linux-ARMhf
+          path: dist/reststudio/RestStudio-Linux-ARMhf
+          if-no-files-found: warn
+
+      - name: Upload Mac x64 ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestStudio-Mac-x64-ZIP
+          path: dist/reststudio/RestStudio-Mac-x64.zip
+          if-no-files-found: warn
+
+      - name: Upload Mac ARM64 ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestStudio-Mac-ARM64-ZIP
+          path: dist/reststudio/RestStudio-Mac-ARM64.zip
+          if-no-files-found: warn
+
+      - name: Upload Mac Universal ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestStudio-Mac-Universal-ZIP
+          path: dist/reststudio/RestStudio-Mac-Universal.zip
           if-no-files-found: warn
 
       - name: Upload Windows Executable
         uses: actions/upload-artifact@v4
         with:
-          name: RestStudio-Windows-Executable
+          name: RestStudio-Windows-x64-Exe
           path: dist/reststudio/RestStudio-Windows-x64.exe
           if-no-files-found: warn
 
@@ -90,8 +118,12 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: false
           files: |
-            dist/reststudio/RestStudio-Linux-*
-            dist/reststudio/RestStudio-Mac-*.zip
+            dist/reststudio/RestStudio-Linux-x64
+            dist/reststudio/RestStudio-Linux-ARM64
+            dist/reststudio/RestStudio-Linux-ARMhf
+            dist/reststudio/RestStudio-Mac-x64.zip
+            dist/reststudio/RestStudio-Mac-ARM64.zip
+            dist/reststudio/RestStudio-Mac-Universal.zip
             dist/reststudio/RestStudio-Windows-x64.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
