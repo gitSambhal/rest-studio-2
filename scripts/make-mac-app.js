@@ -157,37 +157,66 @@ function createZipWithPosixPermissions(sourceDir, zipFilePath) {
 
 let totalCreated = 0;
 
-function ensureResourcesNeu() {
-  const resNeuPath = path.resolve('.neu/resources.neu');
-  if (fs.existsSync(resNeuPath)) return resNeuPath;
+async function getAsarModule() {
+  try {
+    return await import('@electron/asar');
+  } catch {
+    const npxAsar = '/root/.npm/_npx/0214858268217ccb/node_modules/@electron/asar/lib/asar.js';
+    if (fs.existsSync(npxAsar)) {
+      return await import(npxAsar);
+    }
+    return null;
+  }
+}
+
+async function ensureResourcesNeu() {
+  const resNeuPath = path.resolve('dist/reststudio/resources.neu');
+  const asar = await getAsarModule();
   
-  const tempDir = path.resolve('.neu_temp_res');
+  if (!asar) {
+    console.warn('[Mac App Bundler] asar module not found, using existing resources.neu');
+    return resNeuPath;
+  }
+
+  const tempDir = path.resolve('.tmp_neu_asar');
   fs.rmSync(tempDir, { recursive: true, force: true });
-  fs.mkdirSync(path.join(tempDir, 'dist'), { recursive: true });
-  
+  fs.mkdirSync(tempDir, { recursive: true });
+
   if (fs.existsSync('dist')) {
+    fs.cpSync('dist', tempDir, { recursive: true });
+    fs.mkdirSync(path.join(tempDir, 'dist'), { recursive: true });
     fs.cpSync('dist', path.join(tempDir, 'dist'), { recursive: true });
   }
+
   if (fs.existsSync('neutralino.config.json')) {
     fs.copyFileSync('neutralino.config.json', path.join(tempDir, 'neutralino.config.json'));
   }
-  
+
+  // Remove binaries folder from inside asar
+  if (fs.existsSync(path.join(tempDir, 'reststudio'))) {
+    fs.rmSync(path.join(tempDir, 'reststudio'), { recursive: true, force: true });
+  }
+  if (fs.existsSync(path.join(tempDir, 'dist/reststudio'))) {
+    fs.rmSync(path.join(tempDir, 'dist/reststudio'), { recursive: true, force: true });
+  }
+
   fs.mkdirSync(path.dirname(resNeuPath), { recursive: true });
-  createZipWithPosixPermissions(tempDir, resNeuPath);
+  await asar.createPackage(tempDir, resNeuPath);
   fs.rmSync(tempDir, { recursive: true, force: true });
+
+  const dotNeuRes = path.resolve('.neu/resources.neu');
+  fs.mkdirSync(path.dirname(dotNeuRes), { recursive: true });
+  fs.copyFileSync(resNeuPath, dotNeuRes);
+
+  console.log(`[Mac App Bundler] Created clean ASAR resources.neu (${(fs.statSync(resNeuPath).size / 1024).toFixed(2)} KB)`);
   return resNeuPath;
 }
 
-if (fs.existsSync(binDir) || fs.existsSync(distRestStudioDir)) {
-  let resNeuPath = path.join(distRestStudioDir, 'resources.neu');
-  if (!fs.existsSync(resNeuPath)) {
-    const generatedResPath = ensureResourcesNeu();
-    if (fs.existsSync(generatedResPath) && fs.existsSync(distRestStudioDir)) {
-      fs.copyFileSync(generatedResPath, resNeuPath);
-    }
-  }
+async function buildMacApps() {
+  if (fs.existsSync(binDir) || fs.existsSync(distRestStudioDir)) {
+    let resNeuPath = await ensureResourcesNeu();
 
-  targets.forEach(({ appName, zipName, binName, binary }) => {
+    targets.forEach(({ appName, zipName, binName, binary }) => {
     let binaryPath = path.join(distRestStudioDir, binary);
     if (!fs.existsSync(binaryPath)) {
       binaryPath = path.join(binDir, binary);
@@ -203,19 +232,10 @@ if (fs.existsSync(binDir) || fs.existsSync(distRestStudioDir)) {
     fs.mkdirSync(macOSDir, { recursive: true });
     fs.mkdirSync(resourcesDir, { recursive: true });
 
-    // 1. Copy executable binary to Contents/MacOS/RestStudio-bin and create launcher script Contents/MacOS/RestStudio
-    const realBinaryTarget = path.join(macOSDir, 'RestStudio-bin');
+    // 1. Copy native executable binary directly to Contents/MacOS/RestStudio
+    const realBinaryTarget = path.join(macOSDir, 'RestStudio');
     fs.copyFileSync(binaryPath, realBinaryTarget);
     fs.chmodSync(realBinaryTarget, 0o755);
-
-    const launcherPath = path.join(macOSDir, 'RestStudio');
-    const launcherScript = `#!/bin/bash
-DIR="$( cd "$( dirname "\${BASH_SOURCE[0]}" )" && pwd )"
-cd "$DIR"
-exec "$DIR/RestStudio-bin" "$@"
-`;
-    fs.writeFileSync(launcherPath, launcherScript, { mode: 0o755 });
-    fs.chmodSync(launcherPath, 0o755);
 
     // 2. Copy resources.neu to Contents/MacOS and Contents/Resources
     if (fs.existsSync(resNeuPath)) {
@@ -300,18 +320,24 @@ exec "$DIR/RestStudio-bin" "$@"
 
     totalCreated++;
   });
+  }
+
+  // Clean up raw intermediate binary files
+  if (fs.existsSync(distRestStudioDir)) {
+    ['reststudio-mac_arm64', 'reststudio-mac_x64', 'reststudio-mac_universal'].forEach((rawBinary) => {
+      const rawPath = path.join(distRestStudioDir, rawBinary);
+      if (fs.existsSync(rawPath)) {
+        fs.unlinkSync(rawPath);
+      }
+    });
+  }
+
+  if (totalCreated === 0) {
+    console.log('[Mac App Bundler] No macOS binaries found to bundle into .app packages.');
+  }
 }
 
-// Clean up raw intermediate binary files
-if (fs.existsSync(distRestStudioDir)) {
-  ['reststudio-mac_arm64', 'reststudio-mac_x64', 'reststudio-mac_universal'].forEach((rawBinary) => {
-    const rawPath = path.join(distRestStudioDir, rawBinary);
-    if (fs.existsSync(rawPath)) {
-      fs.unlinkSync(rawPath);
-    }
-  });
-}
-
-if (totalCreated === 0) {
-  console.log('[Mac App Bundler] No macOS binaries found to bundle into .app packages.');
-}
+buildMacApps().catch((err) => {
+  console.error('[Mac App Bundler] Fatal error:', err);
+  process.exit(1);
+});

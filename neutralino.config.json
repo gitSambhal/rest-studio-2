@@ -4,7 +4,7 @@
   "defaultMode": "window",
   "port": 0,
   "url": "/",
-  "documentRoot": "/dist/",
+  "documentRoot": "/",
   "enableServer": true,
   "enableLsp": false,
   "nativeAllowList": [

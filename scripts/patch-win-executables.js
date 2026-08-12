@@ -30,24 +30,27 @@ function processWindowsExecutables(distDir) {
     if (!fs.existsSync(resNeuPath) && fs.existsSync('.neu/resources.neu')) {
       resNeuPath = path.resolve('.neu/resources.neu');
     }
+
     if (fs.existsSync(resNeuPath)) {
       fs.copyFileSync(resNeuPath, path.join(winPkgDir, 'resources.neu'));
-      if (!fs.existsSync(path.join(distDir, 'resources.neu'))) {
-        fs.copyFileSync(resNeuPath, path.join(distDir, 'resources.neu'));
-      }
+      fs.copyFileSync(resNeuPath, path.join(distDir, 'resources.neu'));
     }
 
     if (fs.existsSync('neutralino.config.json')) {
       fs.copyFileSync('neutralino.config.json', path.join(winPkgDir, 'neutralino.config.json'));
+      fs.copyFileSync('neutralino.config.json', path.join(distDir, 'neutralino.config.json'));
     }
 
     if (fs.existsSync('public/icon.png')) {
       fs.copyFileSync('public/icon.png', path.join(winPkgDir, 'icon.png'));
+      fs.copyFileSync('public/icon.png', path.join(winPkgDir, 'RestStudio.png'));
+      fs.copyFileSync('public/icon.png', path.join(distDir, 'icon.png'));
     }
 
     // 2. Standalone Windows Executable in dist/reststudio
     const finalWinExePath = path.join(distDir, 'RestStudio-Windows-x64.exe');
     fs.copyFileSync(winExePath, finalWinExePath);
+    fs.copyFileSync(winExePath, path.join(distDir, 'RestStudio.exe'));
 
     // 3. Create Windows ZIP Package (RestStudio-Windows-x64.zip)
     const winZipPath = path.join(distDir, 'RestStudio-Windows-x64.zip');
