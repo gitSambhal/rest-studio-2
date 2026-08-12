@@ -1,7 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
-import sevenZipBin from '7zip-bin';
 
 /**
  * Processes Windows executables generated with Neutralino's --embed-resources mode.
@@ -21,28 +19,8 @@ function processWindowsExecutables(distDir) {
 
     const exeStats = fs.statSync(finalWinExePath);
     console.log(`[Win Build] Created standalone Windows executable (${(exeStats.size / (1024 * 1024)).toFixed(2)} MB): ${finalWinExePath}`);
-
-    // Create Portable ZIP package
-    const p7z = sevenZipBin.path7za;
-    if (fs.existsSync(p7z)) {
-      try { fs.chmodSync(p7z, '755'); } catch (_) {}
-      
-      const tmpDir = path.join(distDir, 'tmp_win_zip');
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-      fs.mkdirSync(tmpDir, { recursive: true });
-
-      fs.copyFileSync(finalWinExePath, path.join(tmpDir, 'RestStudio.exe'));
-
-      const zipPath = path.join(distDir, 'RestStudio-Windows-x64.zip');
-      fs.rmSync(zipPath, { force: true });
-
-      execSync(`"${p7z}" a -tzip "${zipPath}" "${tmpDir}/*"`, { stdio: 'pipe' });
-      console.log(`[Win Build] Created portable Windows ZIP package: ${zipPath}`);
-
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
   } catch (err) {
-    console.warn('[Win Build] Error creating Windows packages:', err.message);
+    console.warn('[Win Build] Error copying Windows executable:', err.message);
   }
 }
 

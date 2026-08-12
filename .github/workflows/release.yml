@@ -103,13 +103,6 @@ jobs:
           path: dist/reststudio/RestStudio-Windows-x64.exe
           if-no-files-found: warn
 
-      - name: Upload Windows x64 Zip
-        uses: actions/upload-artifact@v4
-        with:
-          name: RestStudio-Windows-x64-Zip
-          path: dist/reststudio/RestStudio-Windows-x64.zip
-          if-no-files-found: warn
-
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -124,6 +117,6 @@ jobs:
           files: |
             dist/reststudio/RestStudio-Linux-*
             dist/reststudio/RestStudio-Mac-*.zip
-            dist/reststudio/RestStudio-Windows-*
+            dist/reststudio/RestStudio-Windows-x64.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
