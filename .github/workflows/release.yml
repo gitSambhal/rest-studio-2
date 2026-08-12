@@ -1,4 +1,4 @@
-name: Release Desktop Applications
+name: Release & Desktop Binaries
 
 on:
   push:
@@ -24,19 +24,9 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build Release Binaries (${{ matrix.name }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            name: linux
-          - os: macos-latest
-            name: macos
-          - os: windows-latest
-            name: windows
+  build-and-release:
+    name: Build & Release All Desktop Binaries
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout repository
@@ -53,51 +43,20 @@ jobs:
           node -e "const fs = require('fs'); fs.rmSync('package-lock.json', {force: true});"
           npm install --include=optional
 
-      - name: Lint and Typecheck (Linux only)
-        if: matrix.name == 'linux'
+      - name: Run Linter & Type Check
         run: npm run lint
 
-      - name: Build Web App & Desktop Binaries
+      - name: Build Web App & All Desktop Binaries
         run: npm run build:neu
 
-      - name: Upload Linux Binaries
-        if: matrix.name == 'linux'
+      - name: List Generated Binaries
+        run: find dist/reststudio -type f
+
+      - name: Upload All Desktop Binaries Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: RestStudio-Linux-Binaries
-          path: dist/reststudio/RestStudio-Linux-*
-          if-no-files-found: ignore
-
-      - name: Upload macOS Binaries
-        if: matrix.name == 'macos'
-        uses: actions/upload-artifact@v4
-        with:
-          name: RestStudio-macOS-Binaries
-          path: dist/reststudio/RestStudio-Mac-*
-          if-no-files-found: ignore
-
-      - name: Upload Windows Binaries
-        if: matrix.name == 'windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: RestStudio-Windows-Binaries
-          path: dist/reststudio/RestStudio-Windows-*
-          if-no-files-found: ignore
-
-  release:
-    name: Create GitHub Release & Upload Assets
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download All Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release-artifacts
-          merge-duplicates: true
-
-      - name: List Downloaded Artifacts
-        run: |
-          find release-artifacts -type f
+          name: RestStudio-All-Platforms-Binaries
+          path: dist/reststudio/*
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
@@ -112,8 +71,6 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: false
           files: |
-            release-artifacts/**/*.zip
-            release-artifacts/**/*.exe
-            release-artifacts/**/RestStudio-Linux-*
+            dist/reststudio/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
