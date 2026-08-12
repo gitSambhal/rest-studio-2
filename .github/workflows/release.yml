@@ -52,12 +52,61 @@ jobs:
           echo "=== Built Release Artifacts in dist/reststudio/ ==="
           ls -lh dist/reststudio/
 
-      - name: Upload Build Artifacts to Actions Run
+      - name: Upload Mac ARM64 Binary
         uses: actions/upload-artifact@v4
         with:
-          name: reststudio-desktop-binaries
-          path: dist/reststudio/*
-          retention-days: 90
+          name: RestStudio-Mac-ARM64
+          path: dist/reststudio/RestStudio-Mac-ARM64.zip
+          if-no-files-found: ignore
+
+      - name: Upload Mac x64 Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestStudio-Mac-x64
+          path: dist/reststudio/RestStudio-Mac-x64.zip
+          if-no-files-found: ignore
+
+      - name: Upload Mac Universal Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestStudio-Mac-Universal
+          path: dist/reststudio/RestStudio-Mac-Universal.zip
+          if-no-files-found: ignore
+
+      - name: Upload Windows x64 Exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestStudio-Windows-x64-Exe
+          path: dist/reststudio/RestStudio-Windows-x64.exe
+          if-no-files-found: ignore
+
+      - name: Upload Windows x64 Zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestStudio-Windows-x64-Zip
+          path: dist/reststudio/RestStudio-Windows-x64.zip
+          if-no-files-found: ignore
+
+      - name: Upload Linux x64
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestStudio-Linux-x64
+          path: dist/reststudio/RestStudio-Linux-x64
+          if-no-files-found: ignore
+
+      - name: Upload Linux ARM64
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestStudio-Linux-ARM64
+          path: dist/reststudio/RestStudio-Linux-ARM64
+          if-no-files-found: ignore
+
+      - name: Upload Linux ARMhf
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestStudio-Linux-ARMhf
+          path: dist/reststudio/RestStudio-Linux-ARMhf
+          if-no-files-found: ignore
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
@@ -75,7 +124,6 @@ jobs:
             dist/reststudio/RestStudio-Linux-x64
             dist/reststudio/RestStudio-Linux-ARM64
             dist/reststudio/RestStudio-Linux-ARMhf
-            dist/reststudio/resources.neu
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
