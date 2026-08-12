@@ -4,7 +4,7 @@
   "defaultMode": "window",
   "port": 0,
   "url": "/",
-  "documentRoot": "/dist/",
+  "documentRoot": "/",
   "enableServer": true,
   "enableLsp": false,
   "nativeAllowList": [
@@ -32,7 +32,7 @@
   },
   "cli": {
     "binaryName": "reststudio",
-    "resourcesPath": "/dist/",
+    "resourcesPath": "dist",
     "extensionsPath": "/extensions/",
     "clientLibrary": "/js/neutralino.js",
     "binaryVersion": "6.3.0",
