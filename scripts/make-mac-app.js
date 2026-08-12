@@ -178,9 +178,14 @@ function ensureResourcesNeu() {
   return resNeuPath;
 }
 
-if (fs.existsSync(binDir)) {
+if (fs.existsSync(binDir) || fs.existsSync(distRestStudioDir)) {
+  const resNeuPath = path.join(distRestStudioDir, 'resources.neu');
+
   targets.forEach(({ appName, zipName, binName, binary }) => {
-    const binaryPath = path.join(binDir, binary);
+    let binaryPath = path.join(distRestStudioDir, binary);
+    if (!fs.existsSync(binaryPath)) {
+      binaryPath = path.join(binDir, binary);
+    }
     if (!fs.existsSync(binaryPath)) return;
 
     const appDir = path.join(distRestStudioDir, appName);
@@ -192,20 +197,32 @@ if (fs.existsSync(binDir)) {
     fs.mkdirSync(macOSDir, { recursive: true });
     fs.mkdirSync(resourcesDir, { recursive: true });
 
-    // 1. Copy self-contained embedded binary directly to Contents/MacOS/RestStudio
+    // 1. Copy executable binary to Contents/MacOS/RestStudio
     const executableTarget = path.join(macOSDir, 'RestStudio');
     fs.copyFileSync(binaryPath, executableTarget);
     fs.chmodSync(executableTarget, 0o755);
 
-    // 2. Copy icon
+    // 2. Copy resources.neu to Contents/MacOS and Contents/Resources
+    if (fs.existsSync(resNeuPath)) {
+      fs.copyFileSync(resNeuPath, path.join(macOSDir, 'resources.neu'));
+      fs.copyFileSync(resNeuPath, path.join(resourcesDir, 'resources.neu'));
+    }
+
+    // 3. Copy neutralino.config.json to Contents/MacOS and Contents/Resources
+    if (fs.existsSync('neutralino.config.json')) {
+      fs.copyFileSync('neutralino.config.json', path.join(macOSDir, 'neutralino.config.json'));
+      fs.copyFileSync('neutralino.config.json', path.join(resourcesDir, 'neutralino.config.json'));
+    }
+
+    // 4. Copy icon
     if (fs.existsSync('public/icon.png')) {
       fs.copyFileSync('public/icon.png', path.join(resourcesDir, 'icon.png'));
     }
 
-    // 3. Create PkgInfo
+    // 5. Create PkgInfo
     fs.writeFileSync(path.join(contentsDir, 'PkgInfo'), 'APPL????');
 
-    // 4. Create Info.plist
+    // 6. Create Info.plist
     const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -243,7 +260,7 @@ if (fs.existsSync(binDir)) {
 
     fs.writeFileSync(path.join(contentsDir, 'Info.plist'), plistContent);
 
-    // 5. Ad-hoc Code Sign and clear quarantine
+    // 7. Ad-hoc Code Sign and clear quarantine
     try {
       execSync(`codesign --sign - --force --deep "${appDir}" 2>/dev/null || true`);
       execSync(`chmod -R +x "${macOSDir}" 2>/dev/null || true`);
@@ -254,13 +271,13 @@ if (fs.existsSync(binDir)) {
 
     console.log(`[Mac App Bundler] Created native macOS App bundle: ${appDir}`);
 
-    // 6. Create POSIX 0755 Zip Package
+    // 8. Create POSIX 0755 Zip Package
     const zipPath = path.join(distRestStudioDir, zipName);
     fs.rmSync(zipPath, { force: true });
     createZipWithPosixPermissions(appDir, zipPath);
     console.log(`[Mac App Bundler] Created POSIX 0755 macOS ZIP package: ${zipPath}`);
 
-    // 7. Create standalone Mac executable binary in dist/reststudio/
+    // 9. Create standalone Mac executable binary in dist/reststudio/
     const standaloneBinPath = path.join(distRestStudioDir, binName);
     fs.copyFileSync(binaryPath, standaloneBinPath);
     fs.chmodSync(standaloneBinPath, 0o755);
@@ -270,7 +287,7 @@ if (fs.existsSync(binDir)) {
   });
 }
 
-// Clean up raw binary files
+// Clean up raw intermediate binary files
 if (fs.existsSync(distRestStudioDir)) {
   ['reststudio-mac_arm64', 'reststudio-mac_x64', 'reststudio-mac_universal'].forEach((rawBinary) => {
     const rawPath = path.join(distRestStudioDir, rawBinary);

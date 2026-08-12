@@ -55,16 +55,22 @@ console.log(`[Test Pass] Windows executable found: ${winExe} (${(fs.statSync(win
     process.exit(1);
   }
 
-  // Verify executable binary inside app bundle
+  // Verify executable binary and resources inside app bundle
   const macMacOSExec = path.join(appDir, 'Contents/MacOS/RestStudio');
+  const macResNeu = path.join(appDir, 'Contents/MacOS/resources.neu');
 
   if (!fs.existsSync(macMacOSExec)) {
     console.error(`[Test Error] Missing executable inside macOS bundle ${target}.app`);
     process.exit(1);
   }
+  if (!fs.existsSync(macResNeu)) {
+    console.error(`[Test Error] Missing resources.neu inside macOS bundle ${target}.app`);
+    process.exit(1);
+  }
 
   const stat = fs.statSync(macMacOSExec);
-  console.log(`[Test Pass] macOS bundle & zip verified for ${target} (${(stat.size / (1024*1024)).toFixed(2)} MB)`);
+  const resStat = fs.statSync(macResNeu);
+  console.log(`[Test Pass] macOS bundle & zip verified for ${target} (exec: ${(stat.size / (1024*1024)).toFixed(2)} MB, resources: ${(resStat.size / (1024*1024)).toFixed(2)} MB)`);
 });
 
 console.log('[Test Success] All RestStudio build artifacts and bundle configurations verified successfully!');
