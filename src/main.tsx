@@ -14,17 +14,27 @@ if (typeof window !== 'undefined' && (window as any).Neutralino) {
 
     // Handle window close event gracefully with explicit exit call
     if (NL.events) {
-      NL.events.on('windowClose', async () => {
-        console.log('[RestStudio Neutralino] Window closing...');
+      NL.events.on('windowClose', () => {
+        console.log('[RestStudio Neutralino] Window closing gracefully...');
         try {
           if (NL.app?.exit) {
-            await NL.app.exit(0);
+            NL.app.exit(0);
           }
         } catch {
-          // Fallback handled by exitProcessOnClose: true
+          // Graceful fallback
         }
       });
     }
+
+    window.addEventListener('beforeunload', () => {
+      try {
+        if (NL.app?.exit) {
+          NL.app.exit(0);
+        }
+      } catch {
+        // Ignore unload errors during exit
+      }
+    });
   } catch (err) {
     console.warn('[RestStudio Neutralino] Initialization warning:', err);
   }

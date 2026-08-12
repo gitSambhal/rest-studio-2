@@ -51,12 +51,17 @@ try {
 console.log('\n[Neu Build] Building Web Frontend (Vite & icons)...');
 execSync('npm run build', { stdio: 'inherit' });
 
-// Ensure dist/reststudio directory exists for build outputs
-fs.mkdirSync(distRestStudioDir, { recursive: true });
+// Ensure dist/reststudio is removed before neu build so it does not get bundled into resources.neu
+fs.rmSync(distRestStudioDir, { recursive: true, force: true });
 
-// Step 3: Run Neutralino build to generate resources.neu and binaries
+// Step 3: Run Neutralino build to generate resources.neu and platform binaries
 console.log('\n[Neu Build] Running Neutralino build...');
 execSync('npx @neutralinojs/neu build', { stdio: 'inherit' });
+
+// Ensure neutralino.config.json is copied to dist/reststudio for portable distribution
+if (fs.existsSync('neutralino.config.json')) {
+  fs.copyFileSync('neutralino.config.json', path.join(distRestStudioDir, 'neutralino.config.json'));
+}
 
 // Helper: Strip invalid LC_CODE_SIGNATURE (0x1d) load command from Mach-O binaries modified by postject
 function stripMachOCodeSignature(buf, offset = 0) {
@@ -173,6 +178,40 @@ function makeMacAppBundle(appName, pristineBinPath, platformName) {
   console.log(`  ✓ ${platformName.padEnd(30)} -> ${appName}.app (${appSize} MB binary, Zip: ${zipSize} MB)`);
 }
 
+// Helper: Create portable Windows/Linux Zip containing binary + resources.neu + config
+function makePortableZip(zipName, binaryFileName, exeDisplayName) {
+  const zipPath = path.join(distRestStudioDir, zipName);
+  const tempDir = path.join(distRestStudioDir, `_temp_${zipName.replace('.zip', '')}`);
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+  fs.mkdirSync(tempDir, { recursive: true });
+
+  const binSrc = path.join(distRestStudioDir, binaryFileName);
+  if (fs.existsSync(binSrc)) {
+    fs.copyFileSync(binSrc, path.join(tempDir, exeDisplayName));
+  }
+  const resSrc = path.join(distRestStudioDir, 'resources.neu');
+  if (fs.existsSync(resSrc)) {
+    fs.copyFileSync(resSrc, path.join(tempDir, 'resources.neu'));
+  }
+  if (fs.existsSync('neutralino.config.json')) {
+    fs.copyFileSync('neutralino.config.json', path.join(tempDir, 'neutralino.config.json'));
+  }
+  if (fs.existsSync('public/icon.png')) {
+    fs.copyFileSync('public/icon.png', path.join(tempDir, 'icon.png'));
+  }
+
+  try {
+    execSync(`python3 -c "import zipfile, os; zf = zipfile.ZipFile('${zipPath}', 'w', zipfile.ZIP_DEFLATED); [zf.write(os.path.join('${tempDir}', f), f) for f in os.listdir('${tempDir}')]"`);
+    const zipSize = (fs.statSync(zipPath).size / (1024 * 1024)).toFixed(2);
+    console.log(`  ✓ Portable Zip Package          -> ${zipName} (${zipSize} MB)`);
+  } catch (e) {
+    console.warn(`[Neu Build] Warning: could not create ${zipName}:`, e.message);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 // Step 4: Standardize and fix executables & native macOS .app bundles
 console.log('\n[Neu Build] Standardizing executables and creating macOS GUI .app bundles in dist/reststudio/...');
 
@@ -234,6 +273,13 @@ binaryMap.forEach(({ raw, target, platform, binSource, appName }) => {
 if (fs.existsSync('bin/neutralino-mac_universal')) {
   makeMacAppBundle('RestStudio', 'bin/neutralino-mac_universal', 'macOS (Default App Bundle)');
 }
+
+// Generate portable Zip packages for Windows and Linux containing binary + resources.neu + neutralino.config.json
+console.log('\n[Neu Build] Generating portable Zip packages for Windows and Linux...');
+makePortableZip('RestStudio-Windows-x64.zip', 'RestStudio-Windows-x64.exe', 'RestStudio.exe');
+makePortableZip('RestStudio-Linux-x64.zip', 'RestStudio-Linux-x64', 'RestStudio');
+makePortableZip('RestStudio-Linux-ARM64.zip', 'RestStudio-Linux-ARM64', 'RestStudio');
+makePortableZip('RestStudio-Linux-ARMhf.zip', 'RestStudio-Linux-ARMhf', 'RestStudio');
 
 console.log('\n====================================================');
 console.log('[Neu Build System] All single-binary executables & macOS .app bundles generated successfully!');
