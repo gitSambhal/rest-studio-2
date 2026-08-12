@@ -171,54 +171,16 @@ if (fs.existsSync(binDir)) {
     fs.mkdirSync(macOSDir, { recursive: true });
     fs.mkdirSync(resourcesDir, { recursive: true });
 
-    // 1. Create a robust shell wrapper script as the primary executable in Contents/MacOS/RestStudio
-    // This ensures Neutralino runs from its Contents/MacOS directory and finds resources.neu correctly.
-    const wrapperContent = `#!/bin/sh
-DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$DIR"
-if [ -f "../Resources/resources.neu" ]; then
-  cp -n "../Resources/resources.neu" ./resources.neu 2>/dev/null || true
-fi
-if [ -f "../Resources/neutralino.config.json" ]; then
-  cp -n "../Resources/neutralino.config.json" ./neutralino.config.json 2>/dev/null || true
-fi
-exec "./RestStudio_bin" "$@"
-`;
-    const wrapperPath = path.join(macOSDir, 'RestStudio');
-    fs.writeFileSync(wrapperPath, wrapperContent);
-    fs.chmodSync(wrapperPath, 0o755);
-
-    // Copy actual neutralino binary as RestStudio_bin
-    const executableTarget = path.join(macOSDir, 'RestStudio_bin');
+    // 1. Copy pristine native Neutralino binary directly to Contents/MacOS/RestStudio
+    const executableTarget = path.join(macOSDir, 'RestStudio');
     fs.copyFileSync(binaryPath, executableTarget);
     fs.chmodSync(executableTarget, 0o755);
 
-    // Copy neutralino.config.json into Contents/MacOS/ and Contents/Resources/
+    // 2. Copy neutralino.config.json into Contents/MacOS/ and Contents/Resources/
     if (fs.existsSync('neutralino.config.json')) {
       fs.copyFileSync('neutralino.config.json', path.join(macOSDir, 'neutralino.config.json'));
       fs.copyFileSync('neutralino.config.json', path.join(resourcesDir, 'neutralino.config.json'));
-      // Also copy to dist/reststudio/ for standalone binaries
       fs.copyFileSync('neutralino.config.json', path.join(distRestStudioDir, 'neutralino.config.json'));
-    }
-
-    // 2. Copy resources.neu if present directly into Contents/MacOS/ and Contents/Resources/
-    const resNeuPaths = [
-      path.join(distRestStudioDir, 'resources.neu'),
-      path.resolve('resources.neu'),
-      path.resolve('.neu/resources.neu'),
-    ];
-    let copiedResNeu = false;
-    for (const rPath of resNeuPaths) {
-      if (fs.existsSync(rPath)) {
-        fs.copyFileSync(rPath, path.join(macOSDir, 'resources.neu'));
-        fs.copyFileSync(rPath, path.join(resourcesDir, 'resources.neu'));
-        copiedResNeu = true;
-        console.log(`[Mac App Bundler] Successfully copied resources.neu (${fs.statSync(rPath).size} bytes) to ${appName} bundle.`);
-        break;
-      }
-    }
-    if (!copiedResNeu) {
-      console.warn(`[Mac App Bundler] WARNING: resources.neu NOT found in any search path for ${appName}!`);
     }
 
     // 3. Copy icon
@@ -267,10 +229,14 @@ exec "./RestStudio_bin" "$@"
 
     fs.writeFileSync(path.join(contentsDir, 'Info.plist'), plistContent);
 
+    // 6. Ad-hoc Code Sign (Required on macOS to prevent "app unexpectedly quit" crash dialog) and clear quarantine
     try {
+      execSync(`codesign --sign - --force "${executableTarget}" 2>/dev/null || true`);
       execSync(`chmod -R +x "${macOSDir}" 2>/dev/null || true`);
       execSync(`xattr -cr "${appDir}" 2>/dev/null || true`);
-    } catch (_) {}
+    } catch (e) {
+      console.warn('[Mac App Bundler] Code sign warning:', e.message);
+    }
 
     console.log(`[Mac App Bundler] Created native macOS App bundle: ${appDir}`);
 
