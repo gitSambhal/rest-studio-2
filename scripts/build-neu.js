@@ -19,6 +19,9 @@ const requiredBinaries = [
   'neutralino-linux_armhf'
 ];
 
+// Step 0: Clean dist/reststudio to prevent recursive accumulation in resources.neu
+fs.rmSync(distRestStudioDir, { recursive: true, force: true });
+
 // Step 1: Ensure bin/ directory has Neutralino v6.3.0 binaries
 fs.mkdirSync(binDir, { recursive: true });
 const missingBinaries = requiredBinaries.filter(b => !fs.existsSync(path.join(binDir, b)));
@@ -48,9 +51,12 @@ try {
 console.log('\n[Neu Build] Building Web Frontend (Vite & icons)...');
 execSync('npm run build', { stdio: 'inherit' });
 
-// Step 3: Run Neutralino Single Executable Embed Build
-console.log('\n[Neu Build] Running Neutralino single executable embedding build (--embed-resources)...');
-execSync('npx @neutralinojs/neu build --embed-resources', { stdio: 'inherit' });
+// Ensure dist/reststudio directory exists for build outputs
+fs.mkdirSync(distRestStudioDir, { recursive: true });
+
+// Step 3: Run Neutralino build to generate resources.neu and binaries
+console.log('\n[Neu Build] Running Neutralino build...');
+execSync('npx @neutralinojs/neu build', { stdio: 'inherit' });
 
 // Helper: Strip invalid LC_CODE_SIGNATURE (0x1d) load command from Mach-O binaries modified by postject
 function stripMachOCodeSignature(buf, offset = 0) {
@@ -85,7 +91,7 @@ function stripMachOCodeSignature(buf, offset = 0) {
 }
 
 // Helper: Create native macOS .app bundle and POSIX 0755 zip
-function makeMacAppBundle(appName, embeddedBinPath, binSourcePath, platformName) {
+function makeMacAppBundle(appName, pristineBinPath, platformName) {
   const appPath = path.join(distRestStudioDir, `${appName}.app`);
   const zipPath = path.join(distRestStudioDir, `${appName}.zip`);
 
@@ -102,7 +108,7 @@ function makeMacAppBundle(appName, embeddedBinPath, binSourcePath, platformName)
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>RestStudioLauncher</string>
+    <string>RestStudio</string>
     <key>CFBundleIconFile</key>
     <string>icon</string>
     <key>CFBundleIdentifier</key>
@@ -135,24 +141,15 @@ function makeMacAppBundle(appName, embeddedBinPath, binSourcePath, platformName)
     fs.copyFileSync('public/icon.png', path.join(appPath, 'Contents/Resources/icon.png'));
   }
 
-  // Copy binary into Contents/MacOS/RestStudioBinary (prefer postject-embedded binary if available, fallback to pristine)
-  const targetBinaryPath = path.join(appPath, 'Contents/MacOS/RestStudioBinary');
-  const sourceToUse = (fs.existsSync(embeddedBinPath)) ? embeddedBinPath : binSourcePath;
-  fs.copyFileSync(sourceToUse, targetBinaryPath);
+  // Copy pristine untouched binary into Contents/MacOS/RestStudio
+  const targetBinaryPath = path.join(appPath, 'Contents/MacOS/RestStudio');
+  fs.copyFileSync(pristineBinPath, targetBinaryPath);
   try {
     execSync(`chmod +x "${targetBinaryPath}"`);
   } catch {}
 
-  // Strip code signature from targetBinaryPath so ad-hoc signing on Mac can sign cleanly
-  try {
-    const buf = fs.readFileSync(targetBinaryPath);
-    if (stripMachOCodeSignature(buf)) {
-      fs.writeFileSync(targetBinaryPath, buf);
-    }
-  } catch {}
-
   // Copy resources.neu into Contents/MacOS and Contents/Resources
-  const resNeuSrc = path.resolve('.neu/resources.neu');
+  const resNeuSrc = path.join(distRestStudioDir, 'resources.neu');
   if (fs.existsSync(resNeuSrc)) {
     fs.copyFileSync(resNeuSrc, path.join(appPath, 'Contents/MacOS/resources.neu'));
     fs.copyFileSync(resNeuSrc, path.join(appPath, 'Contents/Resources/resources.neu'));
@@ -164,29 +161,6 @@ function makeMacAppBundle(appName, embeddedBinPath, binSourcePath, platformName)
     fs.copyFileSync('neutralino.config.json', path.join(appPath, 'Contents/Resources/neutralino.config.json'));
   }
 
-  // Create launcher shell script Contents/MacOS/RestStudioLauncher
-  const launcherScript = `#!/bin/bash
-DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$DIR" || exit 1
-
-if command -v codesign >/dev/null 2>&1; then
-    codesign -f -s - "$DIR/RestStudioBinary" 2>/dev/null || true
-    if command -v xattr >/dev/null 2>&1; then
-        xattr -dr com.apple.quarantine "$DIR/RestStudioBinary" 2>/dev/null || true
-        xattr -dr com.apple.quarantine "$DIR/RestStudioLauncher" 2>/dev/null || true
-    fi
-fi
-
-chmod +x "$DIR/RestStudioBinary" 2>/dev/null || true
-exec "$DIR/RestStudioBinary" "$@"
-`;
-
-  const launcherPath = path.join(appPath, 'Contents/MacOS/RestStudioLauncher');
-  fs.writeFileSync(launcherPath, launcherScript, { mode: 0o755 });
-  try {
-    execSync(`chmod +x "${launcherPath}"`);
-  } catch {}
-
   // Create POSIX 0755 Zip archive via scripts/zip-app.py
   try {
     execSync(`python3 scripts/zip-app.py "${distRestStudioDir}" "${appName}.app" "${appName}.zip"`, { stdio: 'inherit' });
@@ -196,7 +170,7 @@ exec "$DIR/RestStudioBinary" "$@"
 
   const appSize = (fs.statSync(targetBinaryPath).size / (1024 * 1024)).toFixed(2);
   const zipSize = fs.existsSync(zipPath) ? (fs.statSync(zipPath).size / (1024 * 1024)).toFixed(2) : 'N/A';
-  console.log(`  ✓ ${platformName.padEnd(30)} -> ${appName}.app (${appSize} MB, Zip: ${zipSize} MB)`);
+  console.log(`  ✓ ${platformName.padEnd(30)} -> ${appName}.app (${appSize} MB binary, Zip: ${zipSize} MB)`);
 }
 
 // Step 4: Standardize and fix executables & native macOS .app bundles
@@ -249,7 +223,7 @@ binaryMap.forEach(({ raw, target, platform, binSource, appName }) => {
 
     // Create macOS GUI .app bundle if this is a Mac target
     if (binSource && appName) {
-      makeMacAppBundle(appName, targetPath, binSource, platform);
+      makeMacAppBundle(appName, binSource, platform);
     }
   } else {
     console.warn(`  ⚠ Warning: Binary ${raw} not found in dist/reststudio`);
@@ -258,8 +232,7 @@ binaryMap.forEach(({ raw, target, platform, binSource, appName }) => {
 
 // Also create default RestStudio.app (Universal) and RestStudio.zip for instant macOS distribution
 if (fs.existsSync('bin/neutralino-mac_universal')) {
-  const universalEmbeddedPath = path.join(distRestStudioDir, 'RestStudio-Mac-Universal');
-  makeMacAppBundle('RestStudio', universalEmbeddedPath, 'bin/neutralino-mac_universal', 'macOS (Default App Bundle)');
+  makeMacAppBundle('RestStudio', 'bin/neutralino-mac_universal', 'macOS (Default App Bundle)');
 }
 
 console.log('\n====================================================');
