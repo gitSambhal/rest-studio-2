@@ -171,8 +171,26 @@ if (fs.existsSync(binDir)) {
     fs.mkdirSync(macOSDir, { recursive: true });
     fs.mkdirSync(resourcesDir, { recursive: true });
 
-    // 1. Copy pristine native Neutralino binary directly to Contents/MacOS/RestStudio as the primary executable
-    const executableTarget = path.join(macOSDir, 'RestStudio');
+    // 1. Create a robust shell wrapper script as the primary executable in Contents/MacOS/RestStudio
+    // This ensures Neutralino runs from its Resources/app directory or finds resources.neu correctly.
+    const wrapperContent = `#!/bin/bash
+DIR="$( cd "$( dirname "\${BASH_SOURCE[0]}" )" && pwd )"
+cd "$DIR"
+# If resources.neu is in Resources/, link or copy if needed, or run binary
+if [ -f "../Resources/resources.neu" ]; then
+  cp -n "../Resources/resources.neu" ./resources.neu 2>/dev/null || true
+fi
+if [ -f "../Resources/neutralino.config.json" ]; then
+  cp -n "../Resources/neutralino.config.json" ./neutralino.config.json 2>/dev/null || true
+fi
+exec "./RestStudio_bin" "$@"
+`;
+    const wrapperPath = path.join(macOSDir, 'RestStudio');
+    fs.writeFileSync(wrapperPath, wrapperContent);
+    fs.chmodSync(wrapperPath, 0o755);
+
+    // Copy actual neutralino binary as RestStudio_bin
+    const executableTarget = path.join(macOSDir, 'RestStudio_bin');
     fs.copyFileSync(binaryPath, executableTarget);
     fs.chmodSync(executableTarget, 0o755);
 
