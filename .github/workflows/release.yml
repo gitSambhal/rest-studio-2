@@ -24,9 +24,19 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: Build & Release All Desktop Binaries
-    runs-on: ubuntu-22.04
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            name: linux
+          - os: macos-latest
+            name: macos
+          - os: windows-latest
+            name: windows
 
     steps:
       - name: Checkout repository
@@ -43,62 +53,56 @@ jobs:
           node -e "const fs = require('fs'); fs.rmSync('package-lock.json', {force: true});"
           npm install --include=optional
 
-      - name: Run Linter & Type Check
+      - name: Lint and Typecheck (Linux only)
+        if: matrix.name == 'linux'
         run: npm run lint
 
-      - name: Build Web App & All Desktop Binaries
+      - name: Build Desktop Binaries
         run: npm run build:neu
 
-      - name: List Generated Binaries
-        run: find dist/reststudio -type f
-
-      - name: Upload Artifact - Linux ARM64
+      - name: Upload Linux Binaries
+        if: matrix.name == 'linux'
         uses: actions/upload-artifact@v4
         with:
-          name: RestStudio-Linux-ARM64
-          path: dist/reststudio/RestStudio-Linux-ARM64
+          name: linux-binaries
+          path: |
+            dist/reststudio/RestStudio-Linux-ARM64
+            dist/reststudio/RestStudio-Linux-ARMhf
+            dist/reststudio/RestStudio-Linux-x64
 
-      - name: Upload Artifact - Linux ARMhf
+      - name: Upload macOS Binaries
+        if: matrix.name == 'macos'
         uses: actions/upload-artifact@v4
         with:
-          name: RestStudio-Linux-ARMhf
-          path: dist/reststudio/RestStudio-Linux-ARMhf
+          name: macos-binaries
+          path: |
+            dist/reststudio/RestStudio-Mac-ARM64.zip
+            dist/reststudio/RestStudio-Mac-Universal.zip
+            dist/reststudio/RestStudio-Mac-x64.zip
 
-      - name: Upload Artifact - Linux x64
+      - name: Upload Windows Binaries
+        if: matrix.name == 'windows'
         uses: actions/upload-artifact@v4
         with:
-          name: RestStudio-Linux-x64
-          path: dist/reststudio/RestStudio-Linux-x64
+          name: windows-binaries
+          path: |
+            dist/reststudio/RestStudio-Windows-x64.exe
+            dist/reststudio/RestStudio-Windows-x64.zip
 
-      - name: Upload Artifact - Mac ARM64
-        uses: actions/upload-artifact@v4
+  release:
+    name: Create GitHub Release & Upload Assets
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
         with:
-          name: RestStudio-Mac-ARM64
-          path: dist/reststudio/RestStudio-Mac-ARM64.zip
+          path: release-artifacts
+          merge-duplicates: true
 
-      - name: Upload Artifact - Mac Universal
-        uses: actions/upload-artifact@v4
-        with:
-          name: RestStudio-Mac-Universal
-          path: dist/reststudio/RestStudio-Mac-Universal.zip
-
-      - name: Upload Artifact - Mac x64
-        uses: actions/upload-artifact@v4
-        with:
-          name: RestStudio-Mac-x64
-          path: dist/reststudio/RestStudio-Mac-x64.zip
-
-      - name: Upload Artifact - Windows x64 Exe
-        uses: actions/upload-artifact@v4
-        with:
-          name: RestStudio-Windows-x64-Exe
-          path: dist/reststudio/RestStudio-Windows-x64.exe
-
-      - name: Upload Artifact - Windows x64 Zip
-        uses: actions/upload-artifact@v4
-        with:
-          name: RestStudio-Windows-x64-Zip
-          path: dist/reststudio/RestStudio-Windows-x64.zip
+      - name: List Downloaded Artifacts
+        run: |
+          find release-artifacts -type f
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
@@ -112,6 +116,6 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: false
           files: |
-            dist/reststudio/*
+            release-artifacts/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
