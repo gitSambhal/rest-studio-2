@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-console.log('[Test Build] Verifying RestStudio build artifacts and configuration integrity...');
+console.log('[Test Build] Verifying RestStudio single-binary executable build artifacts...');
 
 const distDir = path.resolve('dist/reststudio');
 const configPath = path.resolve('neutralino.config.json');
@@ -23,67 +23,32 @@ if (!fs.existsSync(distDir)) {
   process.exit(1);
 }
 
-// Check Windows executable and ZIP package
+// Verify Windows single-binary executable
 const winExe = path.join(distDir, 'RestStudio-Windows-x64.exe');
-const winZip = path.join(distDir, 'RestStudio-Windows-x64.zip');
-const winPkgDir = path.join(distDir, 'RestStudio-Windows-x64');
-const winPkgRes = path.join(winPkgDir, 'resources.neu');
-
 if (!fs.existsSync(winExe)) {
-  console.error(`[Test Error] Missing Windows executable: ${winExe}`);
+  console.error(`[Test Error] Missing Windows single binary executable: ${winExe}`);
   process.exit(1);
 }
-if (!fs.existsSync(winZip)) {
-  console.error(`[Test Error] Missing Windows zip package: ${winZip}`);
-  process.exit(1);
-}
-if (!fs.existsSync(winPkgRes)) {
-  console.error(`[Test Error] Missing resources.neu in Windows package folder: ${winPkgRes}`);
-  process.exit(1);
-}
-console.log(`[Test Pass] Windows executable found: ${winExe} (${(fs.statSync(winExe).size / (1024*1024)).toFixed(2)} MB)`);
-console.log(`[Test Pass] Windows zip package found: ${winZip} (${(fs.statSync(winZip).size / (1024*1024)).toFixed(2)} MB)`);
+console.log(`[Test Pass] Windows single executable verified: ${winExe} (${(fs.statSync(winExe).size / (1024*1024)).toFixed(2)} MB)`);
 
-// Check Linux binaries
+// Verify Linux single-binary executables
 ['RestStudio-Linux-x64', 'RestStudio-Linux-ARM64', 'RestStudio-Linux-ARMhf'].forEach(bin => {
   const binPath = path.join(distDir, bin);
   if (!fs.existsSync(binPath)) {
-    console.error(`[Test Error] Missing Linux binary: ${binPath}`);
+    console.error(`[Test Error] Missing Linux single binary executable: ${binPath}`);
     process.exit(1);
   }
-  console.log(`[Test Pass] Linux binary found: ${bin}`);
+  console.log(`[Test Pass] Linux single executable verified: ${bin} (${(fs.statSync(binPath).size / (1024*1024)).toFixed(2)} MB)`);
 });
 
-// Check Mac App bundles and Zips
-['RestStudio-Mac-x64', 'RestStudio-Mac-ARM64', 'RestStudio-Mac-Universal'].forEach(target => {
-  const appDir = path.join(distDir, `${target}.app`);
-  const zipPath = path.join(distDir, `${target}.zip`);
-
-  if (!fs.existsSync(appDir)) {
-    console.error(`[Test Error] Missing macOS app bundle: ${appDir}`);
+// Verify macOS single-binary executables
+['RestStudio-Mac-x64', 'RestStudio-Mac-ARM64', 'RestStudio-Mac-Universal'].forEach(bin => {
+  const binPath = path.join(distDir, bin);
+  if (!fs.existsSync(binPath)) {
+    console.error(`[Test Error] Missing macOS single binary executable: ${binPath}`);
     process.exit(1);
   }
-  if (!fs.existsSync(zipPath)) {
-    console.error(`[Test Error] Missing macOS zip archive: ${zipPath}`);
-    process.exit(1);
-  }
-
-  // Verify executable binary and resources inside app bundle
-  const macMacOSExec = path.join(appDir, 'Contents/MacOS/RestStudio');
-  const macResNeu = path.join(appDir, 'Contents/MacOS/resources.neu');
-
-  if (!fs.existsSync(macMacOSExec)) {
-    console.error(`[Test Error] Missing executable inside macOS bundle ${target}.app`);
-    process.exit(1);
-  }
-  if (!fs.existsSync(macResNeu)) {
-    console.error(`[Test Error] Missing resources.neu inside macOS bundle ${target}.app`);
-    process.exit(1);
-  }
-
-  const stat = fs.statSync(macMacOSExec);
-  const resStat = fs.statSync(macResNeu);
-  console.log(`[Test Pass] macOS bundle & zip verified for ${target} (exec: ${(stat.size / (1024*1024)).toFixed(2)} MB, resources: ${(resStat.size / (1024*1024)).toFixed(2)} MB)`);
+  console.log(`[Test Pass] macOS single executable verified: ${bin} (${(fs.statSync(binPath).size / (1024*1024)).toFixed(2)} MB)`);
 });
 
-console.log('[Test Success] All RestStudio build artifacts and bundle configurations verified successfully!');
+console.log('[Test Success] All RestStudio single-binary executables verified successfully!');
