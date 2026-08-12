@@ -123,7 +123,6 @@ if (fs.existsSync(distDir)) {
     'reststudio-linux_x64',
     'reststudio-linux_arm64',
     'reststudio-linux_armhf',
-    'RestStudio.exe',
   ];
 
   filesToDelete.forEach((file) => {

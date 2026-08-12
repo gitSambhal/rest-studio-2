@@ -182,23 +182,34 @@ async function ensureResourcesNeu() {
   fs.rmSync(tempDir, { recursive: true, force: true });
   fs.mkdirSync(tempDir, { recursive: true });
 
+  // 1. Copy web build output files directly into root of tempDir
   if (fs.existsSync('dist')) {
     fs.cpSync('dist', tempDir, { recursive: true });
-    fs.mkdirSync(path.join(tempDir, 'dist'), { recursive: true });
-    fs.cpSync('dist', path.join(tempDir, 'dist'), { recursive: true });
   }
 
+  // 2. Ensure js/neutralino.js exists at /js/neutralino.js
+  fs.mkdirSync(path.join(tempDir, 'js'), { recursive: true });
+  if (fs.existsSync('public/js/neutralino.js')) {
+    fs.copyFileSync('public/js/neutralino.js', path.join(tempDir, 'js/neutralino.js'));
+  }
+
+  // 3. Ensure icon.png exists at /icon.png
+  if (fs.existsSync('public/icon.png')) {
+    fs.copyFileSync('public/icon.png', path.join(tempDir, 'icon.png'));
+  }
+
+  // 4. Ensure neutralino.config.json exists at /neutralino.config.json
   if (fs.existsSync('neutralino.config.json')) {
     fs.copyFileSync('neutralino.config.json', path.join(tempDir, 'neutralino.config.json'));
   }
 
-  // Remove binaries folder from inside asar
-  if (fs.existsSync(path.join(tempDir, 'reststudio'))) {
-    fs.rmSync(path.join(tempDir, 'reststudio'), { recursive: true, force: true });
-  }
-  if (fs.existsSync(path.join(tempDir, 'dist/reststudio'))) {
-    fs.rmSync(path.join(tempDir, 'dist/reststudio'), { recursive: true, force: true });
-  }
+  // 5. Remove any build outputs / binaries / raw directories nested inside tempDir
+  ['reststudio', 'server.cjs', 'server.cjs.map', '_redirects', 'dist'].forEach((item) => {
+    const itemPath = path.join(tempDir, item);
+    if (fs.existsSync(itemPath)) {
+      fs.rmSync(itemPath, { recursive: true, force: true });
+    }
+  });
 
   fs.mkdirSync(path.dirname(resNeuPath), { recursive: true });
   await asar.createPackage(tempDir, resNeuPath);
@@ -208,7 +219,7 @@ async function ensureResourcesNeu() {
   fs.mkdirSync(path.dirname(dotNeuRes), { recursive: true });
   fs.copyFileSync(resNeuPath, dotNeuRes);
 
-  console.log(`[Mac App Bundler] Created clean ASAR resources.neu (${(fs.statSync(resNeuPath).size / 1024).toFixed(2)} KB)`);
+  console.log(`[Mac App Bundler] Created clean root ASAR resources.neu (${(fs.statSync(resNeuPath).size / 1024).toFixed(2)} KB)`);
   return resNeuPath;
 }
 

@@ -12,34 +12,18 @@ if (typeof window !== 'undefined' && (window as any).Neutralino) {
     NL.init();
     console.log('[RestStudio Neutralino] Neutralino Native OS SDK initialized');
 
-    // Handle window close event gracefully
+    // Handle window close event gracefully with explicit exit call
     if (NL.events) {
-      NL.events.on('windowClose', () => {
-        // neutralino.config.json handles exitProcessOnClose automatically and cleanly
+      NL.events.on('windowClose', async () => {
         console.log('[RestStudio Neutralino] Window closing...');
+        try {
+          if (NL.app?.exit) {
+            await NL.app.exit(0);
+          }
+        } catch {
+          // Fallback handled by exitProcessOnClose: true
+        }
       });
-    }
-
-    // Configure native main menu bar on macOS/Windows/Linux for native Edit shortcuts
-    if (NL.window?.setMainMenu) {
-      NL.window
-        .setMainMenu({
-          menu: [
-            {
-              id: 'edit',
-              text: 'Edit',
-              items: [
-                { id: 'undo', text: 'Undo', shortcut: 'CmdOrCtrl+Z' },
-                { id: 'redo', text: 'Redo', shortcut: 'CmdOrCtrl+Shift+Z' },
-                { id: 'cut', text: 'Cut', shortcut: 'CmdOrCtrl+X' },
-                { id: 'copy', text: 'Copy', shortcut: 'CmdOrCtrl+C' },
-                { id: 'paste', text: 'Paste', shortcut: 'CmdOrCtrl+V' },
-                { id: 'selectAll', text: 'Select All', shortcut: 'CmdOrCtrl+A' },
-              ],
-            },
-          ],
-        })
-        .catch((err: any) => console.warn('[RestStudio Neutralino] Menu registration note:', err));
     }
   } catch (err) {
     console.warn('[RestStudio Neutralino] Initialization warning:', err);
