@@ -179,7 +179,6 @@ function ensureResourcesNeu() {
 }
 
 if (fs.existsSync(binDir)) {
-  ensureResourcesNeu();
   targets.forEach(({ appName, zipName, binName, binary }) => {
     const binaryPath = path.join(binDir, binary);
     if (!fs.existsSync(binaryPath)) return;
@@ -193,62 +192,20 @@ if (fs.existsSync(binDir)) {
     fs.mkdirSync(macOSDir, { recursive: true });
     fs.mkdirSync(resourcesDir, { recursive: true });
 
-    // 1. Copy pristine native Neutralino binary as RestStudio_bin and create robust wrapper script as RestStudio
-    const binTarget = path.join(macOSDir, 'RestStudio_bin');
-    fs.copyFileSync(binaryPath, binTarget);
-    fs.chmodSync(binTarget, 0o755);
+    // 1. Copy self-contained embedded binary directly to Contents/MacOS/RestStudio
+    const executableTarget = path.join(macOSDir, 'RestStudio');
+    fs.copyFileSync(binaryPath, executableTarget);
+    fs.chmodSync(executableTarget, 0o755);
 
-    const wrapperContent = `#!/bin/sh
-DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$DIR"
-if [ -f "../Resources/resources.neu" ]; then
-  cp -n "../Resources/resources.neu" ./resources.neu 2>/dev/null || true
-fi
-if [ -f "../Resources/neutralino.config.json" ]; then
-  cp -n "../Resources/neutralino.config.json" ./neutralino.config.json 2>/dev/null || true
-fi
-exec "./RestStudio_bin" "$@"
-`;
-    const wrapperTarget = path.join(macOSDir, 'RestStudio');
-    fs.writeFileSync(wrapperTarget, wrapperContent);
-    fs.chmodSync(wrapperTarget, 0o755);
-
-    // 2. Copy resources.neu into Contents/MacOS/ and Contents/Resources/
-    const resNeuPaths = [
-      path.resolve('.neu/resources.neu'),
-      path.resolve('resources.neu'),
-      path.join(distRestStudioDir, 'resources.neu'),
-      path.resolve('dist/resources.neu')
-    ];
-    let copiedResNeu = false;
-    for (const p of resNeuPaths) {
-      if (fs.existsSync(p)) {
-        fs.copyFileSync(p, path.join(macOSDir, 'resources.neu'));
-        fs.copyFileSync(p, path.join(resourcesDir, 'resources.neu'));
-        copiedResNeu = true;
-        break;
-      }
-    }
-    if (!copiedResNeu) {
-      console.warn(`[Mac App Bundler] WARNING: resources.neu not found for ${appName}!`);
-    }
-
-    // 3. Copy neutralino.config.json into Contents/MacOS/ and Contents/Resources/
-    if (fs.existsSync('neutralino.config.json')) {
-      fs.copyFileSync('neutralino.config.json', path.join(macOSDir, 'neutralino.config.json'));
-      fs.copyFileSync('neutralino.config.json', path.join(resourcesDir, 'neutralino.config.json'));
-      fs.copyFileSync('neutralino.config.json', path.join(distRestStudioDir, 'neutralino.config.json'));
-    }
-
-    // 3. Copy icon
+    // 2. Copy icon
     if (fs.existsSync('public/icon.png')) {
       fs.copyFileSync('public/icon.png', path.join(resourcesDir, 'icon.png'));
     }
 
-    // 4. Create PkgInfo
+    // 3. Create PkgInfo
     fs.writeFileSync(path.join(contentsDir, 'PkgInfo'), 'APPL????');
 
-    // 5. Create Info.plist
+    // 4. Create Info.plist
     const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -286,10 +243,9 @@ exec "./RestStudio_bin" "$@"
 
     fs.writeFileSync(path.join(contentsDir, 'Info.plist'), plistContent);
 
-    // 6. Ad-hoc Code Sign (Required on macOS to prevent "app unexpectedly quit" crash dialog) and clear quarantine
+    // 5. Ad-hoc Code Sign and clear quarantine
     try {
-      execSync(`codesign --sign - --force "${binTarget}" 2>/dev/null || true`);
-      execSync(`codesign --sign - --force "${wrapperTarget}" 2>/dev/null || true`);
+      execSync(`codesign --sign - --force --deep "${appDir}" 2>/dev/null || true`);
       execSync(`chmod -R +x "${macOSDir}" 2>/dev/null || true`);
       execSync(`xattr -cr "${appDir}" 2>/dev/null || true`);
     } catch (e) {

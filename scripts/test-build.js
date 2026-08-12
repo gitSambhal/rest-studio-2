@@ -55,24 +55,16 @@ console.log(`[Test Pass] Windows executable found: ${winExe} (${(fs.statSync(win
     process.exit(1);
   }
 
-  // Verify neutralino.config.json and resources.neu inside app bundle
-  const macMacOSConfig = path.join(appDir, 'Contents/MacOS/neutralino.config.json');
-  const macResConfig = path.join(appDir, 'Contents/Resources/neutralino.config.json');
-  const macMacOSResNeu = path.join(appDir, 'Contents/MacOS/resources.neu');
-  const macResResNeu = path.join(appDir, 'Contents/Resources/resources.neu');
+  // Verify executable binary inside app bundle
+  const macMacOSExec = path.join(appDir, 'Contents/MacOS/RestStudio');
 
-  if (!fs.existsSync(macMacOSConfig) || !fs.existsSync(macResConfig) || !fs.existsSync(macMacOSResNeu) || !fs.existsSync(macResResNeu)) {
-    console.error(`[Test Error] Missing neutralino.config.json or resources.neu inside macOS bundle ${target}.app`);
+  if (!fs.existsSync(macMacOSExec)) {
+    console.error(`[Test Error] Missing executable inside macOS bundle ${target}.app`);
     process.exit(1);
   }
 
-  const bundleConfig = JSON.parse(fs.readFileSync(macMacOSConfig, 'utf8'));
-  if (bundleConfig.applicationId !== 'top.suhail.rest-studio') {
-    console.error(`[Test Error] Incorrect applicationId inside macOS bundle ${target}.app`);
-    process.exit(1);
-  }
-
-  console.log(`[Test Pass] macOS bundle & zip verified for ${target}`);
+  const stat = fs.statSync(macMacOSExec);
+  console.log(`[Test Pass] macOS bundle & zip verified for ${target} (${(stat.size / (1024*1024)).toFixed(2)} MB)`);
 });
 
 console.log('[Test Success] All RestStudio build artifacts and bundle configurations verified successfully!');
