@@ -54,6 +54,27 @@ jobs:
           echo "=== Generated files in dist/reststudio ==="
           find dist/reststudio -type f -ls
 
+      - name: Upload Linux Binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestStudio-Linux-Binaries
+          path: dist/reststudio/RestStudio-Linux-*
+          if-no-files-found: warn
+
+      - name: Upload macOS Archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestStudio-macOS-Archives
+          path: dist/reststudio/RestStudio-Mac-*.zip
+          if-no-files-found: warn
+
+      - name: Upload Windows Executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestStudio-Windows-Executable
+          path: dist/reststudio/RestStudio-Windows-x64.exe
+          if-no-files-found: warn
+
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
