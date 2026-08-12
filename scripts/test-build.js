@@ -55,10 +55,11 @@ console.log(`[Test Pass] Windows executable verified: ${winExe} (${(fs.statSync(
 ['RestStudio-Mac-x64', 'RestStudio-Mac-ARM64', 'RestStudio-Mac-Universal', 'RestStudio'].forEach(appName => {
   const appPath = path.join(distDir, `${appName}.app`);
   const zipPath = path.join(distDir, `${appName}.zip`);
-  const execPath = path.join(appPath, 'Contents/MacOS', appName === 'RestStudio' ? 'RestStudio' : appName);
+  const launcherPath = path.join(appPath, 'Contents/MacOS/RestStudioLauncher');
+  const binaryPath = path.join(appPath, 'Contents/MacOS/RestStudioBinary');
   const plistPath = path.join(appPath, 'Contents/Info.plist');
 
-  if (!fs.existsSync(appPath) || !fs.existsSync(execPath) || !fs.existsSync(plistPath)) {
+  if (!fs.existsSync(appPath) || !fs.existsSync(launcherPath) || !fs.existsSync(binaryPath) || !fs.existsSync(plistPath)) {
     console.error(`[Test Error] Missing or invalid macOS .app bundle structure for ${appName}.app`);
     process.exit(1);
   }
@@ -68,7 +69,7 @@ console.log(`[Test Pass] Windows executable verified: ${winExe} (${(fs.statSync(
     process.exit(1);
   }
 
-  console.log(`[Test Pass] macOS .app bundle & zip verified: ${appName}.app (${(fs.statSync(execPath).size / (1024*1024)).toFixed(2)} MB exec, zip: ${(fs.statSync(zipPath).size / (1024*1024)).toFixed(2)} MB)`);
+  console.log(`[Test Pass] macOS .app bundle & zip verified: ${appName}.app (${(fs.statSync(binaryPath).size / (1024*1024)).toFixed(2)} MB binary, zip: ${(fs.statSync(zipPath).size / (1024*1024)).toFixed(2)} MB)`);
 });
 
 console.log('[Test Success] All RestStudio executables and native macOS .app bundles verified successfully!');
