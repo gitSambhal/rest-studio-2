@@ -203,10 +203,19 @@ if (fs.existsSync(binDir) || fs.existsSync(distRestStudioDir)) {
     fs.mkdirSync(macOSDir, { recursive: true });
     fs.mkdirSync(resourcesDir, { recursive: true });
 
-    // 1. Copy executable binary to Contents/MacOS/RestStudio
-    const executableTarget = path.join(macOSDir, 'RestStudio');
-    fs.copyFileSync(binaryPath, executableTarget);
-    fs.chmodSync(executableTarget, 0o755);
+    // 1. Copy executable binary to Contents/MacOS/RestStudio-bin and create launcher script Contents/MacOS/RestStudio
+    const realBinaryTarget = path.join(macOSDir, 'RestStudio-bin');
+    fs.copyFileSync(binaryPath, realBinaryTarget);
+    fs.chmodSync(realBinaryTarget, 0o755);
+
+    const launcherPath = path.join(macOSDir, 'RestStudio');
+    const launcherScript = `#!/bin/bash
+DIR="$( cd "$( dirname "\${BASH_SOURCE[0]}" )" && pwd )"
+cd "$DIR"
+exec "$DIR/RestStudio-bin" "$@"
+`;
+    fs.writeFileSync(launcherPath, launcherScript, { mode: 0o755 });
+    fs.chmodSync(launcherPath, 0o755);
 
     // 2. Copy resources.neu to Contents/MacOS and Contents/Resources
     if (fs.existsSync(resNeuPath)) {

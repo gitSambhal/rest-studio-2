@@ -26,9 +26,15 @@ function processWindowsExecutables(distDir) {
     fs.copyFileSync(winExePath, pkgExePath);
     fs.copyFileSync(winExePath, path.join(winPkgDir, 'RestStudio-Windows-x64.exe'));
 
-    const resNeuPath = path.join(distDir, 'resources.neu');
+    let resNeuPath = path.join(distDir, 'resources.neu');
+    if (!fs.existsSync(resNeuPath) && fs.existsSync('.neu/resources.neu')) {
+      resNeuPath = path.resolve('.neu/resources.neu');
+    }
     if (fs.existsSync(resNeuPath)) {
       fs.copyFileSync(resNeuPath, path.join(winPkgDir, 'resources.neu'));
+      if (!fs.existsSync(path.join(distDir, 'resources.neu'))) {
+        fs.copyFileSync(resNeuPath, path.join(distDir, 'resources.neu'));
+      }
     }
 
     if (fs.existsSync('neutralino.config.json')) {

@@ -12,16 +12,11 @@ if (typeof window !== 'undefined' && (window as any).Neutralino) {
     NL.init();
     console.log('[RestStudio Neutralino] Neutralino Native OS SDK initialized');
 
-    // Handle graceful exit on window close event (prevents macOS unexpected quit crash)
+    // Handle window close event gracefully
     if (NL.events) {
       NL.events.on('windowClose', () => {
-        try {
-          if (NL.app?.exit) {
-            NL.app.exit(0);
-          }
-        } catch {
-          // Ignore exit error if process is already terminating
-        }
+        // neutralino.config.json handles exitProcessOnClose automatically and cleanly
+        console.log('[RestStudio Neutralino] Window closing...');
       });
     }
 
