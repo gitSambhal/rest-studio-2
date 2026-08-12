@@ -51,6 +51,11 @@ function processLinuxExecutables(distDir) {
 const distDir = path.resolve('dist/reststudio');
 
 if (fs.existsSync(distDir)) {
+  // Copy neutralino.config.json for standalone binaries
+  if (fs.existsSync('neutralino.config.json')) {
+    fs.copyFileSync('neutralino.config.json', path.join(distDir, 'neutralino.config.json'));
+  }
+
   // 1. Process Windows Executables
   processWindowsExecutables(distDir);
 

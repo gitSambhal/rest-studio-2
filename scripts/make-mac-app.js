@@ -176,6 +176,14 @@ if (fs.existsSync(binDir)) {
     fs.copyFileSync(binaryPath, executableTarget);
     fs.chmodSync(executableTarget, 0o755);
 
+    // Copy neutralino.config.json into Contents/MacOS/ and Contents/Resources/
+    if (fs.existsSync('neutralino.config.json')) {
+      fs.copyFileSync('neutralino.config.json', path.join(macOSDir, 'neutralino.config.json'));
+      fs.copyFileSync('neutralino.config.json', path.join(resourcesDir, 'neutralino.config.json'));
+      // Also copy to dist/reststudio/ for standalone binaries
+      fs.copyFileSync('neutralino.config.json', path.join(distRestStudioDir, 'neutralino.config.json'));
+    }
+
     // 2. Copy resources.neu if present directly into Contents/MacOS/ and Contents/Resources/
     const resNeuPaths = [
       path.join(distRestStudioDir, 'resources.neu'),
