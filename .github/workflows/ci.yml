@@ -36,7 +36,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          rm -f package-lock.json
+          node -e "const fs = require('fs'); fs.rmSync('package-lock.json', {force: true});"
           npm install --include=optional
 
       - name: Run Linter & Type Check (Linux only)
