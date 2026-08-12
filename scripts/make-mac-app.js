@@ -179,7 +179,13 @@ function ensureResourcesNeu() {
 }
 
 if (fs.existsSync(binDir) || fs.existsSync(distRestStudioDir)) {
-  const resNeuPath = path.join(distRestStudioDir, 'resources.neu');
+  let resNeuPath = path.join(distRestStudioDir, 'resources.neu');
+  if (!fs.existsSync(resNeuPath)) {
+    const generatedResPath = ensureResourcesNeu();
+    if (fs.existsSync(generatedResPath) && fs.existsSync(distRestStudioDir)) {
+      fs.copyFileSync(generatedResPath, resNeuPath);
+    }
+  }
 
   targets.forEach(({ appName, zipName, binName, binary }) => {
     let binaryPath = path.join(distRestStudioDir, binary);
