@@ -1,12 +1,16 @@
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 
 /**
- * Processes Windows executables generated with Neutralino's --embed-resources mode.
- * The generated reststudio-win_x64.exe already contains all web assets embedded directly.
+ * Processes Windows executables and creates a complete package.
+ * Windows executable requires resources.neu and neutralino.config.json in its directory to run correctly.
  */
 function processWindowsExecutables(distDir) {
-  const winExePath = path.join(distDir, 'reststudio-win_x64.exe');
+  let winExePath = path.join(distDir, 'reststudio-win_x64.exe');
+  if (!fs.existsSync(winExePath)) {
+    winExePath = path.resolve('bin/neutralino-win_x64.exe');
+  }
 
   if (!fs.existsSync(winExePath)) {
     console.warn('[Win Build] Windows binary reststudio-win_x64.exe missing.');
@@ -14,13 +18,53 @@ function processWindowsExecutables(distDir) {
   }
 
   try {
+    // 1. Create Windows package directory containing executable + resources.neu + config
+    const winPkgDir = path.join(distDir, 'RestStudio-Windows-x64');
+    fs.mkdirSync(winPkgDir, { recursive: true });
+
+    const pkgExePath = path.join(winPkgDir, 'RestStudio.exe');
+    fs.copyFileSync(winExePath, pkgExePath);
+    fs.copyFileSync(winExePath, path.join(winPkgDir, 'RestStudio-Windows-x64.exe'));
+
+    const resNeuPath = path.join(distDir, 'resources.neu');
+    if (fs.existsSync(resNeuPath)) {
+      fs.copyFileSync(resNeuPath, path.join(winPkgDir, 'resources.neu'));
+    }
+
+    if (fs.existsSync('neutralino.config.json')) {
+      fs.copyFileSync('neutralino.config.json', path.join(winPkgDir, 'neutralino.config.json'));
+    }
+
+    if (fs.existsSync('public/icon.png')) {
+      fs.copyFileSync('public/icon.png', path.join(winPkgDir, 'icon.png'));
+    }
+
+    // 2. Standalone Windows Executable in dist/reststudio
     const finalWinExePath = path.join(distDir, 'RestStudio-Windows-x64.exe');
     fs.copyFileSync(winExePath, finalWinExePath);
 
+    // 3. Create Windows ZIP Package (RestStudio-Windows-x64.zip)
+    const winZipPath = path.join(distDir, 'RestStudio-Windows-x64.zip');
+    fs.rmSync(winZipPath, { force: true });
+
+    try {
+      const sevenZipPath = path.resolve('node_modules/7zip-bin/linux/x64/7za');
+      if (fs.existsSync(sevenZipPath)) {
+        execSync(`"${sevenZipPath}" a -tzip "${winZipPath}" "${winPkgDir}/*" >/dev/null 2>&1 || true`);
+      } else {
+        execSync(`zip -r "${winZipPath}" .`, { cwd: winPkgDir, stdio: 'ignore' });
+      }
+    } catch (e) {
+      console.warn('[Win Build] Note on Zip creation:', e.message);
+    }
+
     const exeStats = fs.statSync(finalWinExePath);
-    console.log(`[Win Build] Created standalone Windows executable (${(exeStats.size / (1024 * 1024)).toFixed(2)} MB): ${finalWinExePath}`);
+    console.log(`[Win Build] Created Windows App Package & Executable (${(exeStats.size / (1024 * 1024)).toFixed(2)} MB): ${finalWinExePath}`);
+    if (fs.existsSync(winZipPath)) {
+      console.log(`[Win Build] Created Windows Portable ZIP Package (${(fs.statSync(winZipPath).size / (1024 * 1024)).toFixed(2)} MB): ${winZipPath}`);
+    }
   } catch (err) {
-    console.warn('[Win Build] Error copying Windows executable:', err.message);
+    console.warn('[Win Build] Error processing Windows executable:', err.message);
   }
 }
 
@@ -80,10 +124,4 @@ if (fs.existsSync(distDir)) {
       console.log(`[Clean] Removed raw build file: ${file}`);
     }
   });
-
-  const redundantDir = path.join(distDir, 'RestStudio-Windows-x64');
-  if (fs.existsSync(redundantDir)) {
-    fs.rmSync(redundantDir, { recursive: true, force: true });
-    console.log(`[Clean] Removed redundant directory: RestStudio-Windows-x64`);
-  }
 }

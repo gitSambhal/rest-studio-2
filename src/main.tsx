@@ -12,6 +12,19 @@ if (typeof window !== 'undefined' && (window as any).Neutralino) {
     NL.init();
     console.log('[RestStudio Neutralino] Neutralino Native OS SDK initialized');
 
+    // Handle graceful exit on window close event (prevents macOS unexpected quit crash)
+    if (NL.events) {
+      NL.events.on('windowClose', () => {
+        try {
+          if (NL.app?.exit) {
+            NL.app.exit(0);
+          }
+        } catch {
+          // Ignore exit error if process is already terminating
+        }
+      });
+    }
+
     // Configure native main menu bar on macOS/Windows/Linux for native Edit shortcuts
     if (NL.window?.setMainMenu) {
       NL.window

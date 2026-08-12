@@ -26,7 +26,7 @@
       "resizable": true,
       "maximizable": true,
       "hidden": false,
-      "exitProcessOnClose": false,
+      "exitProcessOnClose": true,
       "icon": "/icon.png"
     }
   },

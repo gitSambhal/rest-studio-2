@@ -23,13 +23,26 @@ if (!fs.existsSync(distDir)) {
   process.exit(1);
 }
 
-// Check Windows executable
+// Check Windows executable and ZIP package
 const winExe = path.join(distDir, 'RestStudio-Windows-x64.exe');
+const winZip = path.join(distDir, 'RestStudio-Windows-x64.zip');
+const winPkgDir = path.join(distDir, 'RestStudio-Windows-x64');
+const winPkgRes = path.join(winPkgDir, 'resources.neu');
+
 if (!fs.existsSync(winExe)) {
   console.error(`[Test Error] Missing Windows executable: ${winExe}`);
   process.exit(1);
 }
+if (!fs.existsSync(winZip)) {
+  console.error(`[Test Error] Missing Windows zip package: ${winZip}`);
+  process.exit(1);
+}
+if (!fs.existsSync(winPkgRes)) {
+  console.error(`[Test Error] Missing resources.neu in Windows package folder: ${winPkgRes}`);
+  process.exit(1);
+}
 console.log(`[Test Pass] Windows executable found: ${winExe} (${(fs.statSync(winExe).size / (1024*1024)).toFixed(2)} MB)`);
+console.log(`[Test Pass] Windows zip package found: ${winZip} (${(fs.statSync(winZip).size / (1024*1024)).toFixed(2)} MB)`);
 
 // Check Linux binaries
 ['RestStudio-Linux-x64', 'RestStudio-Linux-ARM64', 'RestStudio-Linux-ARMhf'].forEach(bin => {
