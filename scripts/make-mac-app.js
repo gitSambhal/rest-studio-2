@@ -157,75 +157,16 @@ function createZipWithPosixPermissions(sourceDir, zipFilePath) {
 
 let totalCreated = 0;
 
-async function getAsarModule() {
-  try {
-    return await import('@electron/asar');
-  } catch {
-    const npxAsar = '/root/.npm/_npx/0214858268217ccb/node_modules/@electron/asar/lib/asar.js';
-    if (fs.existsSync(npxAsar)) {
-      return await import(npxAsar);
-    }
-    return null;
-  }
-}
-
-async function ensureResourcesNeu() {
-  const resNeuPath = path.resolve('dist/reststudio/resources.neu');
-  const asar = await getAsarModule();
-  
-  if (!asar) {
-    console.warn('[Mac App Bundler] asar module not found, using existing resources.neu');
-    return resNeuPath;
-  }
-
-  const tempDir = path.resolve('.tmp_neu_asar');
-  fs.rmSync(tempDir, { recursive: true, force: true });
-  fs.mkdirSync(tempDir, { recursive: true });
-
-  // 1. Copy web build output files directly into root of tempDir
-  if (fs.existsSync('dist')) {
-    fs.cpSync('dist', tempDir, { recursive: true });
-  }
-
-  // 2. Ensure js/neutralino.js exists at /js/neutralino.js
-  fs.mkdirSync(path.join(tempDir, 'js'), { recursive: true });
-  if (fs.existsSync('public/js/neutralino.js')) {
-    fs.copyFileSync('public/js/neutralino.js', path.join(tempDir, 'js/neutralino.js'));
-  }
-
-  // 3. Ensure icon.png exists at /icon.png
-  if (fs.existsSync('public/icon.png')) {
-    fs.copyFileSync('public/icon.png', path.join(tempDir, 'icon.png'));
-  }
-
-  // 4. Ensure neutralino.config.json exists at /neutralino.config.json
-  if (fs.existsSync('neutralino.config.json')) {
-    fs.copyFileSync('neutralino.config.json', path.join(tempDir, 'neutralino.config.json'));
-  }
-
-  // 5. Remove any build outputs / binaries / raw directories nested inside tempDir
-  ['reststudio', 'server.cjs', 'server.cjs.map', '_redirects', 'dist'].forEach((item) => {
-    const itemPath = path.join(tempDir, item);
-    if (fs.existsSync(itemPath)) {
-      fs.rmSync(itemPath, { recursive: true, force: true });
-    }
-  });
-
-  fs.mkdirSync(path.dirname(resNeuPath), { recursive: true });
-  await asar.createPackage(tempDir, resNeuPath);
-  fs.rmSync(tempDir, { recursive: true, force: true });
-
-  const dotNeuRes = path.resolve('.neu/resources.neu');
-  fs.mkdirSync(path.dirname(dotNeuRes), { recursive: true });
-  fs.copyFileSync(resNeuPath, dotNeuRes);
-
-  console.log(`[Mac App Bundler] Created clean root ASAR resources.neu (${(fs.statSync(resNeuPath).size / 1024).toFixed(2)} KB)`);
-  return resNeuPath;
-}
-
 async function buildMacApps() {
   if (fs.existsSync(binDir) || fs.existsSync(distRestStudioDir)) {
-    let resNeuPath = await ensureResourcesNeu();
+    let resNeuPath = path.join(distRestStudioDir, 'resources.neu');
+    if (!fs.existsSync(resNeuPath) && fs.existsSync('.neu/resources.neu')) {
+      resNeuPath = path.resolve('.neu/resources.neu');
+    }
+
+    if (!fs.existsSync(resNeuPath)) {
+      console.warn('[Mac App Bundler] Warning: resources.neu not found at', resNeuPath);
+    }
 
     targets.forEach(({ appName, zipName, binName, binary }) => {
     let binaryPath = path.join(distRestStudioDir, binary);
