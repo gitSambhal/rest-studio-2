@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-console.log('[Test Build] Verifying RestStudio single-binary executable build artifacts...');
+console.log('[Test Build] Verifying RestStudio build artifacts and macOS Application Bundles...');
 
 const distDir = path.resolve('dist/reststudio');
 const configPath = path.resolve('neutralino.config.json');
@@ -29,26 +29,46 @@ if (!fs.existsSync(winExe)) {
   console.error(`[Test Error] Missing Windows single binary executable: ${winExe}`);
   process.exit(1);
 }
-console.log(`[Test Pass] Windows single executable verified: ${winExe} (${(fs.statSync(winExe).size / (1024*1024)).toFixed(2)} MB)`);
+console.log(`[Test Pass] Windows executable verified: ${winExe} (${(fs.statSync(winExe).size / (1024*1024)).toFixed(2)} MB)`);
 
 // Verify Linux single-binary executables
 ['RestStudio-Linux-x64', 'RestStudio-Linux-ARM64', 'RestStudio-Linux-ARMhf'].forEach(bin => {
   const binPath = path.join(distDir, bin);
   if (!fs.existsSync(binPath)) {
-    console.error(`[Test Error] Missing Linux single binary executable: ${binPath}`);
+    console.error(`[Test Error] Missing Linux binary executable: ${binPath}`);
     process.exit(1);
   }
-  console.log(`[Test Pass] Linux single executable verified: ${bin} (${(fs.statSync(binPath).size / (1024*1024)).toFixed(2)} MB)`);
+  console.log(`[Test Pass] Linux executable verified: ${bin} (${(fs.statSync(binPath).size / (1024*1024)).toFixed(2)} MB)`);
 });
 
-// Verify macOS single-binary executables
+// Verify macOS standalone single-binary executables
 ['RestStudio-Mac-x64', 'RestStudio-Mac-ARM64', 'RestStudio-Mac-Universal'].forEach(bin => {
   const binPath = path.join(distDir, bin);
   if (!fs.existsSync(binPath)) {
-    console.error(`[Test Error] Missing macOS single binary executable: ${binPath}`);
+    console.error(`[Test Error] Missing macOS standalone executable: ${binPath}`);
     process.exit(1);
   }
-  console.log(`[Test Pass] macOS single executable verified: ${bin} (${(fs.statSync(binPath).size / (1024*1024)).toFixed(2)} MB)`);
+  console.log(`[Test Pass] macOS standalone executable verified: ${bin} (${(fs.statSync(binPath).size / (1024*1024)).toFixed(2)} MB)`);
 });
 
-console.log('[Test Success] All RestStudio single-binary executables verified successfully!');
+// Verify native macOS .app bundles and zip archives
+['RestStudio-Mac-x64', 'RestStudio-Mac-ARM64', 'RestStudio-Mac-Universal', 'RestStudio'].forEach(appName => {
+  const appPath = path.join(distDir, `${appName}.app`);
+  const zipPath = path.join(distDir, `${appName}.zip`);
+  const execPath = path.join(appPath, 'Contents/MacOS', appName === 'RestStudio' ? 'RestStudio' : appName);
+  const plistPath = path.join(appPath, 'Contents/Info.plist');
+
+  if (!fs.existsSync(appPath) || !fs.existsSync(execPath) || !fs.existsSync(plistPath)) {
+    console.error(`[Test Error] Missing or invalid macOS .app bundle structure for ${appName}.app`);
+    process.exit(1);
+  }
+
+  if (!fs.existsSync(zipPath)) {
+    console.error(`[Test Error] Missing macOS .app zip archive: ${zipPath}`);
+    process.exit(1);
+  }
+
+  console.log(`[Test Pass] macOS .app bundle & zip verified: ${appName}.app (${(fs.statSync(execPath).size / (1024*1024)).toFixed(2)} MB exec, zip: ${(fs.statSync(zipPath).size / (1024*1024)).toFixed(2)} MB)`);
+});
+
+console.log('[Test Success] All RestStudio executables and native macOS .app bundles verified successfully!');
