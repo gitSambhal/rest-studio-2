@@ -4,12 +4,14 @@ import { execSync } from 'child_process';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
+const { inject } = require('postject');
 
 console.log('====================================================');
 console.log('[Neu Build System] Building RestStudio Executables & macOS App Bundles...');
 console.log('====================================================');
 
 const binDir = path.resolve('bin');
+const distDir = path.resolve('dist');
 const distRestStudioDir = path.resolve('dist/reststudio');
 
 const requiredBinaries = [
@@ -22,15 +24,30 @@ const requiredBinaries = [
   'neutralino-linux_armhf'
 ];
 
-// Step 0: Clean dist/reststudio to prevent recursive accumulation in resources.neu
-fs.rmSync(distRestStudioDir, { recursive: true, force: true });
+// Step 0: Clean dist/ of any previous build artifacts to prevent recursive packaging in resources.neu
+if (fs.existsSync(distDir)) {
+  const distItems = fs.readdirSync(distDir);
+  for (const item of distItems) {
+    if (
+      item.startsWith('RestStudio') ||
+      item.startsWith('reststudio') ||
+      item.endsWith('.zip') ||
+      item.endsWith('.exe') ||
+      item.endsWith('.app') ||
+      item.endsWith('.neu') ||
+      item.endsWith('.cjs') ||
+      item.endsWith('.map')
+    ) {
+      fs.rmSync(path.join(distDir, item), { recursive: true, force: true });
+    }
+  }
+}
 
-// Step 1: Ensure bin/ directory has Neutralino v6.3.0 binaries
+// Step 1: Ensure bin/ directory has pristine Neutralino v6.3.0 binaries
 fs.mkdirSync(binDir, { recursive: true });
-const missingBinaries = requiredBinaries.filter(b => !fs.existsSync(path.join(binDir, b)));
 
-if (missingBinaries.length > 0) {
-  console.log('[Neu Build] Downloading Neutralinojs v6.3.0 platform binaries...');
+function downloadPristineBinaries() {
+  console.log('[Neu Build] Downloading fresh Neutralinojs v6.3.0 platform binaries...');
   const zipPath = path.resolve('neutralino-v6.3.0.zip');
   try {
     execSync(`curl -o "${zipPath}" -L "https://github.com/neutralinojs/neutralinojs/releases/download/v6.3.0/neutralinojs-v6.3.0.zip"`, { stdio: 'inherit' });
@@ -41,8 +58,31 @@ if (missingBinaries.length > 0) {
     console.error('[Neu Build Error] Failed to download Neutralino binaries:', err.message);
     process.exit(1);
   }
+}
+
+// Check if any required binary is missing OR has already been modified by a previous run
+const sentinel = 'POSTJECT_SENTINEL_fce680ab2cc467b6e072b8b5df1996b2';
+let needsRedownload = requiredBinaries.some(b => !fs.existsSync(path.join(binDir, b)));
+
+if (!needsRedownload) {
+  // Check sentinel count on win_x64.exe to ensure it hasn't been postjected in-place
+  const winBinBuf = fs.readFileSync(path.join(binDir, 'neutralino-win_x64.exe'));
+  let occurrences = 0;
+  let pos = 0;
+  while ((pos = winBinBuf.indexOf(sentinel, pos)) !== -1) {
+    occurrences++;
+    pos += sentinel.length;
+  }
+  if (occurrences !== 1) {
+    console.log(`[Neu Build] Detected binary sentinel count = ${occurrences} (expected 1). Redownloading fresh binaries...`);
+    needsRedownload = true;
+  }
+}
+
+if (needsRedownload) {
+  downloadPristineBinaries();
 } else {
-  console.log('[Neu Build] All required Neutralino platform binaries present in bin/.');
+  console.log('[Neu Build] All required pristine Neutralino platform binaries present in bin/.');
 }
 
 // Ensure execution permissions on Unix binaries
@@ -50,14 +90,11 @@ try {
   execSync(`chmod +x "${binDir}"/* 2>/dev/null || true`);
 } catch {}
 
-// Step 2: Build Web Frontend Assets
+// Step 2: Build Web Frontend Assets if needed
 console.log('\n[Neu Build] Ensuring Web Frontend Assets exist...');
 if (!fs.existsSync(path.resolve('dist/index.html'))) {
   execSync('npm run build:web', { stdio: 'inherit' });
 }
-
-// Ensure dist/reststudio is removed before neu build so it does not get bundled into resources.neu
-fs.rmSync(distRestStudioDir, { recursive: true, force: true });
 
 // Step 3: Run Neutralino build to generate resources.neu and platform binaries
 console.log('\n[Neu Build] Running Neutralino build...');
@@ -68,7 +105,39 @@ if (fs.existsSync('neutralino.config.json')) {
   fs.copyFileSync('neutralino.config.json', path.join(distRestStudioDir, 'neutralino.config.json'));
 }
 
-// Helper: Strip invalid LC_CODE_SIGNATURE (0x1d) load command from Mach-O binaries modified by postject
+// Step 4: Embed resources.neu into Windows executables using Postject
+const resNeuPath = path.join(distRestStudioDir, 'resources.neu');
+if (fs.existsSync(resNeuPath)) {
+  const resData = fs.readFileSync(resNeuPath);
+  console.log(`\n[Neu Build] Embedding resources.neu (${(resData.length / (1024*1024)).toFixed(2)} MB) into Windows PE executables...`);
+
+  const winTargets = [
+    path.join(distRestStudioDir, 'reststudio-win_x64.exe'),
+    path.join(distRestStudioDir, 'RestStudio-Windows-x64.exe'),
+    path.join(distRestStudioDir, 'RestStudio.exe')
+  ];
+
+  for (const winTarget of winTargets) {
+    try {
+      fs.copyFileSync(path.join(binDir, 'neutralino-win_x64.exe'), winTarget);
+      await inject(
+        winTarget,
+        'NEUTRALINOJS_RESOURCES_NEU',
+        resData,
+        {
+          overwrite: true,
+          sentinelFuse: sentinel
+        }
+      );
+      const injectedSize = (fs.statSync(winTarget).size / (1024*1024)).toFixed(2);
+      console.log(`  ✓ Successfully embedded resources into ${path.basename(winTarget)} (${injectedSize} MB)`);
+    } catch (err) {
+      console.warn(`  ⚠ Warning embedding resources into ${path.basename(winTarget)}:`, err.message);
+    }
+  }
+}
+
+// Helper: Strip invalid LC_CODE_SIGNATURE (0x1d) load command from Mach-O binaries
 function stripMachOCodeSignature(buf, offset = 0) {
   if (buf.length < offset + 32) return false;
   
@@ -224,10 +293,6 @@ async function patchWindowsExecutable() {
   const exeTarget = path.join(distRestStudioDir, 'RestStudio.exe');
 
   if (fs.existsSync(winBinPath)) {
-    // Always copy first to guarantee targets exist regardless of metadata patching outcome
-    fs.copyFileSync(winBinPath, winTarget);
-    fs.copyFileSync(winBinPath, exeTarget);
-
     console.log('\n[Neu Build] Patching Windows executable metadata and icon...');
     try {
       let exepatchPath;
@@ -246,9 +311,9 @@ async function patchWindowsExecutable() {
       if (exepatchPath) {
         const { patchWindowsExecutable } = await import('file://' + exepatchPath);
         await patchWindowsExecutable(winBinPath);
-        fs.copyFileSync(winBinPath, winTarget);
-        fs.copyFileSync(winBinPath, exeTarget);
-        console.log(`  ✓ Windows Executable Metadata Patched -> RestStudio.exe & RestStudio-Windows-x64.exe (${(fs.statSync(winBinPath).size / (1024*1024)).toFixed(2)} MB)`);
+        await patchWindowsExecutable(winTarget);
+        await patchWindowsExecutable(exeTarget);
+        console.log(`  ✓ Windows Executable Metadata Patched -> RestStudio.exe & RestStudio-Windows-x64.exe (${(fs.statSync(winTarget).size / (1024*1024)).toFixed(2)} MB)`);
       } else {
         console.warn('  ⚠ Could not locate exepatch.js for Windows metadata patching');
       }
@@ -258,7 +323,7 @@ async function patchWindowsExecutable() {
   }
 }
 
-// Step 4: Standardize and fix executables & native macOS .app bundles
+// Step 5: Standardize and fix executables & native macOS .app bundles
 console.log('\n[Neu Build] Standardizing executables and creating macOS GUI .app bundles in dist/reststudio/...');
 
 await patchWindowsExecutable();
@@ -328,12 +393,12 @@ makePortableZip('RestStudio-Linux-x64.zip', 'RestStudio-Linux-x64', 'RestStudio'
 makePortableZip('RestStudio-Linux-ARM64.zip', 'RestStudio-Linux-ARM64', 'RestStudio');
 makePortableZip('RestStudio-Linux-ARMhf.zip', 'RestStudio-Linux-ARMhf', 'RestStudio');
 
-// Mirror all artifacts from dist/reststudio to dist/ root so artifact exporters can find them at either path
+// Step 6: Mirror all artifacts from dist/reststudio to dist/ root
 if (fs.existsSync(distRestStudioDir)) {
   const items = fs.readdirSync(distRestStudioDir);
   for (const item of items) {
     const srcPath = path.join(distRestStudioDir, item);
-    const destPath = path.join(path.resolve('dist'), item);
+    const destPath = path.join(distDir, item);
     if (!fs.existsSync(destPath) || item.startsWith('RestStudio')) {
       try {
         fs.cpSync(srcPath, destPath, { recursive: true });

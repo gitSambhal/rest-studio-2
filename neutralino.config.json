@@ -33,6 +33,7 @@
   "cli": {
     "binaryName": "reststudio",
     "resourcesPath": "dist",
+    "resourcesExclude": "^reststudio|^RestStudio|.*\\.zip$|.*\\.exe$|.*\\.app$|.*\\.cjs.*",
     "extensionsPath": "/extensions/",
     "clientLibrary": "/js/neutralino.js",
     "binaryVersion": "6.3.0",
