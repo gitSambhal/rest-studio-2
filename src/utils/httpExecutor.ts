@@ -361,6 +361,8 @@ export async function executeDirectClientFetch(
     };
   } catch (err: any) {
     const duration = Math.round(performance.now() - startTime);
+    const isLocalhost = targetUrl.includes('localhost') || targetUrl.includes('127.0.0.1') || targetUrl.includes('0.0.0.0') || targetUrl.includes('::1');
+
     return {
       status: 0,
       statusText: 'Network Error',
@@ -368,7 +370,13 @@ export async function executeDirectClientFetch(
       body: JSON.stringify(
         {
           error: `Failed to connect to ${targetUrl}`,
-          message: err?.message || 'Failed to fetch',
+          reason: isLocalhost
+            ? 'Localhost API unreachable from Web App. Web browsers block HTTPS -> HTTP direct connections or require CORS preflight headers.'
+            : err?.message || 'Failed to fetch',
+          solution: isLocalhost
+            ? 'To test localhost APIs from this web app: 1) Click "Desktop Proxy" button in top header bar, or 2) Run RestStudio Desktop App / 1-click Proxy Bridge command.'
+            : 'Check server CORS headers or network connectivity.',
+          details: err?.message || 'Failed to fetch',
         },
         null,
         2
@@ -377,8 +385,25 @@ export async function executeDirectClientFetch(
       duration,
       timestamp: Date.now(),
       ok: false,
-      error: err?.message || 'Connection Refused',
+      error: isLocalhost
+        ? 'Localhost Connection Refused. Start RestStudio Desktop Proxy Agent.'
+        : err?.message || 'Connection Refused',
     };
+  }
+}
+
+export type ProxyMode = 'auto' | 'desktop' | 'cloud' | 'direct';
+
+let currentProxyMode: ProxyMode = (typeof localStorage !== 'undefined' && (localStorage.getItem('reststudio_proxy_mode') as ProxyMode)) || 'auto';
+
+export function getProxyMode(): ProxyMode {
+  return currentProxyMode;
+}
+
+export function setProxyMode(mode: ProxyMode): void {
+  currentProxyMode = mode;
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('reststudio_proxy_mode', mode);
   }
 }
 
@@ -386,6 +411,7 @@ export async function executeDirectClientFetch(
  * Main HTTP request executor for RestStudio.
  */
 export async function executeHttpRequest(options: HttpRequestOptions): Promise<ExecutionResponse> {
+  const startTime = performance.now();
   const { method = 'GET', url, headers = {}, body } = options;
 
   if (!url || typeof url !== 'string' || !url.trim()) {
@@ -446,41 +472,59 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
   }
 
   // 3. Desktop Proxy Agent Check (Enables Netlify Web App -> Localhost / CORS execution)
-  try {
-    const proxyHealth = await checkDesktopProxyHealth();
-    if (proxyHealth.active) {
-      console.log('[RestStudio Netlify/Web] Routing request through Local Desktop Proxy Agent (127.0.0.1:28108)...');
-      const bridgeResult = await fetchViaDesktopProxy(method, targetUrl, headers, body, proxyHealth.port);
-      if (bridgeResult.success && bridgeResult.response) {
-        return bridgeResult.response as ExecutionResponse;
+  if (currentProxyMode === 'auto' || currentProxyMode === 'desktop') {
+    try {
+      const proxyHealth = await checkDesktopProxyHealth();
+      if (proxyHealth.active) {
+        console.log('[RestStudio Netlify/Web] Routing request through Local Desktop Proxy Agent (127.0.0.1:28108)...');
+        const bridgeResult = await fetchViaDesktopProxy(method, targetUrl, headers, body, proxyHealth.port);
+        if (bridgeResult.success && bridgeResult.response) {
+          return bridgeResult.response as ExecutionResponse;
+        }
+      } else if (currentProxyMode === 'desktop') {
+        return {
+          status: 0,
+          statusText: 'Desktop Proxy Offline',
+          headers: {},
+          body: JSON.stringify({ error: 'Desktop Proxy Agent is not running on http://127.0.0.1:28108', hint: 'Click Desktop Proxy button in header to copy quick 1-line command.' }, null, 2),
+          size: 0,
+          duration: Math.round(performance.now() - startTime),
+          timestamp: Date.now(),
+          ok: false,
+          error: 'Desktop Proxy Agent Offline',
+        };
       }
+    } catch (proxyAgentErr) {
+      console.warn('[RestStudio Web] Desktop Proxy Agent check failed, falling back:', proxyAgentErr);
     }
-  } catch (proxyAgentErr) {
-    console.warn('[RestStudio Web] Desktop Proxy Agent check failed, falling back:', proxyAgentErr);
   }
 
-  // 4. Web Proxy Execution (Routes through Netlify Function / Express /api/proxy server to bypass browser CORS for public endpoints)
-  try {
-    const proxyRes = await fetch('/api/proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ method, url: targetUrl, headers, body }),
-    });
+  // 4. Web Proxy Execution (Routes through Netlify Function / Express /api/proxy server for public external endpoints)
+  const isLocalHostTarget = targetUrl.includes('localhost') || targetUrl.includes('127.0.0.1') || targetUrl.includes('0.0.0.0') || targetUrl.includes('::1');
 
-    const contentType = proxyRes.headers.get('content-type') || '';
-    const responseText = await proxyRes.text();
-    const isHtmlResponse = responseText.trim().toLowerCase().startsWith('<!doctype') || responseText.trim().toLowerCase().startsWith('<html') || contentType.includes('text/html');
+  if ((currentProxyMode === 'auto' || currentProxyMode === 'cloud') && !isLocalHostTarget) {
+    try {
+      const proxyRes = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method, url: targetUrl, headers, body }),
+      });
 
-    if (proxyRes.ok && !isHtmlResponse) {
-      try {
-        const responseData: ExecutionResponse = JSON.parse(responseText);
-        if (responseData.status > 0) {
-          return responseData;
-        }
-      } catch (_) {}
+      const contentType = proxyRes.headers.get('content-type') || '';
+      const responseText = await proxyRes.text();
+      const isHtmlResponse = responseText.trim().toLowerCase().startsWith('<!doctype') || responseText.trim().toLowerCase().startsWith('<html') || contentType.includes('text/html');
+
+      if (proxyRes.ok && !isHtmlResponse) {
+        try {
+          const responseData: ExecutionResponse = JSON.parse(responseText);
+          if (responseData.status > 0) {
+            return responseData;
+          }
+        } catch (_) {}
+      }
+    } catch (proxyErr) {
+      console.warn('[RestStudio] Server proxy fetch error, falling back to direct browser fetch:', proxyErr);
     }
-  } catch (proxyErr) {
-    console.warn('[RestStudio] Server proxy fetch error, falling back to direct browser fetch:', proxyErr);
   }
 
   // 5. Direct Client Browser Fetch Fallback

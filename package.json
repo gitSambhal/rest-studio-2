@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
+    "proxy": "node scripts/proxy.js",
     "tauri:dev": "npm run build && tauri dev",
     "tauri:build": "npm run build && tauri build",
     "neu:dev": "node scripts/build-neu.js && npx @neutralinojs/neu run",

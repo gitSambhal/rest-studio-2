@@ -32,6 +32,9 @@ import {
   Key,
 } from 'lucide-react';
 
+import { getProxyMode, setProxyMode, ProxyMode } from '../utils/httpExecutor';
+import { checkDesktopProxyHealth } from '../utils/localhostBridge';
+
 interface RequestEditorProps {
   request: RestRequest;
   envVariables: EnvVariable[];
@@ -41,6 +44,7 @@ interface RequestEditorProps {
   onUpdateProjectAuth?: (auth: RequestAuth) => void;
   onUpdateRequest: (updated: RestRequest) => void;
   onSendRequest: (req: RestRequest) => void;
+  onOpenDesktopModal?: () => void;
   isLoading: boolean;
   lastResponse?: ExecutionResponse | null;
 }
@@ -54,6 +58,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   onUpdateProjectAuth,
   onUpdateRequest,
   onSendRequest,
+  onOpenDesktopModal,
   isLoading,
   lastResponse,
 }) => {
@@ -64,6 +69,18 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   const [copiedCode, setCopiedCode] = useState(false);
   const [isCurlModalOpen, setIsCurlModalOpen] = useState(false);
   const [copiedModalCurl, setCopiedModalCurl] = useState(false);
+  const [currentProxy, setCurrentProxy] = useState<ProxyMode>(() => getProxyMode());
+  const [isProxyActive, setIsProxyActive] = useState(false);
+
+  React.useEffect(() => {
+    const checkProxy = async () => {
+      const h = await checkDesktopProxyHealth();
+      setIsProxyActive(h.active);
+    };
+    checkProxy();
+    const interval = setInterval(checkProxy, 4000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Method colors
   const getMethodColor = (m: HTTPMethod) => {
@@ -346,6 +363,39 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           </div>
 
           <div className="flex items-center space-x-2">
+            {/* Proxy Mode Selector & Status Badge */}
+            <div className="relative flex items-center bg-slate-950/80 border border-slate-800 rounded-lg p-0.5">
+              <select
+                value={currentProxy}
+                onChange={(e) => {
+                  const m = e.target.value as ProxyMode;
+                  setCurrentProxy(m);
+                  setProxyMode(m);
+                }}
+                className="bg-transparent text-xs text-slate-200 font-medium px-2 py-1 focus:outline-none cursor-pointer"
+                title="Select HTTP Proxy Execution Mode"
+              >
+                <option value="auto" className="bg-slate-900 text-slate-200">⚡ Proxy: Auto (Desktop/Cloud)</option>
+                <option value="desktop" className="bg-slate-900 text-slate-200">🖥️ Proxy: Desktop Agent (127.0.0.1:28108)</option>
+                <option value="cloud" className="bg-slate-900 text-slate-200">☁️ Proxy: Cloud Server</option>
+                <option value="direct" className="bg-slate-900 text-slate-200">🌐 Proxy: Direct Browser</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={onOpenDesktopModal}
+                className={`flex items-center space-x-1 text-[11px] font-semibold px-2 py-1 rounded transition-colors cursor-pointer shrink-0 ${
+                  isProxyActive
+                    ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
+                    : 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
+                }`}
+                title={isProxyActive ? 'Desktop Localhost Proxy Agent is ACTIVE on http://127.0.0.1:28108' : 'Click to setup Desktop Proxy Agent for Localhost & CORS'}
+              >
+                <span className={`w-2 h-2 rounded-full ${isProxyActive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                <span className="hidden sm:inline">{isProxyActive ? 'Agent Active' : 'Setup Proxy'}</span>
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={() => setIsCurlModalOpen(true)}

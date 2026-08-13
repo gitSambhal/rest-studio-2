@@ -1627,6 +1627,7 @@ export default function App() {
             onOpenImportExport={() => setIsImportExportOpen(true)}
             onOpenQuickHelp={() => setIsQuickHelpOpen(true)}
             onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
             onOpenQuickNewRequest={() => setIsQuickNewRequestOpen(true)}
             onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
             historyCount={history.length}
@@ -1718,6 +1719,7 @@ export default function App() {
                           onUpdateProjectAuth={handleUpdateProjectAuth}
                           onUpdateRequest={handleUpdateActiveRequest}
                           onSendRequest={handleExecuteRequest}
+                          onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
                           isLoading={isExecuting}
                           lastResponse={lastResponse}
                         />
@@ -1949,6 +1951,7 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         isDarkMode={isDarkMode}
         onToggleDarkMode={handleToggleDarkMode}
+        onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
         showToast={showToast}
       />
 

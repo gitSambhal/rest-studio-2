@@ -209,6 +209,49 @@ async function startServer() {
     });
   }
 
+  // Start secondary Desktop Localhost Proxy Agent on 127.0.0.1:28108 if available
+  try {
+    const http = await import('http');
+    const proxyServer = http.createServer((req, res) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD');
+      res.setHeader('Access-Control-Allow-Headers', '*');
+      res.setHeader('Access-Control-Allow-Private-Network', 'true');
+
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        return res.end();
+      }
+
+      if (req.url === '/health' || req.url === '/') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({
+          status: 'ok',
+          service: 'RestStudio Desktop Localhost Proxy Agent',
+          version: '1.0.0',
+          port: 28108
+        }));
+      }
+
+      // Delegate /proxy requests to main app Express router
+      app(req as any, res as any);
+    });
+
+    proxyServer.listen(28108, '127.0.0.1', () => {
+      console.log('RestStudio Desktop Proxy Agent active on http://127.0.0.1:28108');
+    });
+
+    proxyServer.on('error', (err: any) => {
+      if (err.code === 'EADDRINUSE') {
+        console.log('[RestStudio] Proxy agent port 28108 is already bound and active.');
+      } else {
+        console.warn('[RestStudio] Proxy agent port 28108 warning:', err.message);
+      }
+    });
+  } catch (err: any) {
+    console.warn('[RestStudio] Could not initialize 28108 listener:', err?.message);
+  }
+
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`RestStudio server running on http://localhost:${PORT}`);
   });
