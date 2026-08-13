@@ -36,13 +36,122 @@ export function isNativeDesktopApp(): boolean {
   );
 }
 
+let relayWs: WebSocket | null = null;
+
 /**
- * Initialize Desktop App Relay Client stub (no background WebSocket loops).
+ * Initialize Desktop App Relay Client when running inside native Desktop container.
+ * Opens an outbound WebSocket connection to the Cloud Relay server so web sessions can execute local requests.
  */
 export function initDesktopRelayClient(): void {
-  if (isNativeDesktopApp()) {
-    console.log('[RestStudio Desktop] Native Desktop OS mode active. Direct OS execution enabled.');
+  if (typeof window === 'undefined') return;
+  if (!isNativeDesktopApp()) {
+    return; // No relay client needed in standard web browser
   }
+
+  console.log('[RestStudio Desktop] Native Desktop OS mode active. Direct OS execution enabled.');
+
+  let wsUrl = '';
+  if (window.location.protocol.startsWith('http')) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    wsUrl = `${protocol}//${window.location.host}/api/relay/ws`;
+  } else {
+    const host = window.location.host || 'ais-dev-p7q3teh2lcfdzgil5j7yhw-236658229502.asia-southeast1.run.app';
+    wsUrl = `wss://${host}/api/relay/ws`;
+  }
+
+  function connectRelay() {
+    if (relayWs && (relayWs.readyState === WebSocket.OPEN || relayWs.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+
+    try {
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log('[RestStudio Desktop Relay] Connected to Cloud Relay Server!');
+        try {
+          ws.send(JSON.stringify({ type: 'register_desktop', platform: navigator.platform }));
+        } catch (_) {}
+      };
+
+      ws.onmessage = async (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong' }));
+            return;
+          }
+
+          if (data.type === 'relay_request' && data.id && data.url) {
+            console.log(`[RestStudio Desktop Relay] Executing local request: ${data.method} ${data.url}`);
+            
+            let localResponse: any = null;
+            try {
+              const startTime = performance.now();
+              const res = await fetch(data.url, {
+                method: data.method,
+                headers: data.headers,
+                body: data.body ? (typeof data.body === 'string' ? data.body : JSON.stringify(data.body)) : undefined,
+              });
+              const text = await res.text();
+              const duration = Math.round(performance.now() - startTime);
+              const resHeaders: Record<string, string> = {};
+              res.headers.forEach((v, k) => { resHeaders[k] = v; });
+
+              localResponse = {
+                status: res.status,
+                statusText: res.statusText || 'OK',
+                headers: resHeaders,
+                body: text,
+                size: new Blob([text]).size,
+                duration,
+                timestamp: Date.now(),
+                ok: res.ok,
+                contentType: res.headers.get('content-type') || 'text/plain',
+              };
+            } catch (fetchErr: any) {
+              localResponse = {
+                status: 0,
+                statusText: 'Local Network Error',
+                headers: {},
+                body: JSON.stringify({ error: fetchErr.message || 'Failed to fetch local endpoint' }),
+                size: 0,
+                duration: 0,
+                timestamp: Date.now(),
+                ok: false,
+                error: fetchErr.message,
+              };
+            }
+
+            ws.send(
+              JSON.stringify({
+                type: 'relay_response',
+                id: data.id,
+                ...localResponse,
+              })
+            );
+          }
+        } catch (err: any) {
+          console.warn('[RestStudio Desktop Relay] Error processing relay message:', err?.message);
+        }
+      };
+
+      ws.onclose = () => {
+        relayWs = null;
+        setTimeout(connectRelay, 5000);
+      };
+
+      ws.onerror = () => {
+        try { ws.close(); } catch (_) {}
+      };
+
+      relayWs = ws;
+    } catch (_) {
+      setTimeout(connectRelay, 5000);
+    }
+  }
+
+  connectRelay();
 }
 
 /**
@@ -50,7 +159,7 @@ export function initDesktopRelayClient(): void {
  */
 export async function checkDesktopProxyHealth(): Promise<DesktopProxyHealth> {
   const now = Date.now();
-  if (now - lastHealthCheck < 2500 && cachedProxyHealth.active) {
+  if (now - lastHealthCheck < 1500) {
     return cachedProxyHealth;
   }
 
@@ -65,24 +174,27 @@ export async function checkDesktopProxyHealth(): Promise<DesktopProxyHealth> {
     return cachedProxyHealth;
   }
 
-  // 2. Query Cloud Server for status
+  // 2. Query Relay Status endpoint to check if a Desktop App agent is connected
   try {
-    const res = await fetch('/api/health', { method: 'GET' }).catch(() => null);
+    const res = await fetch('/api/relay/status', { method: 'GET', cache: 'no-store' }).catch(() => null);
     if (res && res.ok) {
-      cachedProxyHealth = {
-        active: true,
-        port: 3000,
-        message: 'RestStudio Server Ready',
-      };
-      lastHealthCheck = now;
-      return cachedProxyHealth;
+      const data = await res.json().catch(() => null);
+      if (data && data.active === true) {
+        cachedProxyHealth = {
+          active: true,
+          port: 3000,
+          message: 'RestStudio Desktop Agent Connected',
+        };
+        lastHealthCheck = now;
+        return cachedProxyHealth;
+      }
     }
   } catch (_) {}
 
   cachedProxyHealth = {
     active: false,
     port: 3000,
-    message: 'Desktop App Offline',
+    message: 'Desktop App Disconnected',
   };
   lastHealthCheck = now;
   return cachedProxyHealth;
