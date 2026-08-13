@@ -446,8 +446,6 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
   // 1. Neutralino Native Desktop Container Check
   if (typeof window !== 'undefined' && ((window as any).Neutralino || (window as any).NL_PORT || (window as any).NL_MODE || (window as any).__NL_PORT__ || window.location.protocol === 'file:')) {
     try {
-      // Ensure local Desktop Proxy Server is initialized in background for Netlify web app connectivity
-      startDesktopProxyInNeutralino().catch(() => {});
       console.log('[RestStudio Neutralino] Executing via Neutralino Native Engine...');
       const neuRes = await executeNeutralinoFetch(method, targetUrl, headers, body);
       if (neuRes && neuRes.status > 0) {
