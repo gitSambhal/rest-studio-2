@@ -4,6 +4,7 @@ import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import './index.css';
 import { initDesktopClipboardHandlers } from './utils/desktopClipboard.ts';
+import { initDesktopRelayClient } from './utils/localhostBridge.ts';
 
 // Initialize Neutralino Native Desktop SDK if running inside Neutralino container
 if (typeof window !== 'undefined' && (window as any).Neutralino) {
@@ -11,14 +12,13 @@ if (typeof window !== 'undefined' && (window as any).Neutralino) {
     const NL = (window as any).Neutralino;
     NL.init();
     console.log('[RestStudio Neutralino] Neutralino Native OS SDK initialized');
-    // Auto-start background local proxy listener so web browser app can connect seamlessly
-    import('./utils/localhostBridge').then(({ startDesktopProxyInNeutralino }) => {
-      startDesktopProxyInNeutralino().catch(() => {});
-    });
   } catch (err) {
     console.warn('[RestStudio Neutralino] Initialization warning:', err);
   }
 }
+
+// Automatically connect Desktop App Cloud Relay if running in Desktop mode or app load
+initDesktopRelayClient();
 
 // Initialize desktop clipboard, copy/paste and text selection handlers
 initDesktopClipboardHandlers();
@@ -30,5 +30,6 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>,
 );
+
 
 

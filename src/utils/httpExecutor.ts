@@ -476,8 +476,8 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
     try {
       const proxyHealth = await checkDesktopProxyHealth();
       if (proxyHealth.active) {
-        console.log('[RestStudio Netlify/Web] Routing request through Local Desktop Proxy Agent (127.0.0.1:28108)...');
-        const bridgeResult = await fetchViaDesktopProxy(method, targetUrl, headers, body, proxyHealth.port);
+        console.log('[RestStudio Netlify/Web] Routing request through Local Desktop Proxy / Cloud Relay...');
+        const bridgeResult = await fetchViaDesktopProxy(method, targetUrl, headers, body);
         if (bridgeResult.success && bridgeResult.response) {
           return bridgeResult.response as ExecutionResponse;
         }

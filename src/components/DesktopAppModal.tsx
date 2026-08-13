@@ -2,16 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { checkDesktopProxyHealth, DesktopProxyHealth } from '../utils/localhostBridge';
 import {
   X,
-  Copy,
-  Check,
-  Zap,
-  Terminal,
   ShieldCheck,
-  Globe,
   RefreshCw,
-  Server,
-  Play,
   Monitor,
+  Zap,
 } from 'lucide-react';
 
 interface DesktopAppModalProps {
@@ -25,8 +19,7 @@ export const DesktopAppModal: React.FC<DesktopAppModalProps> = ({
   onClose,
   isDarkMode = true,
 }) => {
-  const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
-  const [proxyHealth, setProxyHealth] = useState<DesktopProxyHealth>({ active: false, port: 28108 });
+  const [proxyHealth, setProxyHealth] = useState<DesktopProxyHealth>({ active: false, port: 3000 });
   const [isChecking, setIsChecking] = useState(false);
 
   const refreshHealth = async () => {
@@ -46,12 +39,6 @@ export const DesktopAppModal: React.FC<DesktopAppModalProps> = ({
   }, [isOpen]);
 
   if (!isOpen) return null;
-
-  const handleCopy = (cmd: string, key: string) => {
-    navigator.clipboard.writeText(cmd);
-    setCopiedCmd(key);
-    setTimeout(() => setCopiedCmd(null), 2000);
-  };
 
   const isNativeApp = typeof window !== 'undefined' && Boolean(
     (window as any).Neutralino ||
@@ -84,7 +71,7 @@ export const DesktopAppModal: React.FC<DesktopAppModalProps> = ({
                     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                     : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                 }`}>
-                  {proxyHealth.active ? '🟢 ACTIVE (127.0.0.1:28108)' : '⚪ OFFLINE'}
+                  {proxyHealth.active ? '🟢 CONNECTED' : '⚪ DISCONNECTED'}
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
@@ -116,23 +103,23 @@ export const DesktopAppModal: React.FC<DesktopAppModalProps> = ({
                 <div className="space-y-1">
                   <h3 className="font-bold text-white text-sm">
                     {isNativeApp
-                      ? 'RestStudio Native Desktop App Active'
+                      ? 'RestStudio Native Desktop App Running'
                       : proxyHealth.active
-                        ? 'Desktop App Active & Connected'
-                        : 'Desktop App Not Running'}
+                        ? 'Desktop App Connected & Ready'
+                        : 'Desktop App Disconnected'}
                   </h3>
                   <p className="text-xs text-slate-300 leading-relaxed">
                     {isNativeApp ? (
                       <span>
-                        RestStudio is running directly as a native desktop application. All HTTP requests to <code className="text-emerald-400 font-mono">localhost</code> execute natively with zero CORS restrictions.
+                        RestStudio is running as a native desktop application. All HTTP requests to <code className="text-emerald-400 font-mono">localhost</code> execute natively on your computer with zero CORS restrictions.
                       </span>
                     ) : proxyHealth.active ? (
                       <span>
-                        RestStudio Desktop App is running on your machine (<code className="text-emerald-400 font-mono">127.0.0.1:28108</code>). Requests to <code className="text-emerald-400 font-mono">localhost</code> and local servers execute directly through your local environment!
+                        RestStudio Desktop App is open on your computer. Requests to <code className="text-emerald-400 font-mono">localhost</code> and local dev servers execute directly on your machine through an encrypted relay tunnel!
                       </span>
                     ) : (
                       <span>
-                        To connect this web app to your local APIs on <code className="text-slate-200 font-mono">localhost</code>, simply launch the installed <strong>RestStudio Desktop Application</strong> on your computer. It automatically listens for local API requests without any configuration required.
+                        To connect this web app to your local APIs on <code className="text-slate-200 font-mono">localhost</code>, simply launch the <strong>RestStudio Desktop Application</strong> on your computer. It connects automatically with zero configuration or terminal commands needed.
                       </span>
                     )}
                   </p>
@@ -153,6 +140,19 @@ export const DesktopAppModal: React.FC<DesktopAppModalProps> = ({
             </div>
           </div>
 
+          {/* Instructions Box */}
+          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2.5">
+            <h4 className="font-bold text-slate-200 text-xs flex items-center space-x-2">
+              <Zap className="w-4 h-4 text-emerald-400" />
+              <span>How it works:</span>
+            </h4>
+            <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-slate-300 leading-relaxed">
+              <li>Open the <strong>RestStudio Desktop App</strong> on your PC or Mac.</li>
+              <li>The Desktop App establishes a secure background connection to your web session.</li>
+              <li>Execute any HTTP request to <code className="text-emerald-400 font-mono">http://localhost:5000</code> or your local APIs—it connects seamlessly!</li>
+            </ol>
+          </div>
+
           {/* Capabilities */}
           <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-xl p-3.5 space-y-2">
             <h5 className="font-bold text-emerald-400 text-xs flex items-center space-x-1.5">
@@ -162,7 +162,7 @@ export const DesktopAppModal: React.FC<DesktopAppModalProps> = ({
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-300">
               <li className="flex items-center space-x-2">
                 <span className="text-emerald-400 font-bold">✓</span>
-                <span>Automatic background connection when opened</span>
+                <span>Automatic connection on app launch</span>
               </li>
               <li className="flex items-center space-x-2">
                 <span className="text-emerald-400 font-bold">✓</span>
@@ -170,7 +170,7 @@ export const DesktopAppModal: React.FC<DesktopAppModalProps> = ({
               </li>
               <li className="flex items-center space-x-2">
                 <span className="text-emerald-400 font-bold">✓</span>
-                <span>No commands or setup needed</span>
+                <span>Zero configuration or terminal setup</span>
               </li>
               <li className="flex items-center space-x-2">
                 <span className="text-emerald-400 font-bold">✓</span>
@@ -182,9 +182,13 @@ export const DesktopAppModal: React.FC<DesktopAppModalProps> = ({
 
         {/* Modal Footer */}
         <div className="px-5 py-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between shrink-0">
-          <div className="flex items-center space-x-2 text-[11px] text-slate-400 font-mono">
-            <span>Agent Port:</span>
-            <code className="text-emerald-400 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded font-bold">127.0.0.1:28108</code>
+          <div className="flex items-center space-x-2 text-[11px] text-slate-400">
+            <span>Status:</span>
+            <span className={`font-bold font-mono px-2 py-0.5 rounded border ${
+              proxyHealth.active ? 'text-emerald-400 bg-emerald-950/60 border-emerald-500/30' : 'text-amber-400 bg-amber-950/60 border-amber-500/30'
+            }`}>
+              {proxyHealth.active ? 'Desktop App Connected' : 'Waiting for Desktop App launch...'}
+            </span>
           </div>
           <button
             type="button"

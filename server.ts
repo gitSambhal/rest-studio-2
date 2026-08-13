@@ -1,6 +1,8 @@
 import express from 'express';
 import path from 'path';
 import axios from 'axios';
+import http from 'http';
+import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 
 async function startServer() {
@@ -22,9 +24,23 @@ async function startServer() {
     next();
   });
 
+  // Track connected Desktop App instances over WebSocket relay
+  const connectedDesktopApps = new Map<string, WebSocket>();
+  const pendingRelayRequests = new Map<string, (resData: any) => void>();
+
   // Health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', service: 'RestStudio API Proxy' });
+  });
+
+  // Desktop App Relay Connection Status
+  app.get('/api/relay/status', (req, res) => {
+    const isConnected = connectedDesktopApps.size > 0;
+    res.json({
+      active: isConnected,
+      connectedCount: connectedDesktopApps.size,
+      message: isConnected ? 'RestStudio Desktop App Connected' : 'Desktop App Disconnected',
+    });
   });
 
   // Return JS stub for Neutralino client library in web browser preview mode to prevent HTML 404 syntax error
@@ -32,8 +48,8 @@ async function startServer() {
     res.type('application/javascript').send('/* Neutralino JS stub for web browser preview */');
   });
 
-  // REST Request Proxy Endpoint - Uses Axios on server to bypass Browser CORS for ALL external APIs
-  app.post('/api/proxy', async (req, res) => {
+  // REST Request Proxy Endpoint - Relays local requests to connected Desktop App, or proxies external APIs
+  app.post(['/api/proxy', '/proxy'], async (req, res) => {
     const { method = 'GET', url, headers = {}, body } = req.body;
 
     if (!url || typeof url !== 'string') {
@@ -57,7 +73,9 @@ async function startServer() {
       }
     }
 
-    // Convert localhost or 0.0.0.0 to 127.0.0.1 to avoid Node 18+ IPv6 (::1) lookup connection refused errors
+    // Standardize localhost or 0.0.0.0 to 127.0.0.1
+    const isLocalAddress = /^(http|https):\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|.*\.local)(:|\/|$)/i.test(targetUrl);
+
     targetUrl = targetUrl
       .replace(/^http:\/\/localhost(?=[:\/]|$)/i, 'http://127.0.0.1')
       .replace(/^http:\/\/0\.0\.0\.0(?=[:\/]|$)/i, 'http://127.0.0.1');
@@ -80,6 +98,55 @@ async function startServer() {
 
     const startTime = performance.now();
 
+    // 1. If targeting localhost / local IP AND a Desktop App is connected via WebSocket, relay to Desktop App!
+    if (isLocalAddress && connectedDesktopApps.size > 0) {
+      const desktopWs = Array.from(connectedDesktopApps.values()).pop();
+      if (desktopWs && desktopWs.readyState === WebSocket.OPEN) {
+        const reqId = `relay_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        
+        try {
+          const relayResult = await new Promise((resolve) => {
+            const timeout = setTimeout(() => {
+              pendingRelayRequests.delete(reqId);
+              resolve({
+                status: 504,
+                statusText: 'Gateway Timeout',
+                headers: {},
+                body: JSON.stringify({ error: 'Desktop App did not respond within 30 seconds' }),
+                size: 0,
+                duration: 30000,
+                timestamp: Date.now(),
+                ok: false,
+                error: 'Desktop App timeout',
+              });
+            }, 30000);
+
+            pendingRelayRequests.set(reqId, (responseData: any) => {
+              clearTimeout(timeout);
+              resolve(responseData);
+            });
+
+            desktopWs.send(
+              JSON.stringify({
+                type: 'relay_request',
+                id: reqId,
+                method,
+                url: targetUrl,
+                headers,
+                body,
+              })
+            );
+          });
+
+          res.json(relayResult);
+          return;
+        } catch (relayErr: any) {
+          console.warn('[RestStudio Relay] Desktop Relay failed:', relayErr?.message);
+        }
+      }
+    }
+
+    // 2. Direct Axios proxy attempt
     try {
       // Clean up headers to prevent host/content-length conflicts
       const cleanedHeaders: Record<string, string> = {
@@ -137,6 +204,32 @@ async function startServer() {
         contentType: resHeaders['content-type'] || 'text/plain',
       });
     } catch (err: any) {
+      // If local address and Axios failed (because server is on Cloud Run and target is localhost on user PC)
+      if (isLocalAddress) {
+        const endTime = performance.now();
+        const duration = Math.round(endTime - startTime);
+        res.status(503).json({
+          status: 503,
+          statusText: 'Desktop App Disconnected',
+          headers: {},
+          body: JSON.stringify(
+            {
+              error: 'To connect to localhost / local APIs from this web app, please launch the RestStudio Desktop Application on your computer.',
+              targetUrl,
+              message: 'The Desktop App automatically connects over a secure relay tunnel with zero configuration.',
+            },
+            null,
+            2
+          ),
+          size: 0,
+          duration,
+          timestamp: Date.now(),
+          ok: false,
+          error: 'RestStudio Desktop App not running on local computer',
+        });
+        return;
+      }
+
       // Fallback server-side attempt using public CORS proxy (corsproxy.io / allorigins.win)
       try {
         console.log('[RestStudio Proxy] Direct Axios failed. Attempting corsproxy.io fallback...');
@@ -209,150 +302,54 @@ async function startServer() {
     });
   }
 
-  // Start secondary Desktop Localhost Proxy Agent on 127.0.0.1:28108 if available
-  try {
-    const http = await import('http');
-    const { WebSocketServer } = await import('ws');
-    const proxyServer = http.createServer((req, res) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD');
-      res.setHeader('Access-Control-Allow-Headers', '*');
-      res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  // Create primary HTTP server for Express and WebSocket Relay
+  const server = http.createServer(app);
 
-      if (req.method === 'OPTIONS') {
-        res.writeHead(204);
-        return res.end();
-      }
+  // Mount WebSocket Relay Server for Desktop App Connections
+  const wss = new WebSocketServer({ server, path: '/api/relay/ws' });
 
-      if (req.url === '/health' || req.url === '/') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({
-          status: 'ok',
-          service: 'RestStudio Desktop Localhost Proxy Agent',
-          version: '1.0.0',
-          port: 28108
-        }));
-      }
+  wss.on('connection', (ws, req) => {
+    const clientId = `desktop_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    connectedDesktopApps.set(clientId, ws);
+    console.log(`[RestStudio Relay] Desktop App connected: ${clientId} from ${req.socket.remoteAddress}`);
 
-      // Delegate /proxy requests to main app Express router
-      app(req as any, res as any);
-    });
+    ws.send(JSON.stringify({ type: 'connected', clientId, version: '1.0.0' }));
 
-    // Attach WebSocket Server for HTTPS web app connection
-    const wss = new WebSocketServer({ server: proxyServer });
-    wss.on('connection', (ws) => {
-      ws.on('message', async (message) => {
-        try {
-          const payload = JSON.parse(message.toString());
-          if (payload.type === 'ping' || payload.action === 'ping') {
-            ws.send(JSON.stringify({ type: 'pong', status: 'ok', port: 28108 }));
-            return;
+    ws.on('message', (message) => {
+      try {
+        const payload = JSON.parse(message.toString());
+        if (payload.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
+          return;
+        }
+
+        if (payload.type === 'relay_response' && payload.id) {
+          const callback = pendingRelayRequests.get(payload.id);
+          if (callback) {
+            pendingRelayRequests.delete(payload.id);
+            callback(payload);
           }
-
-          if (payload.type === 'proxy' || payload.type === 'proxy_request') {
-            const { id, method = 'GET', url, headers = {}, body } = payload;
-            if (!url) {
-              ws.send(JSON.stringify({ type: 'proxy_response', id, error: 'URL is required', status: 0 }));
-              return;
-            }
-
-            try {
-              const httpMod = await import('http');
-              const httpsMod = await import('https');
-              const parsedUrl = new URL(url);
-              const transport = parsedUrl.protocol === 'https:' ? httpsMod : httpMod;
-              const startTime = Date.now();
-
-              const reqOptions = {
-                hostname: parsedUrl.hostname === 'localhost' ? '127.0.0.1' : parsedUrl.hostname,
-                port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
-                path: parsedUrl.pathname + parsedUrl.search,
-                method: method.toUpperCase(),
-                headers: { ...headers },
-                rejectUnauthorized: false
-              };
-
-              const proxyReq = transport.request(reqOptions, (proxyRes) => {
-                let resData = '';
-                proxyRes.on('data', chunk => { resData += chunk; });
-                proxyRes.on('end', () => {
-                  const duration = Date.now() - startTime;
-                  const resHeaders: Record<string, any> = {};
-                  Object.keys(proxyRes.headers).forEach(k => { resHeaders[k] = proxyRes.headers[k]; });
-                  ws.send(JSON.stringify({
-                    type: 'proxy_response',
-                    id,
-                    status: proxyRes.statusCode,
-                    statusText: proxyRes.statusMessage || 'OK',
-                    headers: resHeaders,
-                    body: resData,
-                    size: Buffer.byteLength(resData),
-                    duration,
-                    timestamp: Date.now(),
-                    ok: (proxyRes.statusCode || 0) >= 200 && (proxyRes.statusCode || 0) < 300,
-                    contentType: proxyRes.headers['content-type'] || 'text/plain'
-                  }));
-                });
-              });
-
-              proxyReq.on('error', (err) => {
-                ws.send(JSON.stringify({
-                  type: 'proxy_response',
-                  id,
-                  status: 0,
-                  statusText: 'Network Error',
-                  headers: {},
-                  body: JSON.stringify({ error: err.message }),
-                  size: 0,
-                  duration: Date.now() - startTime,
-                  timestamp: Date.now(),
-                  ok: false,
-                  error: err.message
-                }));
-              });
-
-              if (body !== undefined && body !== null) {
-                proxyReq.write(typeof body === 'object' ? JSON.stringify(body) : String(body));
-              }
-              proxyReq.end();
-            } catch (err: any) {
-              ws.send(JSON.stringify({
-                type: 'proxy_response',
-                id,
-                status: 0,
-                statusText: 'Server Error',
-                headers: {},
-                body: JSON.stringify({ error: err.message }),
-                size: 0,
-                duration: 0,
-                timestamp: Date.now(),
-                ok: false,
-                error: err.message
-              }));
-            }
-          }
-        } catch (_) {}
-      });
-    });
-
-    proxyServer.listen(28108, '127.0.0.1', () => {
-      console.log('RestStudio Desktop Proxy Agent active on http://127.0.0.1:28108 & ws://127.0.0.1:28108');
-    });
-
-    proxyServer.on('error', (err: any) => {
-      if (err.code === 'EADDRINUSE') {
-        console.log('[RestStudio] Proxy agent port 28108 is already bound and active.');
-      } else {
-        console.warn('[RestStudio] Proxy agent port 28108 warning:', err.message);
+        }
+      } catch (err: any) {
+        console.warn('[RestStudio Relay] Invalid message received on WS:', err?.message);
       }
     });
-  } catch (err: any) {
-    console.warn('[RestStudio] Could not initialize 28108 listener:', err?.message);
-  }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`RestStudio server running on http://localhost:${PORT}`);
+    ws.on('close', () => {
+      connectedDesktopApps.delete(clientId);
+      console.log(`[RestStudio Relay] Desktop App disconnected: ${clientId}`);
+    });
+
+    ws.on('error', (err) => {
+      connectedDesktopApps.delete(clientId);
+      console.warn(`[RestStudio Relay] Desktop App WS error (${clientId}):`, err.message);
+    });
+  });
+
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`RestStudio Server & WebSocket Relay active on http://0.0.0.0:${PORT} (ws://0.0.0.0:${PORT}/api/relay/ws)`);
   });
 }
 
 startServer();
+
