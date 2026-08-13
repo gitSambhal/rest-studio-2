@@ -304,6 +304,20 @@ makePortableZip('RestStudio-Linux-x64.zip', 'RestStudio-Linux-x64', 'RestStudio'
 makePortableZip('RestStudio-Linux-ARM64.zip', 'RestStudio-Linux-ARM64', 'RestStudio');
 makePortableZip('RestStudio-Linux-ARMhf.zip', 'RestStudio-Linux-ARMhf', 'RestStudio');
 
+// Mirror all artifacts from dist/reststudio to dist/ root so artifact exporters can find them at either path
+if (fs.existsSync(distRestStudioDir)) {
+  const items = fs.readdirSync(distRestStudioDir);
+  for (const item of items) {
+    const srcPath = path.join(distRestStudioDir, item);
+    const destPath = path.join(path.resolve('dist'), item);
+    if (!fs.existsSync(destPath) || item.startsWith('RestStudio')) {
+      try {
+        fs.cpSync(srcPath, destPath, { recursive: true });
+      } catch {}
+    }
+  }
+}
+
 console.log('\n====================================================');
 console.log('[Neu Build System] All single-binary executables & macOS .app bundles generated successfully!');
 console.log('====================================================\n');
