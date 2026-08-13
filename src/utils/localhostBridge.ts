@@ -92,7 +92,7 @@ export async function connectDesktopProxyWebSocket(port: number = DEFAULT_DESKTO
 }
 
 /**
- * Check if RestStudio Desktop Proxy Agent is running locally on http/ws://127.0.0.1:28108
+ * Check if RestStudio Desktop Proxy Agent is running locally on http/ws://127.0.0.1:28108 or Cloud Relay
  */
 export async function checkDesktopProxyHealth(port: number = DEFAULT_DESKTOP_PROXY_PORT): Promise<DesktopProxyHealth> {
   const now = Date.now();
@@ -100,7 +100,33 @@ export async function checkDesktopProxyHealth(port: number = DEFAULT_DESKTOP_PRO
     return cachedProxyHealth;
   }
 
-  // 1. Try WebSocket connection (Bypasses HTTPS Mixed Content in Web Browsers!)
+  // 1. Try Cloud Relay Agent Status (Works 100% on HTTPS Web Apps!)
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1000);
+    const relayRes = await fetch('/api/relay/status', {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    if (relayRes.ok) {
+      const data = await relayRes.json();
+      if (data && data.active) {
+        cachedProxyHealth = {
+          active: true,
+          version: '1.0.0',
+          port,
+          message: 'Desktop Proxy Agent Connected (Relay Bridge)',
+        };
+        lastHealthCheck = now;
+        return cachedProxyHealth;
+      }
+    }
+  } catch (_) {}
+
+  // 2. Try WebSocket connection (Bypasses HTTPS Mixed Content when supported)
   const ws = await connectDesktopProxyWebSocket(port);
   if (ws) {
     cachedProxyHealth = {
@@ -113,7 +139,7 @@ export async function checkDesktopProxyHealth(port: number = DEFAULT_DESKTOP_PRO
     return cachedProxyHealth;
   }
 
-  // 2. Try HTTP fetch fallback
+  // 3. Try HTTP fetch fallback
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1200);
@@ -151,8 +177,7 @@ export async function checkDesktopProxyHealth(port: number = DEFAULT_DESKTOP_PRO
 }
 
 /**
- * Execute HTTP Request via Desktop Proxy Agent on ws:// or http://127.0.0.1:28108
- * Used when web application is running on Netlify to bypass CORS and access localhost directly
+ * Execute HTTP Request via Desktop Proxy Agent on Relay / ws:// or http://127.0.0.1:28108
  */
 export async function fetchViaDesktopProxy(
   method: string,
@@ -161,7 +186,34 @@ export async function fetchViaDesktopProxy(
   body?: any,
   port: number = DEFAULT_DESKTOP_PROXY_PORT
 ): Promise<BridgeFetchResult> {
-  // 1. Try WebSocket execution first (Works on HTTPS Web Deployments!)
+  // 1. Try Cloud Relay execution first (Primary for Web App -> Desktop Agent)
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
+    const relayRes = await fetch('/api/relay/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ method, url, headers, body }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeout);
+
+    if (relayRes.ok) {
+      const data = await relayRes.json();
+      if (data && data.status !== undefined) {
+        return {
+          success: true,
+          response: data
+        };
+      }
+    }
+  } catch (rErr) {
+    console.warn('[localhostBridge] Relay execution attempt bypassed:', rErr);
+  }
+
+  // 2. Try WebSocket execution (Direct Local Mode)
   const ws = await connectDesktopProxyWebSocket(port);
   if (ws && ws.readyState === WebSocket.OPEN) {
     return new Promise((resolve) => {
