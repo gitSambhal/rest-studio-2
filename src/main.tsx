@@ -6,7 +6,11 @@ import './index.css';
 import { initDesktopClipboardHandlers } from './utils/desktopClipboard.ts';
 
 // Initialize Neutralino Native Desktop SDK if running inside Neutralino container
-if (typeof window !== 'undefined' && (window as any).Neutralino) {
+if (
+  typeof window !== 'undefined' &&
+  (window as any).Neutralino &&
+  ((window as any).NL_PORT || (window as any).NL_TOKEN)
+) {
   try {
     const NL = (window as any).Neutralino;
     NL.init();

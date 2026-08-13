@@ -39,9 +39,10 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Skip non-GET requests, proxy API endpoints, and Vite dev/module assets
+  // Skip non-GET requests, non-http/https schemes (like chrome-extension:), proxy API endpoints, and Vite dev/module assets
   if (
     event.request.method !== 'GET' ||
+    !url.protocol.startsWith('http') ||
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/src/') ||
     url.pathname.startsWith('/node_modules/') ||
@@ -60,7 +61,9 @@ self.addEventListener('fetch', (event) => {
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             const copy = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, copy).catch(() => {});
+            }).catch(() => {});
           }
           return networkResponse;
         })
@@ -79,8 +82,8 @@ self.addEventListener('fetch', (event) => {
           if (networkResponse && networkResponse.status === 200) {
             const responseToCache = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
+              cache.put(event.request, responseToCache).catch(() => {});
+            }).catch(() => {});
           }
           return networkResponse;
         })

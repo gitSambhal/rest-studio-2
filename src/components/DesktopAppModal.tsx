@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { checkDesktopProxyHealth, DesktopProxyHealth } from '../utils/localhostBridge';
+import { checkDesktopProxyHealth, isNativeDesktopApp, DesktopProxyHealth } from '../utils/localhostBridge';
 import {
   X,
   ShieldCheck,
@@ -40,13 +40,7 @@ export const DesktopAppModal: React.FC<DesktopAppModalProps> = ({
 
   if (!isOpen) return null;
 
-  const isNativeApp = typeof window !== 'undefined' && Boolean(
-    (window as any).Neutralino ||
-    (window as any).NL_PORT ||
-    (window as any).__TAURI__ ||
-    (window as any).__TAURI_INTERNALS__ ||
-    window.location.protocol === 'file:'
-  );
+  const isNativeApp = isNativeDesktopApp();
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-150">

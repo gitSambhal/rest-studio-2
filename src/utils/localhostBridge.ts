@@ -29,13 +29,10 @@ export function isNativeDesktopApp(): boolean {
   if (typeof window === 'undefined') return false;
   const w = window as any;
   return Boolean(
-    w.Neutralino ||
-    w.NL_PORT ||
-    w.NL_MODE ||
-    w.__NL_PORT__ ||
+    (w.Neutralino && (w.NL_PORT || w.NL_TOKEN || w.NL_MODE || w.__NL_PORT__)) ||
     w.__TAURI__ ||
     w.__TAURI_INTERNALS__ ||
-    w.location?.protocol === 'file:'
+    (w.location?.protocol === 'file:' && w.NL_PORT)
   );
 }
 

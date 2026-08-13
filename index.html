@@ -70,7 +70,14 @@
   </head>
   <body class="bg-slate-950 text-slate-100 antialiased selection:bg-emerald-500/30 selection:text-emerald-300">
     <div id="root"></div>
-    <script src="/js/neutralino.js"></script>
+    <script>
+      // Load Neutralino Native Desktop SDK dynamically only inside native Desktop App container
+      if (typeof window !== 'undefined' && (window.NL_PORT || window.NL_TOKEN || window.NL_MODE || (window.location && window.location.protocol === 'file:'))) {
+        var neuScript = document.createElement('script');
+        neuScript.src = '/js/neutralino.js';
+        document.head.appendChild(neuScript);
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
     <script>
       // Avoid caching stale JS chunks during Vite development

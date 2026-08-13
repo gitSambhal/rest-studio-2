@@ -444,7 +444,11 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
   }
 
   // 1. Neutralino Native Desktop Container Check
-  if (typeof window !== 'undefined' && ((window as any).Neutralino || (window as any).NL_PORT || (window as any).NL_MODE || (window as any).__NL_PORT__ || window.location.protocol === 'file:')) {
+  const isNeutralinoActive = typeof window !== 'undefined' && Boolean(
+    (window as any).Neutralino &&
+    ((window as any).NL_PORT || (window as any).NL_TOKEN || (window as any).NL_MODE || (window as any).__NL_PORT__)
+  );
+  if (isNeutralinoActive) {
     try {
       console.log('[RestStudio Neutralino] Executing via Neutralino Native Engine...');
       const neuRes = await executeNeutralinoFetch(method, targetUrl, headers, body);
