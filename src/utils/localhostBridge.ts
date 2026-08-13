@@ -92,7 +92,7 @@ export async function connectDesktopProxyWebSocket(port: number = DEFAULT_DESKTO
 }
 
 /**
- * Check if RestStudio Desktop App is running locally on http/ws://127.0.0.1:28108
+ * Check if RestStudio Desktop App is running locally on ws://127.0.0.1:28108
  */
 export async function checkDesktopProxyHealth(port: number = DEFAULT_DESKTOP_PROXY_PORT): Promise<DesktopProxyHealth> {
   const now = Date.now();
@@ -100,46 +100,30 @@ export async function checkDesktopProxyHealth(port: number = DEFAULT_DESKTOP_PRO
     return cachedProxyHealth;
   }
 
-  // 1. Try WebSocket connection (Bypasses HTTPS Mixed Content in modern browsers when connecting to 127.0.0.1)
+  // 1. Direct native execution mode inside Neutralino App
+  if (typeof window !== 'undefined' && ((window as any).Neutralino || (window as any).NL_PORT || (window as any).NL_MODE)) {
+    cachedProxyHealth = {
+      active: true,
+      version: '1.0.0',
+      port,
+      message: 'Desktop App Running (Native OS)',
+    };
+    lastHealthCheck = now;
+    return cachedProxyHealth;
+  }
+
+  // 2. Try WebSocket connection (Connects HTTPS Web App to Desktop App on 127.0.0.1:28108)
   const ws = await connectDesktopProxyWebSocket(port);
   if (ws) {
     cachedProxyHealth = {
       active: true,
       version: '1.0.0',
       port,
-      message: 'Desktop App Connected (WebSocket)',
+      message: 'Desktop App Connected (127.0.0.1:28108)',
     };
     lastHealthCheck = now;
     return cachedProxyHealth;
   }
-
-  // 2. Try HTTP fetch fallback
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1200);
-
-    const res = await fetch(`http://127.0.0.1:${port}/health`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
-
-    if (res.ok) {
-      const data = await res.json();
-      cachedProxyHealth = {
-        active: true,
-        version: data.version || '1.0.0',
-        port,
-        message: 'Desktop App Connected (HTTP)',
-      };
-      lastHealthCheck = now;
-      return cachedProxyHealth;
-    }
-  } catch (_) {}
 
   cachedProxyHealth = {
     active: false,
@@ -151,7 +135,7 @@ export async function checkDesktopProxyHealth(port: number = DEFAULT_DESKTOP_PRO
 }
 
 /**
- * Execute HTTP Request via Desktop App local agent on ws:// or http://127.0.0.1:28108
+ * Execute HTTP Request via Desktop App local agent on ws://127.0.0.1:28108
  */
 export async function fetchViaDesktopProxy(
   method: string,
@@ -221,46 +205,10 @@ export async function fetchViaDesktopProxy(
     });
   }
 
-  // 2. HTTP Fetch Fallback
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
-
-    const res = await fetch(`http://127.0.0.1:${port}/proxy`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        method,
-        url,
-        headers,
-        body,
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
-
-    if (res.ok) {
-      const data = await res.json();
-      return {
-        success: true,
-        response: data,
-      };
-    } else {
-      const text = await res.text();
-      return {
-        success: false,
-        error: `Desktop Proxy returned HTTP ${res.status}: ${text}`,
-      };
-    }
-  } catch (err: any) {
-    return {
-      success: false,
-      error: err?.message || 'Failed to communicate with Desktop Proxy Agent',
-    };
-  }
+  return {
+    success: false,
+    error: 'RestStudio Desktop App is not running on 127.0.0.1:28108. Please launch the Desktop App on your computer.',
+  };
 }
 
 /**
@@ -276,14 +224,19 @@ export async function startDesktopProxyInNeutralino(port: number = DEFAULT_DESKT
   }
 
   try {
-    // Check if proxy server is already running on port
-    const health = await checkDesktopProxyHealth(port);
-    if (health.active) {
-      console.log(`[DesktopProxy] Local Desktop Proxy is already active on port ${port}`);
-      return true;
-    }
+    // Check if proxy server port 28108 is already responding to HTTP
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 800);
+      const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        console.log(`[DesktopProxy] Local Desktop Proxy is already active on port ${port}`);
+        return true;
+      }
+    } catch (_) {}
 
-    // Launch lightweight background proxy server using Node
+    // Launch lightweight background proxy server using Node / Python / PowerShell
     const isWin = (navigator.platform || '').toLowerCase().includes('win') || w.NL_OS === 'Windows';
     const nodeCmd = isWin ? 'node.exe' : 'node';
 
@@ -294,8 +247,8 @@ const https = require('https');
 const PORT = ${port};
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Access-Control-Request-Private-Network');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD');
+  res.setHeader('Access-Control-Allow-Headers', '*');
   res.setHeader('Access-Control-Allow-Private-Network', 'true');
 
   if (req.method === 'OPTIONS') {
@@ -304,7 +257,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (req.url === '/health') {
+  if (req.url === '/health' || req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', service: 'RestStudio Desktop Proxy Agent', version: '1.0.0', port: PORT }));
     return;
@@ -328,7 +281,7 @@ const server = http.createServer((req, res) => {
         const startTime = Date.now();
 
         const reqOptions = {
-          hostname: parsedUrl.hostname,
+          hostname: parsedUrl.hostname === 'localhost' ? '127.0.0.1' : parsedUrl.hostname,
           port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
           path: parsedUrl.pathname + parsedUrl.search,
           method: method.toUpperCase(),
@@ -398,10 +351,7 @@ server.listen(PORT, '127.0.0.1', () => {
     console.log('[DesktopProxy] Spawning background Desktop Proxy Agent server in Neutralino...');
     neu.os.execCommand(command, { background: true });
 
-    // Wait 500ms and verify health
-    await new Promise((r) => setTimeout(r, 500));
-    const h = await checkDesktopProxyHealth(port);
-    return h.active;
+    return true;
   } catch (err) {
     console.warn('[DesktopProxy] Failed to start local proxy in Neutralino:', err);
     return false;

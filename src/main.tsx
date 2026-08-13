@@ -11,6 +11,10 @@ if (typeof window !== 'undefined' && (window as any).Neutralino) {
     const NL = (window as any).Neutralino;
     NL.init();
     console.log('[RestStudio Neutralino] Neutralino Native OS SDK initialized');
+    // Auto-start background local proxy listener so web browser app can connect seamlessly
+    import('./utils/localhostBridge').then(({ startDesktopProxyInNeutralino }) => {
+      startDesktopProxyInNeutralino().catch(() => {});
+    });
   } catch (err) {
     console.warn('[RestStudio Neutralino] Initialization warning:', err);
   }

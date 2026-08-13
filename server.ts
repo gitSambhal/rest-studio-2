@@ -241,12 +241,95 @@ async function startServer() {
     // Attach WebSocket Server for HTTPS web app connection
     const wss = new WebSocketServer({ server: proxyServer });
     wss.on('connection', (ws) => {
-      ws.on('message', (message) => {
+      ws.on('message', async (message) => {
         try {
           const payload = JSON.parse(message.toString());
           if (payload.type === 'ping' || payload.action === 'ping') {
             ws.send(JSON.stringify({ type: 'pong', status: 'ok', port: 28108 }));
             return;
+          }
+
+          if (payload.type === 'proxy' || payload.type === 'proxy_request') {
+            const { id, method = 'GET', url, headers = {}, body } = payload;
+            if (!url) {
+              ws.send(JSON.stringify({ type: 'proxy_response', id, error: 'URL is required', status: 0 }));
+              return;
+            }
+
+            try {
+              const httpMod = await import('http');
+              const httpsMod = await import('https');
+              const parsedUrl = new URL(url);
+              const transport = parsedUrl.protocol === 'https:' ? httpsMod : httpMod;
+              const startTime = Date.now();
+
+              const reqOptions = {
+                hostname: parsedUrl.hostname === 'localhost' ? '127.0.0.1' : parsedUrl.hostname,
+                port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+                path: parsedUrl.pathname + parsedUrl.search,
+                method: method.toUpperCase(),
+                headers: { ...headers },
+                rejectUnauthorized: false
+              };
+
+              const proxyReq = transport.request(reqOptions, (proxyRes) => {
+                let resData = '';
+                proxyRes.on('data', chunk => { resData += chunk; });
+                proxyRes.on('end', () => {
+                  const duration = Date.now() - startTime;
+                  const resHeaders: Record<string, any> = {};
+                  Object.keys(proxyRes.headers).forEach(k => { resHeaders[k] = proxyRes.headers[k]; });
+                  ws.send(JSON.stringify({
+                    type: 'proxy_response',
+                    id,
+                    status: proxyRes.statusCode,
+                    statusText: proxyRes.statusMessage || 'OK',
+                    headers: resHeaders,
+                    body: resData,
+                    size: Buffer.byteLength(resData),
+                    duration,
+                    timestamp: Date.now(),
+                    ok: (proxyRes.statusCode || 0) >= 200 && (proxyRes.statusCode || 0) < 300,
+                    contentType: proxyRes.headers['content-type'] || 'text/plain'
+                  }));
+                });
+              });
+
+              proxyReq.on('error', (err) => {
+                ws.send(JSON.stringify({
+                  type: 'proxy_response',
+                  id,
+                  status: 0,
+                  statusText: 'Network Error',
+                  headers: {},
+                  body: JSON.stringify({ error: err.message }),
+                  size: 0,
+                  duration: Date.now() - startTime,
+                  timestamp: Date.now(),
+                  ok: false,
+                  error: err.message
+                }));
+              });
+
+              if (body !== undefined && body !== null) {
+                proxyReq.write(typeof body === 'object' ? JSON.stringify(body) : String(body));
+              }
+              proxyReq.end();
+            } catch (err: any) {
+              ws.send(JSON.stringify({
+                type: 'proxy_response',
+                id,
+                status: 0,
+                statusText: 'Server Error',
+                headers: {},
+                body: JSON.stringify({ error: err.message }),
+                size: 0,
+                duration: 0,
+                timestamp: Date.now(),
+                ok: false,
+                error: err.message
+              }));
+            }
           }
         } catch (_) {}
       });
