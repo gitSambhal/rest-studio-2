@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Organization, Project } from '../types';
+import { checkDesktopProxyHealth } from '../utils/localhostBridge';
 import {
   Zap,
   Building2,
@@ -23,6 +24,7 @@ import {
   Edit2,
   Trash2,
   Monitor,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -91,6 +93,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [isEnvOpen, setIsEnvOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [desktopProxyActive, setDesktopProxyActive] = useState(false);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -99,9 +102,18 @@ export const Header: React.FC<HeaderProps> = ({
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    // Check desktop proxy health
+    const checkProxy = async () => {
+      const h = await checkDesktopProxyHealth();
+      setDesktopProxyActive(h.active);
+    };
+    checkProxy();
+    const interval = setInterval(checkProxy, 4000);
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      clearInterval(interval);
     };
   }, []);
 
@@ -473,6 +485,34 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* SECTION 3: Settings & Tools Menu */}
         <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0 md:order-3">
+          {/* Desktop Proxy Bridge Indicator */}
+          {onOpenDesktopModal && (
+            <button
+              type="button"
+              onClick={onOpenDesktopModal}
+              className={`flex items-center space-x-1.5 text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-all cursor-pointer shadow-sm ${
+                desktopProxyActive
+                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900/60'
+                  : 'bg-slate-800 hover:bg-slate-700/80 text-slate-300 border-slate-700'
+              }`}
+              title={desktopProxyActive ? 'Desktop Proxy Agent Connected (127.0.0.1:28108) - Netlify CORS & Localhost proxy ready' : 'Click to configure Desktop Proxy Bridge for Netlify / Localhost CORS'}
+            >
+              {desktopProxyActive ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                  <span className="font-semibold hidden sm:inline text-[11px] font-mono">Desktop Proxy Active</span>
+                  <span className="font-semibold sm:hidden text-[11px] font-mono">Proxy Active</span>
+                </>
+              ) : (
+                <>
+                  <Monitor className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                  <span className="font-semibold text-xs hidden sm:inline">Desktop Proxy</span>
+                  <span className="font-semibold text-xs sm:hidden">Proxy</span>
+                </>
+              )}
+            </button>
+          )}
+
           <div className="relative" ref={menuRef}>
             <button
               type="button"

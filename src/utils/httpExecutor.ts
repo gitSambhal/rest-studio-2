@@ -1,4 +1,5 @@
 import { ExecutionResponse } from '../types';
+import { checkDesktopProxyHealth, fetchViaDesktopProxy, startDesktopProxyInNeutralino } from './localhostBridge';
 
 export interface HttpRequestOptions {
   method: string;
@@ -419,6 +420,8 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
   // 1. Neutralino Native Desktop Container Check
   if (typeof window !== 'undefined' && ((window as any).Neutralino || (window as any).NL_PORT || (window as any).NL_MODE || (window as any).__NL_PORT__ || window.location.protocol === 'file:')) {
     try {
+      // Ensure local Desktop Proxy Server is initialized in background for Netlify web app connectivity
+      startDesktopProxyInNeutralino().catch(() => {});
       console.log('[RestStudio Neutralino] Executing via Neutralino Native Engine...');
       const neuRes = await executeNeutralinoFetch(method, targetUrl, headers, body);
       if (neuRes && neuRes.status > 0) {
@@ -442,7 +445,21 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
     }
   }
 
-  // 3. Web Proxy Execution (Routes through Express /api/proxy server to bypass browser CORS)
+  // 3. Desktop Proxy Agent Check (Enables Netlify Web App -> Localhost / CORS execution)
+  try {
+    const proxyHealth = await checkDesktopProxyHealth();
+    if (proxyHealth.active) {
+      console.log('[RestStudio Netlify/Web] Routing request through Local Desktop Proxy Agent (127.0.0.1:28108)...');
+      const bridgeResult = await fetchViaDesktopProxy(method, targetUrl, headers, body, proxyHealth.port);
+      if (bridgeResult.success && bridgeResult.response) {
+        return bridgeResult.response as ExecutionResponse;
+      }
+    }
+  } catch (proxyAgentErr) {
+    console.warn('[RestStudio Web] Desktop Proxy Agent check failed, falling back:', proxyAgentErr);
+  }
+
+  // 4. Web Proxy Execution (Routes through Netlify Function / Express /api/proxy server to bypass browser CORS for public endpoints)
   try {
     const proxyRes = await fetch('/api/proxy', {
       method: 'POST',
@@ -466,6 +483,6 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
     console.warn('[RestStudio] Server proxy fetch error, falling back to direct browser fetch:', proxyErr);
   }
 
-  // 4. Direct Client Browser Fetch Fallback
+  // 5. Direct Client Browser Fetch Fallback
   return await executeDirectClientFetch(method, targetUrl, headers, body);
 }

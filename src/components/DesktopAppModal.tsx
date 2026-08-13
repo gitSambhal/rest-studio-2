@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { checkDesktopProxyHealth, DesktopProxyHealth } from '../utils/localhostBridge';
 import {
   Monitor,
   X,
@@ -15,6 +16,8 @@ import {
   Layers,
   ArrowRight,
   HardDrive,
+  Wifi,
+  Activity,
 } from 'lucide-react';
 
 interface DesktopAppModalProps {
@@ -29,14 +32,19 @@ export const DesktopAppModal: React.FC<DesktopAppModalProps> = ({
   isDarkMode = true,
 }) => {
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'tauri' | 'wails' | 'neutralino'>('tauri');
+  const [activeTab, setActiveTab] = useState<'tauri' | 'wails' | 'neutralino'>('neutralino');
   const [isNativeActive, setIsNativeActive] = useState<boolean>(false);
+  const [proxyHealth, setProxyHealth] = useState<DesktopProxyHealth>({ active: false, port: 28108 });
 
   useEffect(() => {
     if (typeof window !== 'undefined' && ((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__)) {
       setIsNativeActive(true);
     }
-  }, []);
+
+    if (isOpen) {
+      checkDesktopProxyHealth().then(setProxyHealth);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -85,6 +93,45 @@ export const DesktopAppModal: React.FC<DesktopAppModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-5 overflow-y-auto space-y-5 text-xs text-slate-300">
+          {/* Netlify Web App <-> Desktop Localhost Proxy Bridge Status */}
+          <div className={`p-4 rounded-xl border transition-all ${
+            proxyHealth.active
+              ? 'bg-emerald-950/40 border-emerald-500/50 shadow-lg shadow-emerald-950/20'
+              : 'bg-slate-950 border-slate-800'
+          }`}>
+            <div className="flex items-start justify-between">
+              <div className="flex items-center space-x-2.5">
+                <div className={`w-3 h-3 rounded-full ${proxyHealth.active ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                <div>
+                  <h3 className="font-bold text-white text-sm flex items-center space-x-2">
+                    <span>Netlify Web App &lt;-&gt; Desktop Proxy Bridge</span>
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold border ${
+                      proxyHealth.active
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}>
+                      {proxyHealth.active ? '🟢 ACTIVE (127.0.0.1:28108)' : '⚪ OFFLINE'}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                    When you run the RestStudio Desktop app on your machine, it runs a background proxy agent on <code className="text-emerald-400 font-mono">http://127.0.0.1:28108</code>. This allows your Netlify web app (<code className="text-emerald-400 font-mono">https://reststudio.netlify.app</code>) to send requests directly to <code className="text-emerald-400 font-mono">localhost</code> and bypass browser CORS restrictions!
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const h = await checkDesktopProxyHealth();
+                  setProxyHealth(h);
+                }}
+                className="text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono px-2.5 py-1 rounded-lg border border-slate-700 transition-colors shrink-0 ml-3 cursor-pointer"
+              >
+                Re-check
+              </button>
+            </div>
+          </div>
+
           {/* Comparison Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Tauri */}
