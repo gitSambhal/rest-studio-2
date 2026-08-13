@@ -212,29 +212,22 @@ function makePortableZip(zipName, binaryFileName, exeDisplayName) {
   }
 }
 
-// Helper to build single embedded standalone Windows EXE
-async function buildStandaloneWindowsExe() {
+// Helper to patch Windows executable metadata and icon
+async function patchWindowsExecutable() {
+  const winBinPath = path.join(distRestStudioDir, 'reststudio-win_x64.exe');
   const winTarget = path.join(distRestStudioDir, 'RestStudio-Windows-x64.exe');
-  const rawWinTarget = path.join(distRestStudioDir, 'reststudio-win_x64.exe');
-  const resNeuPath = path.join(distRestStudioDir, 'resources.neu');
-  const pristineWinBin = path.join(binDir, 'neutralino-win_x64.exe');
+  const exeTarget = path.join(distRestStudioDir, 'RestStudio.exe');
 
-  if (fs.existsSync(pristineWinBin) && fs.existsSync(resNeuPath)) {
-    console.log('\n[Neu Build] Embedding resources into standalone Windows executable (postject + resedit)...');
-    fs.copyFileSync(pristineWinBin, winTarget);
-
-    const postjectBin = '/root/.npm/_npx/0214858268217ccb/node_modules/.bin/postject';
-    const postjectCmd = `"${postjectBin}" "${winTarget}" NEUTRALINO_RESOURCES "${resNeuPath}" --sentinel-fuse POSTJECT_SENTINEL_fce680ab2cc467b6e072b8b5df1996b2`;
+  if (fs.existsSync(winBinPath)) {
+    console.log('\n[Neu Build] Patching Windows executable metadata and icon...');
     try {
-      execSync(postjectCmd, { stdio: 'inherit' });
       const { patchWindowsExecutable } = await import('/root/.npm/_npx/0214858268217ccb/node_modules/@neutralinojs/neu/src/modules/exepatch.js');
-      await patchWindowsExecutable(winTarget);
-      
-      // Also copy to reststudio-win_x64.exe
-      fs.copyFileSync(winTarget, rawWinTarget);
-      console.log(`  ✓ Standalone Embedded Windows EXE -> RestStudio-Windows-x64.exe (${(fs.statSync(winTarget).size / (1024*1024)).toFixed(2)} MB standalone)`);
+      await patchWindowsExecutable(winBinPath);
+      fs.copyFileSync(winBinPath, winTarget);
+      fs.copyFileSync(winBinPath, exeTarget);
+      console.log(`  ✓ Windows Executable          -> RestStudio.exe & RestStudio-Windows-x64.exe (${(fs.statSync(winBinPath).size / (1024*1024)).toFixed(2)} MB)`);
     } catch (err) {
-      console.error('  ⚠ Warning: Failed to embed Windows EXE:', err.message);
+      console.warn('  ⚠ Warning: Could not patch Windows executable metadata:', err.message);
     }
   }
 }
@@ -242,7 +235,7 @@ async function buildStandaloneWindowsExe() {
 // Step 4: Standardize and fix executables & native macOS .app bundles
 console.log('\n[Neu Build] Standardizing executables and creating macOS GUI .app bundles in dist/reststudio/...');
 
-await buildStandaloneWindowsExe();
+await patchWindowsExecutable();
 
 const binaryMap = [
   { raw: 'reststudio-mac_x64', target: 'RestStudio-Mac-x64', platform: 'macOS (x64 Intel)', binSource: 'bin/neutralino-mac_x64', appName: 'RestStudio-Mac-x64' },
