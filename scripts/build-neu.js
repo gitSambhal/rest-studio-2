@@ -48,8 +48,10 @@ try {
 } catch {}
 
 // Step 2: Build Web Frontend Assets
-console.log('\n[Neu Build] Building Web Frontend (Vite & icons)...');
-execSync('npm run build', { stdio: 'inherit' });
+console.log('\n[Neu Build] Ensuring Web Frontend Assets exist...');
+if (!fs.existsSync(path.resolve('dist/index.html'))) {
+  execSync('npm run build:web', { stdio: 'inherit' });
+}
 
 // Ensure dist/reststudio is removed before neu build so it does not get bundled into resources.neu
 fs.rmSync(distRestStudioDir, { recursive: true, force: true });
