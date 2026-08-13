@@ -212,6 +212,7 @@ async function startServer() {
   // Start secondary Desktop Localhost Proxy Agent on 127.0.0.1:28108 if available
   try {
     const http = await import('http');
+    const { WebSocketServer } = await import('ws');
     const proxyServer = http.createServer((req, res) => {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD');
@@ -237,8 +238,22 @@ async function startServer() {
       app(req as any, res as any);
     });
 
+    // Attach WebSocket Server for HTTPS web app connection
+    const wss = new WebSocketServer({ server: proxyServer });
+    wss.on('connection', (ws) => {
+      ws.on('message', (message) => {
+        try {
+          const payload = JSON.parse(message.toString());
+          if (payload.type === 'ping' || payload.action === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong', status: 'ok', port: 28108 }));
+            return;
+          }
+        } catch (_) {}
+      });
+    });
+
     proxyServer.listen(28108, '127.0.0.1', () => {
-      console.log('RestStudio Desktop Proxy Agent active on http://127.0.0.1:28108');
+      console.log('RestStudio Desktop Proxy Agent active on http://127.0.0.1:28108 & ws://127.0.0.1:28108');
     });
 
     proxyServer.on('error', (err: any) => {

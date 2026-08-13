@@ -24,8 +24,75 @@ let swRegistration: ServiceWorkerRegistration | null = null;
 let cachedProxyHealth: DesktopProxyHealth = { active: false, port: DEFAULT_DESKTOP_PROXY_PORT };
 let lastHealthCheck = 0;
 
+let activeWsSocket: WebSocket | null = null;
+let pendingWsCallbacks = new Map<string, (res: any) => void>();
+
 /**
- * Check if RestStudio Desktop Proxy Agent is running locally on http://127.0.0.1:28108
+ * Connect to Desktop Proxy Agent WebSocket Server on ws://127.0.0.1:28108
+ * Crucial for Web Deployments (HTTPS -> ws://127.0.0.1) to bypass browser Mixed Content restrictions!
+ */
+export async function connectDesktopProxyWebSocket(port: number = DEFAULT_DESKTOP_PROXY_PORT): Promise<WebSocket | null> {
+  if (typeof window === 'undefined' || !('WebSocket' in window)) return null;
+
+  if (activeWsSocket && activeWsSocket.readyState === WebSocket.OPEN) {
+    return activeWsSocket;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+
+      const timer = setTimeout(() => {
+        try { ws.close(); } catch (_) {}
+        resolve(null);
+      }, 1200);
+
+      ws.onopen = () => {
+        clearTimeout(timer);
+        activeWsSocket = ws;
+        cachedProxyHealth = {
+          active: true,
+          version: '1.0.0',
+          port,
+          message: 'Desktop Proxy Agent Connected (WebSocket)',
+        };
+        lastHealthCheck = Date.now();
+
+        try {
+          ws.send(JSON.stringify({ type: 'ping' }));
+        } catch (_) {}
+
+        resolve(ws);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'proxy_response' && data.id && pendingWsCallbacks.has(data.id)) {
+            const cb = pendingWsCallbacks.get(data.id);
+            pendingWsCallbacks.delete(data.id);
+            if (cb) cb(data);
+          }
+        } catch (_) {}
+      };
+
+      ws.onerror = () => {
+        clearTimeout(timer);
+        if (activeWsSocket === ws) activeWsSocket = null;
+        resolve(null);
+      };
+
+      ws.onclose = () => {
+        if (activeWsSocket === ws) activeWsSocket = null;
+      };
+    } catch (_) {
+      resolve(null);
+    }
+  });
+}
+
+/**
+ * Check if RestStudio Desktop Proxy Agent is running locally on http/ws://127.0.0.1:28108
  */
 export async function checkDesktopProxyHealth(port: number = DEFAULT_DESKTOP_PROXY_PORT): Promise<DesktopProxyHealth> {
   const now = Date.now();
@@ -33,9 +100,23 @@ export async function checkDesktopProxyHealth(port: number = DEFAULT_DESKTOP_PRO
     return cachedProxyHealth;
   }
 
+  // 1. Try WebSocket connection (Bypasses HTTPS Mixed Content in Web Browsers!)
+  const ws = await connectDesktopProxyWebSocket(port);
+  if (ws) {
+    cachedProxyHealth = {
+      active: true,
+      version: '1.0.0',
+      port,
+      message: 'Desktop Proxy Agent Connected (WebSocket)',
+    };
+    lastHealthCheck = now;
+    return cachedProxyHealth;
+  }
+
+  // 2. Try HTTP fetch fallback
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1500);
+    const timeout = setTimeout(() => controller.abort(), 1200);
 
     const res = await fetch(`http://127.0.0.1:${port}/health`, {
       method: 'GET',
@@ -53,7 +134,7 @@ export async function checkDesktopProxyHealth(port: number = DEFAULT_DESKTOP_PRO
         active: true,
         version: data.version || '1.0.0',
         port,
-        message: 'Desktop Proxy Agent Connected',
+        message: 'Desktop Proxy Agent Connected (HTTP)',
       };
       lastHealthCheck = now;
       return cachedProxyHealth;
@@ -70,7 +151,7 @@ export async function checkDesktopProxyHealth(port: number = DEFAULT_DESKTOP_PRO
 }
 
 /**
- * Execute HTTP Request via Desktop Proxy Agent on http://127.0.0.1:28108
+ * Execute HTTP Request via Desktop Proxy Agent on ws:// or http://127.0.0.1:28108
  * Used when web application is running on Netlify to bypass CORS and access localhost directly
  */
 export async function fetchViaDesktopProxy(
@@ -80,6 +161,68 @@ export async function fetchViaDesktopProxy(
   body?: any,
   port: number = DEFAULT_DESKTOP_PROXY_PORT
 ): Promise<BridgeFetchResult> {
+  // 1. Try WebSocket execution first (Works on HTTPS Web Deployments!)
+  const ws = await connectDesktopProxyWebSocket(port);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    return new Promise((resolve) => {
+      const reqId = `ws_req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+      const timeout = setTimeout(() => {
+        pendingWsCallbacks.delete(reqId);
+        resolve({
+          success: false,
+          error: 'WebSocket Desktop Proxy request timed out after 30s',
+        });
+      }, 30000);
+
+      pendingWsCallbacks.set(reqId, (data: any) => {
+        clearTimeout(timeout);
+        if (data && data.status !== undefined) {
+          resolve({
+            success: true,
+            response: {
+              status: data.status,
+              statusText: data.statusText || 'OK',
+              headers: data.headers || {},
+              body: data.body || '',
+              size: data.size || 0,
+              duration: data.duration || 0,
+              timestamp: data.timestamp || Date.now(),
+              ok: data.ok || (data.status >= 200 && data.status < 300),
+              contentType: data.contentType || 'text/plain',
+            },
+          });
+        } else {
+          resolve({
+            success: false,
+            error: data.error || 'Desktop Proxy WebSocket error',
+          });
+        }
+      });
+
+      try {
+        ws.send(
+          JSON.stringify({
+            type: 'proxy',
+            id: reqId,
+            method,
+            url,
+            headers,
+            body,
+          })
+        );
+      } catch (err: any) {
+        clearTimeout(timeout);
+        pendingWsCallbacks.delete(reqId);
+        resolve({
+          success: false,
+          error: `Failed to send WebSocket message: ${err.message}`,
+        });
+      }
+    });
+  }
+
+  // 2. HTTP Fetch Fallback
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);

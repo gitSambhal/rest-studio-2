@@ -528,5 +528,24 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
   }
 
   // 5. Direct Client Browser Fetch Fallback
+  const isHttpsWebApp = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  if (isLocalHostTarget && isHttpsWebApp) {
+    return {
+      status: 0,
+      statusText: 'Localhost Inaccessible from HTTPS',
+      headers: {},
+      body: JSON.stringify({
+        error: `Cannot make direct HTTP calls to '${targetUrl}' from an HTTPS Web App due to browser Mixed Content restrictions.`,
+        solution: 'To connect this Web App to your local APIs, launch the RestStudio Desktop App or click the "Desktop Proxy" button in the header bar and run the 1-line Proxy Agent (ws://127.0.0.1:28108) on your computer.',
+        desktopAgentCommand: 'npx reststudio-proxy or node -e "..."'
+      }, null, 2),
+      size: 0,
+      duration: Math.round(performance.now() - startTime),
+      timestamp: Date.now(),
+      ok: false,
+      error: 'Localhost inaccessible from HTTPS Web App. Launch Desktop App or Desktop Proxy Agent.',
+    };
+  }
+
   return await executeDirectClientFetch(method, targetUrl, headers, body);
 }
