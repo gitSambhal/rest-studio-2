@@ -211,66 +211,7 @@ server.listen(PORT, HOST, () => {
   console.log(` WebSocket Bridge: ws://${HOST}:${PORT}`);
   console.log(` Connects Web App -> Localhost APIs & CORS`);
   console.log(`======================================================\n`);
-
-  // Connect outbound to Cloud Relay Server if specified or default
-  initCloudRelayClient();
 });
-
-function initCloudRelayClient() {
-  const WebSocket = require('ws');
-  const relayUrlArg = process.argv.find(a => a.startsWith('--relay='))?.split('=')[1] || process.env.RELAY_URL;
-  const targetHosts = relayUrlArg 
-    ? [relayUrlArg] 
-    : [
-        'wss://ais-dev-p7q3teh2lcfdzgil5j7yhw-236658229502.asia-southeast1.run.app/api/relay/ws',
-        'wss://ais-pre-p7q3teh2lcfdzgil5j7yhw-236658229502.asia-southeast1.run.app/api/relay/ws'
-      ];
-
-  targetHosts.forEach(hostUrl => {
-    try {
-      console.log(`[Relay] Connecting outbound to Relay Server: ${hostUrl}...`);
-      const ws = new WebSocket(hostUrl);
-
-      ws.on('open', () => {
-        console.log(`[Relay] Connected to Cloud Relay Server at ${hostUrl}!`);
-        ws.send(JSON.stringify({ type: 'register', agentId: 'desktop_proxy_agent' }));
-      });
-
-      ws.on('message', (message) => {
-        try {
-          const payload = JSON.parse(message.toString());
-          if (payload.type === 'relay_request' && payload.id) {
-            console.log(`[Relay] Processing remote ${payload.method} request to local URL: ${payload.url}`);
-            executeTargetRequest({
-              method: payload.method,
-              url: payload.url,
-              headers: payload.headers,
-              body: payload.body
-            }, (result) => {
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                  type: 'relay_response',
-                  id: payload.id,
-                  ...result
-                }));
-              }
-            });
-          }
-        } catch (err) {
-          console.warn('[Relay] Error handling message:', err.message);
-        }
-      });
-
-      ws.on('close', () => {
-        setTimeout(() => initCloudRelayClient(), 5000);
-      });
-
-      ws.on('error', () => {
-        // Silent catch on secondary host errors
-      });
-    } catch (_) {}
-  });
-}
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {

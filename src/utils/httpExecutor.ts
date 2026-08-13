@@ -484,14 +484,14 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
       } else if (currentProxyMode === 'desktop') {
         return {
           status: 0,
-          statusText: 'Desktop Proxy Offline',
+          statusText: 'Desktop App Offline',
           headers: {},
-          body: JSON.stringify({ error: 'Desktop Proxy Agent is not running on http://127.0.0.1:28108', hint: 'Click Desktop Proxy button in header to copy quick 1-line command.' }, null, 2),
+          body: JSON.stringify({ error: 'RestStudio Desktop App is not running on http://127.0.0.1:28108', hint: 'Launch the RestStudio Desktop Application on your computer to connect local APIs.' }, null, 2),
           size: 0,
           duration: Math.round(performance.now() - startTime),
           timestamp: Date.now(),
           ok: false,
-          error: 'Desktop Proxy Agent Offline',
+          error: 'RestStudio Desktop App Offline',
         };
       }
     } catch (proxyAgentErr) {
@@ -536,14 +536,13 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
       headers: {},
       body: JSON.stringify({
         error: `Cannot make direct HTTP calls to '${targetUrl}' from an HTTPS Web App due to browser Mixed Content restrictions.`,
-        solution: 'To connect this Web App to your local APIs, launch the RestStudio Desktop App or click the "Desktop Proxy" button in the header bar and run the 1-line Proxy Agent (ws://127.0.0.1:28108) on your computer.',
-        desktopAgentCommand: 'npx reststudio-proxy or node -e "..."'
+        solution: 'To connect this Web App to your local APIs on localhost, launch the installed RestStudio Desktop Application on your computer.'
       }, null, 2),
       size: 0,
       duration: Math.round(performance.now() - startTime),
       timestamp: Date.now(),
       ok: false,
-      error: 'Localhost inaccessible from HTTPS Web App. Launch Desktop App or Desktop Proxy Agent.',
+      error: 'Localhost inaccessible from HTTPS Web App. Launch the Desktop App on your computer.',
     };
   }
 

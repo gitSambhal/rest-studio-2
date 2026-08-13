@@ -495,19 +495,19 @@ export const Header: React.FC<HeaderProps> = ({
                   ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900/60'
                   : 'bg-slate-800 hover:bg-slate-700/80 text-slate-300 border-slate-700'
               }`}
-              title={desktopProxyActive ? 'Desktop Proxy Agent Connected (127.0.0.1:28108) - Netlify CORS & Localhost proxy ready' : 'Click to configure Desktop Proxy Bridge for Netlify / Localhost CORS'}
+              title={desktopProxyActive ? 'RestStudio Desktop App Connected (127.0.0.1:28108) - Localhost APIs & CORS ready' : 'Connect to RestStudio Desktop App for Localhost APIs'}
             >
               {desktopProxyActive ? (
                 <>
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                  <span className="font-semibold hidden sm:inline text-[11px] font-mono">Desktop Proxy Active</span>
-                  <span className="font-semibold sm:hidden text-[11px] font-mono">Proxy Active</span>
+                  <span className="font-semibold hidden sm:inline text-[11px] font-mono">Desktop Active</span>
+                  <span className="font-semibold sm:hidden text-[11px] font-mono">Desktop Active</span>
                 </>
               ) : (
                 <>
                   <Monitor className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                  <span className="font-semibold text-xs hidden sm:inline">Desktop Proxy</span>
-                  <span className="font-semibold text-xs sm:hidden">Proxy</span>
+                  <span className="font-semibold text-xs hidden sm:inline">Desktop App</span>
+                  <span className="font-semibold text-xs sm:hidden">Desktop</span>
                 </>
               )}
             </button>
@@ -603,14 +603,14 @@ export const Header: React.FC<HeaderProps> = ({
                     <Monitor className="w-4 h-4 text-teal-400 shrink-0" />
                     <div className="flex flex-col">
                       <div className="flex items-center space-x-1.5">
-                        <span className="font-semibold leading-tight">Desktop Localhost & CORS Proxy</span>
+                        <span className="font-semibold leading-tight">RestStudio Desktop Connection</span>
                         <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold ${
                           desktopProxyActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400'
                         }`}>
                           {desktopProxyActive ? 'ACTIVE' : 'OFFLINE'}
                         </span>
                       </div>
-                      <span className={`text-[10px] font-normal ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Bypass CORS & connect Netlify web app to localhost</span>
+                      <span className={`text-[10px] font-normal ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Access localhost APIs & zero CORS blocking</span>
                     </div>
                   </button>
 
