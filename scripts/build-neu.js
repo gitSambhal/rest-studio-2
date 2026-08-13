@@ -1,6 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
 
 console.log('====================================================');
 console.log('[Neu Build System] Building RestStudio Executables & macOS App Bundles...');
@@ -221,13 +224,34 @@ async function patchWindowsExecutable() {
   const exeTarget = path.join(distRestStudioDir, 'RestStudio.exe');
 
   if (fs.existsSync(winBinPath)) {
+    // Always copy first to guarantee targets exist regardless of metadata patching outcome
+    fs.copyFileSync(winBinPath, winTarget);
+    fs.copyFileSync(winBinPath, exeTarget);
+
     console.log('\n[Neu Build] Patching Windows executable metadata and icon...');
     try {
-      const { patchWindowsExecutable } = await import('/root/.npm/_npx/0214858268217ccb/node_modules/@neutralinojs/neu/src/modules/exepatch.js');
-      await patchWindowsExecutable(winBinPath);
-      fs.copyFileSync(winBinPath, winTarget);
-      fs.copyFileSync(winBinPath, exeTarget);
-      console.log(`  ✓ Windows Executable          -> RestStudio.exe & RestStudio-Windows-x64.exe (${(fs.statSync(winBinPath).size / (1024*1024)).toFixed(2)} MB)`);
+      let exepatchPath;
+      try {
+        exepatchPath = require.resolve('@neutralinojs/neu/src/modules/exepatch.js');
+      } catch {
+        const fallbacks = [
+          'node_modules/@neutralinojs/neu/src/modules/exepatch.js',
+          '../node_modules/@neutralinojs/neu/src/modules/exepatch.js'
+        ];
+        for (const p of fallbacks) {
+          if (fs.existsSync(p)) { exepatchPath = path.resolve(p); break; }
+        }
+      }
+
+      if (exepatchPath) {
+        const { patchWindowsExecutable } = await import('file://' + exepatchPath);
+        await patchWindowsExecutable(winBinPath);
+        fs.copyFileSync(winBinPath, winTarget);
+        fs.copyFileSync(winBinPath, exeTarget);
+        console.log(`  ✓ Windows Executable Metadata Patched -> RestStudio.exe & RestStudio-Windows-x64.exe (${(fs.statSync(winBinPath).size / (1024*1024)).toFixed(2)} MB)`);
+      } else {
+        console.warn('  ⚠ Could not locate exepatch.js for Windows metadata patching');
+      }
     } catch (err) {
       console.warn('  ⚠ Warning: Could not patch Windows executable metadata:', err.message);
     }
