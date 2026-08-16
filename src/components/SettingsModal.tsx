@@ -85,12 +85,17 @@ export function SettingsModal({
               isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50/80 border-slate-200'
             }`}>
               <p className={`text-[11px] leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                When you send a request to localhost or a device on your local network from the web app, your browser
-                (Chrome 142+ / Firefox 147+) will ask for permission to access your local network. Click <b>Allow</b> —
-                this is a native browser prompt, no proxy or extension required.
+                When the web app is hosted on a public <b>https</b> site, the browser (Chrome 142+ / Firefox 147+) shows a
+                native <b>Local Network Access</b> prompt the first time you send a request to localhost or a device on
+                your local network — click <b>Allow</b>, no proxy or extension required. If the site is denied, re-enable it
+                via the lock icon in the address bar → Site settings → Local network access.
               </p>
               <p className={`text-[11px] leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                Local servers must respond with CORS headers (e.g. <code className="text-emerald-400">Access-Control-Allow-Origin: *</code>)
+                When the web app itself runs from a local origin (e.g. the local dev server at <code className="text-emerald-400">localhost</code>)
+                no permission prompt appears — the browser treats it as a local-to-local request.
+              </p>
+              <p className={`text-[11px] leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                In both cases the local server must respond with CORS headers (e.g. <code className="text-emerald-400">Access-Control-Allow-Origin: *</code>)
                 for the browser to read the response.
               </p>
             </div>

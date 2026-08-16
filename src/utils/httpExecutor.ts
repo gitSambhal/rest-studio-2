@@ -8,6 +8,16 @@ export interface HttpRequestOptions {
 }
 
 /**
+ * True when running inside the Neutralino desktop app.
+ */
+export function isNeutralinoActive(): boolean {
+  return typeof window !== 'undefined' && Boolean(
+    (window as any).Neutralino &&
+    ((window as any).NL_PORT || (window as any).NL_TOKEN || (window as any).NL_MODE || (window as any).__NL_PORT__)
+  );
+}
+
+/**
  * Safely retrieve Neutralino SDK instance in desktop mode
  */
 async function getNeutralino(): Promise<any> {
@@ -285,16 +295,64 @@ export function isLocalTargetUrl(url: string): boolean {
 export type LocalNetworkPermissionState = 'granted' | 'prompt' | 'denied' | 'unsupported';
 
 /**
- * Query the browser's Local Network Access permission state.
- * Chrome 142+ / Firefox 147+ expose it via the Permissions API. Chrome 145 split the
- * permission into granular loopback/local-network entries, so try the known names.
+ * Chrome's `targetAddressSpace` fetch option must EXACTLY match the target's
+ * resolved IP address space or the request fails with a network error before
+ * any Local Network Access check runs (and before any permission prompt can
+ * appear). Loopback targets (localhost, 127.x, ::1) are in the `loopback`
+ * space; everything else local (RFC1918, link-local, .local, single-label
+ * intranet hosts) is in the `local` space.
  */
-export async function getLocalNetworkPermissionState(): Promise<LocalNetworkPermissionState> {
+export function getTargetAddressSpace(url: string): 'loopback' | 'local' {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (host === 'localhost' || host === '::1' || host === '0.0.0.0' || host === '0:0:0:0:0:0:0:1' || host === '::ffff:127.0.0.1') {
+      return 'loopback';
+    }
+    if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
+      const a = Number(host.split('.')[0]);
+      return a === 127 ? 'loopback' : 'local';
+    }
+    // .local and single-label intranet hostnames are presumed to be on the LAN.
+    return 'local';
+  } catch {
+    return 'local';
+  }
+}
+
+/**
+ * Chrome/Firefox only gate Local Network Access requests from PUBLIC (secure)
+ * origins to local/loopback targets. When the app itself is served from a local
+ * origin (localhost dev server, LAN IP) or over plain http, no Local Network
+ * Access permission prompt will ever appear — those requests are plain CORS.
+ * Returns true only when the browser can actually show the permission prompt.
+ */
+export function isLnaPromptApplicable(): boolean {
+  if (typeof window === 'undefined' || !window.isSecureContext) return false;
+  return !isLocalTargetUrl(window.location.origin);
+}
+
+/**
+ * Query the browser's Local Network Access permission state for a given target.
+ * Chrome 142+ / Firefox 147+ expose it via the Permissions API. Chrome 145 split
+ * the single `local-network-access` permission into `loopback-network` and
+ * `local-network`, so query the permission matching the target type first and
+ * fall back to the legacy combined name on older browsers.
+ */
+export async function getLocalNetworkPermissionState(targetUrl?: string): Promise<LocalNetworkPermissionState> {
   try {
     if (typeof navigator === 'undefined' || !navigator.permissions || typeof navigator.permissions.query !== 'function') {
       return 'unsupported';
     }
-    const names = ['local-network-access', 'loopback-network-access', 'local-network'];
+    let names: string[];
+    if (targetUrl && isLocalTargetUrl(targetUrl)) {
+      const space = getTargetAddressSpace(targetUrl);
+      names = space === 'loopback'
+        ? ['loopback-network', 'local-network-access', 'local-network']
+        : ['local-network', 'local-network-access', 'loopback-network'];
+    } else {
+      names = ['local-network-access', 'local-network', 'loopback-network'];
+    }
     for (const name of names) {
       try {
         const res = await (navigator.permissions as any).query({ name });
@@ -440,10 +498,14 @@ export async function executeDirectLocalFetch(
 ): Promise<ExecutionResponse> {
   const startTime = performance.now();
 
+  // Must match the target's actual address space exactly — a mismatch is a
+  // hard network error that aborts before the LNA permission check, so the
+  // browser permission prompt would never appear (loopback targets need
+  // 'loopback', LAN targets need 'local').
   const fetchOptions: any = {
     method: method.toUpperCase(),
     headers: { ...headers },
-    targetAddressSpace: 'local',
+    targetAddressSpace: getTargetAddressSpace(targetUrl),
   };
 
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) && body !== undefined && body !== null) {
@@ -556,11 +618,7 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
   }
 
   // 1. Neutralino Native Desktop Container Check — desktop app executes locally with zero restrictions
-  const isNeutralinoActive = typeof window !== 'undefined' && Boolean(
-    (window as any).Neutralino &&
-    ((window as any).NL_PORT || (window as any).NL_TOKEN || (window as any).NL_MODE || (window as any).__NL_PORT__)
-  );
-  if (isNeutralinoActive) {
+  if (isNeutralinoActive()) {
     try {
       console.log('[RestStudio Neutralino] Executing via Neutralino Native Engine...');
       const neuRes = await executeNeutralinoFetch(method, targetUrl, headers, body);
