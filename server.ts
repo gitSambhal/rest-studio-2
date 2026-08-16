@@ -2,7 +2,6 @@ import express from 'express';
 import path from 'path';
 import axios from 'axios';
 import http from 'http';
-import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 
 async function startServer() {
@@ -24,23 +23,9 @@ async function startServer() {
     next();
   });
 
-  // Track connected Desktop App instances over WebSocket relay
-  const connectedDesktopApps = new Map<string, WebSocket>();
-  const pendingRelayRequests = new Map<string, (resData: any) => void>();
-
   // Health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', service: 'RestStudio API Proxy' });
-  });
-
-  // Desktop App Relay Connection Status
-  app.get('/api/relay/status', (req, res) => {
-    const isConnected = connectedDesktopApps.size > 0;
-    res.json({
-      active: isConnected,
-      connectedCount: connectedDesktopApps.size,
-      message: isConnected ? 'RestStudio Desktop App Connected' : 'Desktop App Disconnected',
-    });
   });
 
   // Return JS stub for Neutralino client library in web browser preview mode to prevent HTML 404 syntax error
@@ -48,7 +33,7 @@ async function startServer() {
     res.type('application/javascript').send('/* Neutralino JS stub for web browser preview */');
   });
 
-  // REST Request Proxy Endpoint - Relays local requests to connected Desktop App, or proxies external APIs
+  // REST Request Proxy Endpoint - Proxies public external APIs server-side (CORS relief)
   app.post(['/api/proxy', '/proxy'], async (req, res) => {
     const { method = 'GET', url, headers = {}, body } = req.body;
 
@@ -73,12 +58,27 @@ async function startServer() {
       }
     }
 
-    // Standardize localhost or 0.0.0.0 to 127.0.0.1
+    // Local addresses cannot be proxied server-side: the server can never reach the
+    // user's localhost / LAN. The web app handles these via direct browser fetch with
+    // the Local Network Access permission (Chrome 142+ / Firefox 147+).
     const isLocalAddress = /^(http|https):\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|.*\.local)(:|\/|$)/i.test(targetUrl);
-
-    targetUrl = targetUrl
-      .replace(/^http:\/\/localhost(?=[:\/]|$)/i, 'http://127.0.0.1')
-      .replace(/^http:\/\/0\.0\.0\.0(?=[:\/]|$)/i, 'http://127.0.0.1');
+    if (isLocalAddress) {
+      res.status(400).json({
+        status: 400,
+        statusText: 'Local Target Not Supported',
+        headers: {},
+        body: JSON.stringify({
+          error: 'Local addresses cannot be proxied through the server. The web app connects to localhost / LAN APIs directly from your browser via the Local Network Access permission (Chrome 142+ / Firefox 147+).',
+          targetUrl,
+        }, null, 2),
+        size: 0,
+        duration: 0,
+        timestamp: Date.now(),
+        ok: false,
+        error: 'Local targets must be fetched directly from the browser',
+      });
+      return;
+    }
 
     // Prevent recursive proxy loops
     if (targetUrl.includes('/api/proxy')) {
@@ -98,55 +98,6 @@ async function startServer() {
 
     const startTime = performance.now();
 
-    // 1. If targeting localhost / local IP AND a Desktop App is connected via WebSocket, relay to Desktop App!
-    if (isLocalAddress && connectedDesktopApps.size > 0) {
-      const desktopWs = Array.from(connectedDesktopApps.values()).pop();
-      if (desktopWs && desktopWs.readyState === WebSocket.OPEN) {
-        const reqId = `relay_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        
-        try {
-          const relayResult = await new Promise((resolve) => {
-            const timeout = setTimeout(() => {
-              pendingRelayRequests.delete(reqId);
-              resolve({
-                status: 504,
-                statusText: 'Gateway Timeout',
-                headers: {},
-                body: JSON.stringify({ error: 'Desktop App did not respond within 30 seconds' }),
-                size: 0,
-                duration: 30000,
-                timestamp: Date.now(),
-                ok: false,
-                error: 'Desktop App timeout',
-              });
-            }, 30000);
-
-            pendingRelayRequests.set(reqId, (responseData: any) => {
-              clearTimeout(timeout);
-              resolve(responseData);
-            });
-
-            desktopWs.send(
-              JSON.stringify({
-                type: 'relay_request',
-                id: reqId,
-                method,
-                url: targetUrl,
-                headers,
-                body,
-              })
-            );
-          });
-
-          res.json(relayResult);
-          return;
-        } catch (relayErr: any) {
-          console.warn('[RestStudio Relay] Desktop Relay failed:', relayErr?.message);
-        }
-      }
-    }
-
-    // 2. Direct Axios proxy attempt
     try {
       // Clean up headers to prevent host/content-length conflicts
       const cleanedHeaders: Record<string, string> = {
@@ -176,8 +127,8 @@ async function startServer() {
       const endTime = performance.now();
       const duration = Math.round(endTime - startTime);
 
-      const responseText = typeof axiosResponse.data === 'string' 
-        ? axiosResponse.data 
+      const responseText = typeof axiosResponse.data === 'string'
+        ? axiosResponse.data
         : JSON.stringify(axiosResponse.data);
 
       const responseSize = Buffer.byteLength(responseText, 'utf8');
@@ -204,64 +155,6 @@ async function startServer() {
         contentType: resHeaders['content-type'] || 'text/plain',
       });
     } catch (err: any) {
-      // If local address and Axios failed (because server is on Cloud Run and target is localhost on user PC)
-      if (isLocalAddress) {
-        const endTime = performance.now();
-        const duration = Math.round(endTime - startTime);
-        res.status(503).json({
-          status: 503,
-          statusText: 'Desktop App Disconnected',
-          headers: {},
-          body: JSON.stringify(
-            {
-              error: 'To connect to localhost / local APIs from this web app, please launch the RestStudio Desktop Application on your computer.',
-              targetUrl,
-              message: 'The Desktop App automatically connects over a secure relay tunnel with zero configuration.',
-            },
-            null,
-            2
-          ),
-          size: 0,
-          duration,
-          timestamp: Date.now(),
-          ok: false,
-          error: 'RestStudio Desktop App not running on local computer',
-        });
-        return;
-      }
-
-      // Fallback server-side attempt using public CORS proxy (corsproxy.io / allorigins.win)
-      try {
-        console.log('[RestStudio Proxy] Direct Axios failed. Attempting corsproxy.io fallback...');
-        const fallbackUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
-        const fallbackRes = await axios({
-          method: method.toUpperCase(),
-          url: fallbackUrl,
-          data: body !== undefined && body !== null ? body : undefined,
-          validateStatus: () => true,
-          responseType: 'text',
-          timeout: 15000,
-        });
-
-        const endTime = performance.now();
-        const duration = Math.round(endTime - startTime);
-        const responseText = typeof fallbackRes.data === 'string' ? fallbackRes.data : JSON.stringify(fallbackRes.data);
-
-        return res.json({
-          status: fallbackRes.status,
-          statusText: fallbackRes.statusText || 'OK',
-          headers: {},
-          body: responseText,
-          size: Buffer.byteLength(responseText, 'utf8'),
-          duration,
-          timestamp: Date.now(),
-          ok: fallbackRes.status >= 200 && fallbackRes.status < 300,
-          contentType: 'text/plain',
-        });
-      } catch (fallbackErr) {
-        console.warn('[RestStudio Proxy] Corsproxy.io fallback failed:', fallbackErr);
-      }
-
       const endTime = performance.now();
       const duration = Math.round(endTime - startTime);
 
@@ -271,7 +164,7 @@ async function startServer() {
         headers: {},
         body: JSON.stringify(
           {
-            error: 'Failed to connect to target server via Axios proxy or Public CORS Proxy',
+            error: 'Failed to connect to target server via Axios proxy',
             details: err.message || String(err),
             targetUrl,
           },
@@ -302,54 +195,11 @@ async function startServer() {
     });
   }
 
-  // Create primary HTTP server for Express and WebSocket Relay
   const server = http.createServer(app);
 
-  // Mount WebSocket Relay Server for Desktop App Connections
-  const wss = new WebSocketServer({ server, path: '/api/relay/ws' });
-
-  wss.on('connection', (ws, req) => {
-    const clientId = `desktop_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    connectedDesktopApps.set(clientId, ws);
-    console.log(`[RestStudio Relay] Desktop App connected: ${clientId} from ${req.socket.remoteAddress}`);
-
-    ws.send(JSON.stringify({ type: 'connected', clientId, version: '1.0.0' }));
-
-    ws.on('message', (message) => {
-      try {
-        const payload = JSON.parse(message.toString());
-        if (payload.type === 'ping') {
-          ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
-          return;
-        }
-
-        if (payload.type === 'relay_response' && payload.id) {
-          const callback = pendingRelayRequests.get(payload.id);
-          if (callback) {
-            pendingRelayRequests.delete(payload.id);
-            callback(payload);
-          }
-        }
-      } catch (err: any) {
-        console.warn('[RestStudio Relay] Invalid message received on WS:', err?.message);
-      }
-    });
-
-    ws.on('close', () => {
-      connectedDesktopApps.delete(clientId);
-      console.log(`[RestStudio Relay] Desktop App disconnected: ${clientId}`);
-    });
-
-    ws.on('error', (err) => {
-      connectedDesktopApps.delete(clientId);
-      console.warn(`[RestStudio Relay] Desktop App WS error (${clientId}):`, err.message);
-    });
-  });
-
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`RestStudio Server & WebSocket Relay active on http://0.0.0.0:${PORT} (ws://0.0.0.0:${PORT}/api/relay/ws)`);
+    console.log(`RestStudio Server active on http://0.0.0.0:${PORT}`);
   });
 }
 
 startServer();
-

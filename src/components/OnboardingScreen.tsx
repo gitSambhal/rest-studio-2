@@ -27,7 +27,6 @@ export interface OnboardingScreenProps {
   onOpenImportModal: () => void;
   onOpenQuickCurl?: () => void;
   onOpenQuickHelp?: () => void;
-  onOpenDesktopModal?: () => void;
   onLaunchWorkspace?: () => void;
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
@@ -39,7 +38,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   onOpenImportModal,
   onOpenQuickCurl,
   onOpenQuickHelp,
-  onOpenDesktopModal,
   onLaunchWorkspace,
   isDarkMode,
   onToggleDarkMode,
@@ -241,7 +239,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           {/* Action 4: Desktop App */}
           <button
             type="button"
-            onClick={onOpenDesktopModal || onLaunchWorkspace || onCreateNewRequest}
+            onClick={onLaunchWorkspace || onCreateNewRequest}
             className={`group p-5 rounded-2xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between space-y-3 ${
               isDarkMode
                 ? 'bg-slate-900/90 hover:bg-slate-800/90 border-slate-800 hover:border-amber-500/50 shadow-xl'

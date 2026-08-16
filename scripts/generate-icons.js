@@ -177,79 +177,10 @@ function createPngBuffer(width, height) {
   return Buffer.concat([sig, ihdrChunk, idatChunk, iendChunk]);
 }
 
-function createIcoFromPngs(pngImages) {
-  const count = pngImages.length;
-  const headerSize = 6;
-  const directorySize = 16 * count;
-  let currentOffset = headerSize + directorySize;
-
-  const header = Buffer.alloc(headerSize);
-  header.writeUInt16LE(0, 0);
-  header.writeUInt16LE(1, 2);
-  header.writeUInt16LE(count, 4);
-
-  const entries = [];
-  const buffers = [];
-
-  pngImages.forEach(({ width, height, buffer }) => {
-    const entry = Buffer.alloc(16);
-    entry.writeUInt8(width >= 256 ? 0 : width, 0);
-    entry.writeUInt8(height >= 256 ? 0 : height, 1);
-    entry.writeUInt8(0, 2);
-    entry.writeUInt8(0, 3);
-    entry.writeUInt16LE(1, 4);
-    entry.writeUInt16LE(32, 6);
-    entry.writeUInt32LE(buffer.length, 8);
-    entry.writeUInt32LE(currentOffset, 12);
-
-    entries.push(entry);
-    buffers.push(buffer);
-    currentOffset += buffer.length;
-  });
-
-  return Buffer.concat([header, ...entries, ...buffers]);
-}
-
-// Generate all required Tauri and Neutralino icon sizes
-const iconsDir = path.resolve('src-tauri/icons');
-if (!fs.existsSync(iconsDir)) {
-  fs.mkdirSync(iconsDir, { recursive: true });
-}
-
-const sizes = [
-  { name: '32x32.png', width: 32, height: 32 },
-  { name: '128x128.png', width: 128, height: 128 },
-  { name: '128x128@2x.png', width: 256, height: 256 },
-  { name: 'icon.png', width: 512, height: 512 },
-  { name: 'Square30x30Logo.png', width: 30, height: 30 },
-  { name: 'Square44x44Logo.png', width: 44, height: 44 },
-  { name: 'Square71x71Logo.png', width: 71, height: 71 },
-  { name: 'Square89x89Logo.png', width: 89, height: 89 },
-  { name: 'Square150x150Logo.png', width: 150, height: 150 },
-  { name: 'Square310x310Logo.png', width: 310, height: 310 },
-  { name: 'StoreLogo.png', width: 50, height: 50 },
-];
-
-const generatedPngs = [];
-
-sizes.forEach(({ name, width, height }) => {
-  const pngBuf = createPngBuffer(width, height);
-  const targetPath = path.join(iconsDir, name);
-  fs.writeFileSync(targetPath, pngBuf);
-  generatedPngs.push({ width, height, buffer: pngBuf });
-  console.log(`[Icon Generator] Created SVG-matched PNG: ${targetPath} (${width}x${height})`);
-});
-
 // Create root icon.png and public/icon.png
 const rootPng = createPngBuffer(512, 512);
 fs.writeFileSync(path.resolve('icon.png'), rootPng);
 fs.writeFileSync(path.resolve('public/icon.png'), rootPng);
-
-// Create valid ICO file containing 32x32 and 256x256 icon images
-const png32 = generatedPngs.find(p => p.width === 32) || { width: 32, height: 32, buffer: createPngBuffer(32, 32) };
-const png256 = generatedPngs.find(p => p.width === 256) || { width: 256, height: 256, buffer: createPngBuffer(256, 256) };
-const icoBuf = createIcoFromPngs([png32, png256]);
-fs.writeFileSync(path.resolve('src-tauri/icons/icon.ico'), icoBuf);
 
 // Ensure public/js/neutralino.js exists so vite build copies it to dist/js/neutralino.js
 const rootJs = path.resolve('js/neutralino.js');
@@ -260,6 +191,6 @@ if (fs.existsSync(rootJs)) {
   console.log('[Icon Generator] Synced js/neutralino.js to public/js/neutralino.js!');
 }
 
-console.log('[Icon Generator] All SVG-matched icons (public/icon.png, icon.png, src-tauri/icons/*) successfully generated!');
+console.log('[Icon Generator] All SVG-matched icons (public/icon.png, icon.png) successfully generated!');
 
 

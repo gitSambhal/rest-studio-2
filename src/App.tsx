@@ -31,7 +31,6 @@ import { SettingsModal } from './components/SettingsModal';
 import { PromptModal } from './components/PromptModal';
 import { QuickNewRequestModal } from './components/QuickNewRequestModal';
 import { QuickCurlModal } from './components/QuickCurlModal';
-import { DesktopAppModal } from './components/DesktopAppModal';
 import { TabBar } from './components/TabBar';
 import { OnboardingScreen } from './components/OnboardingScreen';
 import { ToastContainer, ToastMessage } from './components/ToastContainer';
@@ -209,7 +208,6 @@ export default function App() {
   const [isImportExportOpen, setIsImportExportOpen] = useState<boolean>(false);
   const [isQuickHelpOpen, setIsQuickHelpOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
-  const [isDesktopModalOpen, setIsDesktopModalOpen] = useState<boolean>(false);
   const [isQuickNewRequestOpen, setIsQuickNewRequestOpen] = useState<boolean>(false);
   const [isQuickCurlOpen, setIsQuickCurlOpen] = useState<boolean>(false);
   const [initialPasteText, setInitialPasteText] = useState<string>('');
@@ -611,7 +609,7 @@ export default function App() {
         status: 0,
         statusText: 'Network Error',
         headers: {},
-        body: JSON.stringify({ error: err.message || 'Failed to proxy request' }, null, 2),
+        body: JSON.stringify({ error: err.message || 'Failed to execute request' }, null, 2),
         size: 0,
         duration: 0,
         timestamp: Date.now(),
@@ -1585,7 +1583,6 @@ export default function App() {
           onOpenImportModal={() => setIsImportExportOpen(true)}
           onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
           onOpenQuickHelp={() => setIsQuickHelpOpen(true)}
-          onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
           onLaunchWorkspace={handleLaunchWorkspace}
           isDarkMode={isDarkMode}
           onToggleDarkMode={handleToggleDarkMode}
@@ -1627,7 +1624,6 @@ export default function App() {
             onOpenImportExport={() => setIsImportExportOpen(true)}
             onOpenQuickHelp={() => setIsQuickHelpOpen(true)}
             onOpenSettings={() => setIsSettingsOpen(true)}
-            onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
             onOpenQuickNewRequest={() => setIsQuickNewRequestOpen(true)}
             onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
             historyCount={history.length}
@@ -1719,7 +1715,6 @@ export default function App() {
                           onUpdateProjectAuth={handleUpdateProjectAuth}
                           onUpdateRequest={handleUpdateActiveRequest}
                           onSendRequest={handleExecuteRequest}
-                          onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
                           isLoading={isExecuting}
                           lastResponse={lastResponse}
                         />
@@ -1951,15 +1946,7 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         isDarkMode={isDarkMode}
         onToggleDarkMode={handleToggleDarkMode}
-        onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
         showToast={showToast}
-      />
-
-      {/* Desktop App Conversion Modal */}
-      <DesktopAppModal
-        isOpen={isDesktopModalOpen}
-        onClose={() => setIsDesktopModalOpen(false)}
-        isDarkMode={isDarkMode}
       />
 
       {/* Global App Prompt Modal */}

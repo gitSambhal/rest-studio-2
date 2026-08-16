@@ -1,6 +1,6 @@
 /**
  * Desktop & Neutralino Clipboard & Selection Helper
- * Fixes copy, paste, cut, select all, and right-click text selection issues in Neutralino (nue build), Tauri, and WebViews.
+ * Fixes copy, paste, cut, select all, and right-click text selection issues in Neutralino (nue build) and WebViews.
  */
 
 // Helper to set React input/textarea values cleanly so React state handlers fire
@@ -21,7 +21,7 @@ function setNativeInputValue(element: HTMLInputElement | HTMLTextAreaElement, va
 }
 
 /**
- * Get text from Clipboard (tries Neutralino, Tauri, then browser navigator.clipboard)
+ * Get text from Clipboard (tries Neutralino, then browser navigator.clipboard)
  */
 export async function readClipboardText(): Promise<string> {
   if (typeof window === 'undefined') return '';
@@ -35,15 +35,7 @@ export async function readClipboardText(): Promise<string> {
     } catch (_) {}
   }
 
-  // 2. Tauri Clipboard API
-  if (w.__TAURI__?.clipboard?.readText) {
-    try {
-      const text = await w.__TAURI__.clipboard.readText();
-      if (typeof text === 'string') return text;
-    } catch (_) {}
-  }
-
-  // 3. Browser Clipboard API
+  // 2. Browser Clipboard API
   if (navigator?.clipboard?.readText) {
     try {
       const text = await navigator.clipboard.readText();
@@ -55,7 +47,7 @@ export async function readClipboardText(): Promise<string> {
 }
 
 /**
- * Write text to Clipboard (tries Neutralino, Tauri, then browser navigator.clipboard)
+ * Write text to Clipboard (tries Neutralino, then browser navigator.clipboard)
  */
 export async function writeClipboardText(text: string): Promise<boolean> {
   if (typeof window === 'undefined') return false;
@@ -69,15 +61,7 @@ export async function writeClipboardText(text: string): Promise<boolean> {
     } catch (_) {}
   }
 
-  // 2. Tauri
-  if (w.__TAURI__?.clipboard?.writeText) {
-    try {
-      await w.__TAURI__.clipboard.writeText(text);
-      return true;
-    } catch (_) {}
-  }
-
-  // 3. Browser
+  // 2. Browser
   if (navigator?.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(text);
@@ -104,7 +88,7 @@ export async function writeClipboardText(text: string): Promise<boolean> {
 /**
  * Initialize global clipboard handlers
  * Ensures Cmd+A (Select All), Cmd+C (Copy), Cmd+X (Cut), Cmd+V (Paste), Cmd+Z (Undo), Cmd+Shift+Z / Cmd+Y (Redo)
- * work reliably in macOS WKWebView (Neutralino/Tauri/Browser) and Windows/Linux.
+ * work reliably in macOS WKWebView (Neutralino/Browser) and Windows/Linux.
  */
 export function initDesktopClipboardHandlers() {
   if (typeof window === 'undefined') return;

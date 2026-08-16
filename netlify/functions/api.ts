@@ -127,6 +127,28 @@ export async function handler(event: any) {
       }
     }
 
+    // Local addresses cannot be proxied server-side: the server can never reach the
+    // user's localhost / LAN. The web app handles these via direct browser fetch with
+    // the Local Network Access permission (Chrome 142+ / Firefox 147+).
+    const isLocalAddress = /^(http|https):\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|.*\.local)(:|\/|$)/i.test(targetUrl);
+    if (isLocalAddress) {
+      return {
+        statusCode: 400,
+        headers: corsHeaders,
+        body: JSON.stringify({
+          status: 400,
+          statusText: 'Local Target Not Supported',
+          headers: {},
+          body: JSON.stringify({ error: 'Local addresses cannot be proxied through the server. The web app connects to localhost / LAN APIs directly from your browser via the Local Network Access permission (Chrome 142+ / Firefox 147+).' }, null, 2),
+          size: 0,
+          duration: 0,
+          timestamp: Date.now(),
+          ok: false,
+          error: 'Local targets must be fetched directly from the browser',
+        }),
+      };
+    }
+
     if (targetUrl.includes('/api/proxy')) {
       return {
         statusCode: 400,

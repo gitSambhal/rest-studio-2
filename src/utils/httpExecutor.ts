@@ -1,5 +1,4 @@
 import { ExecutionResponse } from '../types';
-import { checkDesktopProxyHealth, fetchViaDesktopProxy, startDesktopProxyInNeutralino } from './localhostBridge';
 
 export interface HttpRequestOptions {
   method: string;
@@ -245,79 +244,122 @@ async function executeNeutralinoFetch(
 }
 
 /**
- * Execute HTTP requests via Tauri Native Engine
+ * Detect whether a URL targets the user's local network / local machine.
+ * Covers loopback, RFC1918 private IPs, link-local, IPv6 loopback, .local (mDNS) and
+ * single-label intranet hostnames.
  */
-async function executeTauriFetch(
-  method: string,
-  targetUrl: string,
-  headers: Record<string, string>,
-  body?: any
-): Promise<ExecutionResponse | null> {
-  const startTime = performance.now();
-
-  // 1. Try Tauri v2/v1 http plugin fetch if present
-  if ((window as any).__TAURI__?.http?.fetch) {
-    try {
-      const res = await (window as any).__TAURI__.http.fetch(targetUrl, {
-        method: method.toUpperCase(),
-        headers,
-        body: ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) && body ? (typeof body === 'object' ? JSON.stringify(body) : String(body)) : undefined,
-      });
-      const duration = Math.round(performance.now() - startTime);
-      const text = await res.text();
-      const resHeaders: Record<string, string> = {};
-      if (res.headers && typeof res.headers.forEach === 'function') {
-        res.headers.forEach((v: string, k: string) => { resHeaders[k] = v; });
-      }
-      return {
-        status: res.status,
-        statusText: res.statusText || 'OK',
-        headers: resHeaders,
-        body: text,
-        size: new Blob([text]).size,
-        duration,
-        timestamp: Date.now(),
-        ok: res.ok,
-        contentType: res.headers?.get('content-type') || 'text/plain',
-      };
-    } catch (err) {
-      console.warn('[RestStudio Tauri] Tauri http fetch failed:', err);
-    }
-  }
-
-  // 2. Direct webview fetch inside Tauri window
+export function isLocalTargetUrl(url: string): boolean {
   try {
-    const res = await fetch(targetUrl, {
-      method: method.toUpperCase(),
-      headers,
-      body: ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) && body ? (typeof body === 'object' ? JSON.stringify(body) : String(body)) : undefined,
-    });
-    const duration = Math.round(performance.now() - startTime);
-    const text = await res.text();
-    const resHeaders: Record<string, string> = {};
-    if (res.headers && typeof res.headers.forEach === 'function') {
-      res.headers.forEach((v: string, k: string) => { resHeaders[k] = v; });
-    }
-    return {
-      status: res.status,
-      statusText: res.statusText || 'OK',
-      headers: resHeaders,
-      body: text,
-      size: new Blob([text]).size,
-      duration,
-      timestamp: Date.now(),
-      ok: res.ok,
-      contentType: res.headers?.get('content-type') || 'text/plain',
-    };
-  } catch (err) {
-    console.warn('[RestStudio Tauri] Standard fetch inside Tauri failed:', err);
-  }
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (host === 'localhost' || host === '0.0.0.0' || host === '::1') return true;
 
-  return null;
+    // IPv4 literals
+    if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
+      const parts = host.split('.').map(Number);
+      if (parts.some((p) => p < 0 || p > 255)) return false;
+      const [a, b] = parts;
+      if (a === 127) return true;               // loopback
+      if (a === 10) return true;                // 10.0.0.0/8
+      if (a === 169 && b === 254) return true;  // 169.254.0.0/16 link-local
+      if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+      if (a === 192 && b === 168) return true;  // 192.168.0.0/16
+      return false;
+    }
+
+    // IPv6 loopback (compressed forms like 0:0:0:0:0:0:0:1)
+    if (host === '0:0:0:0:0:0:0:1' || host === '::ffff:127.0.0.1') return true;
+
+    // mDNS / local-network names
+    if (host.endsWith('.local')) return true;
+
+    // Single-label intranet hostnames (e.g. http://mypc:8080)
+    if (!host.includes('.')) return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export type LocalNetworkPermissionState = 'granted' | 'prompt' | 'denied' | 'unsupported';
+
+/**
+ * Query the browser's Local Network Access permission state.
+ * Chrome 142+ / Firefox 147+ expose it via the Permissions API. Chrome 145 split the
+ * permission into granular loopback/local-network entries, so try the known names.
+ */
+export async function getLocalNetworkPermissionState(): Promise<LocalNetworkPermissionState> {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.permissions || typeof navigator.permissions.query !== 'function') {
+      return 'unsupported';
+    }
+    const names = ['local-network-access', 'loopback-network-access', 'local-network'];
+    for (const name of names) {
+      try {
+        const res = await (navigator.permissions as any).query({ name });
+        if (res && res.state) {
+          return res.state as LocalNetworkPermissionState;
+        }
+      } catch {
+        // Unknown permission name on this browser version — try the next one.
+      }
+    }
+    return 'unsupported';
+  } catch {
+    return 'unsupported';
+  }
+}
+
+function buildLocalFetchError(
+  targetUrl: string,
+  permState: LocalNetworkPermissionState,
+  details: string,
+  duration: number
+): ExecutionResponse {
+  const denied = permState === 'denied';
+  const unsupported = permState === 'unsupported';
+
+  const statusText = denied
+    ? 'Local Network Access Denied'
+    : 'Local Request Blocked';
+
+  const reason = denied
+    ? 'The browser blocked access to your local network because the Local Network Access permission was not granted.'
+    : unsupported
+      ? 'The request to the local server failed. This browser does not support the Local Network Access permission prompt (Chrome 142+ / Firefox 147+).'
+      : 'The local server did not respond with the CORS headers required for browser access, or it is not running.';
+
+  const solution = denied
+    ? 'Re-enable access: click the lock icon in the browser address bar → Site settings → Local network access → Allow. Then retry the request.'
+    : unsupported
+      ? 'Ensure the server is running and that it sends CORS headers (Access-Control-Allow-Origin: *). For the permission prompt experience, use Google Chrome 142+ or Firefox 147+.'
+      : 'Make sure the server is running and responds with CORS headers, e.g. Access-Control-Allow-Origin: * (plus Access-Control-Allow-Private-Network: true for preflight). Alternatively, use the RestStudio Desktop App for zero-config localhost access.';
+
+  return {
+    status: 0,
+    statusText,
+    headers: {},
+    body: JSON.stringify(
+      {
+        error: `Failed to connect to ${targetUrl}`,
+        reason,
+        solution,
+        details: details || 'Failed to fetch',
+      },
+      null,
+      2
+    ),
+    size: 0,
+    duration,
+    timestamp: Date.now(),
+    ok: false,
+    error: statusText,
+  };
 }
 
 /**
- * Direct Client Browser `fetch()`
+ * Direct Client Browser `fetch()` — public (non-local) targets.
  */
 export async function executeDirectClientFetch(
   method: string,
@@ -361,8 +403,6 @@ export async function executeDirectClientFetch(
     };
   } catch (err: any) {
     const duration = Math.round(performance.now() - startTime);
-    const isLocalhost = targetUrl.includes('localhost') || targetUrl.includes('127.0.0.1') || targetUrl.includes('0.0.0.0') || targetUrl.includes('::1');
-
     return {
       status: 0,
       statusText: 'Network Error',
@@ -370,12 +410,8 @@ export async function executeDirectClientFetch(
       body: JSON.stringify(
         {
           error: `Failed to connect to ${targetUrl}`,
-          reason: isLocalhost
-            ? 'Localhost API unreachable from Web App. Web browsers block HTTPS -> HTTP direct connections or require CORS preflight headers.'
-            : err?.message || 'Failed to fetch',
-          solution: isLocalhost
-            ? 'To test localhost APIs from this web app: 1) Click "Desktop Proxy" button in top header bar, or 2) Run RestStudio Desktop App / 1-click Proxy Bridge command.'
-            : 'Check server CORS headers or network connectivity.',
+          reason: err?.message || 'Failed to fetch',
+          solution: 'Check network connectivity, or retry through the server proxy if the API blocks CORS.',
           details: err?.message || 'Failed to fetch',
         },
         null,
@@ -385,30 +421,106 @@ export async function executeDirectClientFetch(
       duration,
       timestamp: Date.now(),
       ok: false,
-      error: isLocalhost
-        ? 'Localhost Connection Refused. Start RestStudio Desktop Proxy Agent.'
-        : err?.message || 'Connection Refused',
+      error: err?.message || 'Connection Refused',
     };
   }
 }
 
-export type ProxyMode = 'auto' | 'desktop' | 'cloud' | 'direct';
+/**
+ * Direct Client Browser `fetch()` for local-network targets.
+ * Annotates the request with `targetAddressSpace: 'local'` so Chrome 142+ / Firefox 147+
+ * exempt it from mixed-content blocking and trigger the Local Network Access permission
+ * prompt — no proxy, agent, or extension required.
+ */
+export async function executeDirectLocalFetch(
+  method: string,
+  targetUrl: string,
+  headers: Record<string, string>,
+  body?: any
+): Promise<ExecutionResponse> {
+  const startTime = performance.now();
 
-let currentProxyMode: ProxyMode = (typeof localStorage !== 'undefined' && (localStorage.getItem('reststudio_proxy_mode') as ProxyMode)) || 'auto';
+  const fetchOptions: any = {
+    method: method.toUpperCase(),
+    headers: { ...headers },
+    targetAddressSpace: 'local',
+  };
 
-export function getProxyMode(): ProxyMode {
-  return currentProxyMode;
-}
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) && body !== undefined && body !== null) {
+    fetchOptions.body = typeof body === 'object' ? JSON.stringify(body) : String(body);
+  }
 
-export function setProxyMode(mode: ProxyMode): void {
-  currentProxyMode = mode;
-  if (typeof localStorage !== 'undefined') {
-    localStorage.setItem('reststudio_proxy_mode', mode);
+  try {
+    const res = await fetch(targetUrl, fetchOptions);
+    const duration = Math.round(performance.now() - startTime);
+
+    const text = await res.text();
+    const size = new Blob([text]).size;
+
+    const resHeaders: Record<string, string> = {};
+    res.headers.forEach((val, key) => {
+      resHeaders[key] = val;
+    });
+
+    return {
+      status: res.status,
+      statusText: res.statusText || 'OK',
+      headers: resHeaders,
+      body: text,
+      size,
+      duration,
+      timestamp: Date.now(),
+      ok: res.ok,
+      contentType: res.headers.get('content-type') || 'text/plain',
+    };
+  } catch (err: any) {
+    const duration = Math.round(performance.now() - startTime);
+    const permState = await getLocalNetworkPermissionState();
+    return buildLocalFetchError(targetUrl, permState, err?.message || 'Failed to fetch', duration);
   }
 }
 
 /**
+ * Execute a request through the server-side /api/proxy (public URLs only —
+ * local targets never reach this endpoint from the web app).
+ */
+async function executeServerProxyFetch(
+  method: string,
+  targetUrl: string,
+  headers: Record<string, string>,
+  body?: any
+): Promise<ExecutionResponse | null> {
+  try {
+    const proxyRes = await fetch('/api/proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ method, url: targetUrl, headers, body }),
+    });
+
+    const contentType = proxyRes.headers.get('content-type') || '';
+    const responseText = await proxyRes.text();
+    const isHtmlResponse = responseText.trim().toLowerCase().startsWith('<!doctype') || responseText.trim().toLowerCase().startsWith('<html') || contentType.includes('text/html');
+
+    if (proxyRes.ok && !isHtmlResponse) {
+      try {
+        const responseData: ExecutionResponse = JSON.parse(responseText);
+        if (responseData.status > 0) {
+          return responseData;
+        }
+      } catch (_) {}
+    }
+  } catch (proxyErr) {
+    console.warn('[RestStudio] Server proxy fetch error:', proxyErr);
+  }
+
+  return null;
+}
+
+/**
  * Main HTTP request executor for RestStudio.
+ * - Desktop (Neutralino): native OS curl — no browser restrictions.
+ * - Web app, local target: direct browser fetch with Local Network Access permission.
+ * - Web app, public target: direct browser fetch, then /api/proxy fallback.
  */
 export async function executeHttpRequest(options: HttpRequestOptions): Promise<ExecutionResponse> {
   const startTime = performance.now();
@@ -443,7 +555,7 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
     }
   }
 
-  // 1. Neutralino Native Desktop Container Check
+  // 1. Neutralino Native Desktop Container Check — desktop app executes locally with zero restrictions
   const isNeutralinoActive = typeof window !== 'undefined' && Boolean(
     (window as any).Neutralino &&
     ((window as any).NL_PORT || (window as any).NL_TOKEN || (window as any).NL_MODE || (window as any).__NL_PORT__)
@@ -460,93 +572,21 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
     }
   }
 
-  // 2. Tauri Native Desktop Container Check
-  if (typeof window !== 'undefined' && ((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__ || (window as any).__TAURI_IPC__)) {
-    try {
-      console.log('[RestStudio Tauri] Executing via Tauri Native Engine...');
-      const tauriRes = await executeTauriFetch(method, targetUrl, headers, body);
-      if (tauriRes && tauriRes.status > 0) {
-        return tauriRes;
-      }
-    } catch (tErr) {
-      console.warn('[RestStudio Tauri] Native execution error, falling back:', tErr);
-    }
+  // 2. Web app: local target → direct browser fetch with Local Network Access permission
+  if (isLocalTargetUrl(targetUrl)) {
+    return await executeDirectLocalFetch(method, targetUrl, headers, body);
   }
 
-  // 3. Desktop Proxy Agent Check (Enables Netlify Web App -> Localhost / CORS execution)
-  if (currentProxyMode === 'auto' || currentProxyMode === 'desktop') {
-    try {
-      const proxyHealth = await checkDesktopProxyHealth();
-      if (proxyHealth.active) {
-        console.log('[RestStudio Netlify/Web] Routing request through Local Desktop Proxy / Cloud Relay...');
-        const bridgeResult = await fetchViaDesktopProxy(method, targetUrl, headers, body);
-        if (bridgeResult.success && bridgeResult.response) {
-          return bridgeResult.response as ExecutionResponse;
-        }
-      } else if (currentProxyMode === 'desktop') {
-        return {
-          status: 0,
-          statusText: 'Desktop App Offline',
-          headers: {},
-          body: JSON.stringify({ error: 'RestStudio Desktop App is not running on http://127.0.0.1:28108', hint: 'Launch the RestStudio Desktop Application on your computer to connect local APIs.' }, null, 2),
-          size: 0,
-          duration: Math.round(performance.now() - startTime),
-          timestamp: Date.now(),
-          ok: false,
-          error: 'RestStudio Desktop App Offline',
-        };
-      }
-    } catch (proxyAgentErr) {
-      console.warn('[RestStudio Web] Desktop Proxy Agent check failed, falling back:', proxyAgentErr);
-    }
+  // 3. Web app: public target → direct fetch first, then server proxy fallback
+  const directRes = await executeDirectClientFetch(method, targetUrl, headers, body);
+  if (directRes.status > 0) {
+    return directRes;
   }
 
-  // 4. Web Proxy Execution (Routes through Netlify Function / Express /api/proxy server for public external endpoints)
-  const isLocalHostTarget = targetUrl.includes('localhost') || targetUrl.includes('127.0.0.1') || targetUrl.includes('0.0.0.0') || targetUrl.includes('::1');
-
-  if ((currentProxyMode === 'auto' || currentProxyMode === 'cloud') && !isLocalHostTarget) {
-    try {
-      const proxyRes = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method, url: targetUrl, headers, body }),
-      });
-
-      const contentType = proxyRes.headers.get('content-type') || '';
-      const responseText = await proxyRes.text();
-      const isHtmlResponse = responseText.trim().toLowerCase().startsWith('<!doctype') || responseText.trim().toLowerCase().startsWith('<html') || contentType.includes('text/html');
-
-      if (proxyRes.ok && !isHtmlResponse) {
-        try {
-          const responseData: ExecutionResponse = JSON.parse(responseText);
-          if (responseData.status > 0) {
-            return responseData;
-          }
-        } catch (_) {}
-      }
-    } catch (proxyErr) {
-      console.warn('[RestStudio] Server proxy fetch error, falling back to direct browser fetch:', proxyErr);
-    }
+  const proxyRes = await executeServerProxyFetch(method, targetUrl, headers, body);
+  if (proxyRes) {
+    return proxyRes;
   }
 
-  // 5. Direct Client Browser Fetch Fallback
-  const isHttpsWebApp = typeof window !== 'undefined' && window.location.protocol === 'https:';
-  if (isLocalHostTarget && isHttpsWebApp) {
-    return {
-      status: 0,
-      statusText: 'Localhost Inaccessible from HTTPS',
-      headers: {},
-      body: JSON.stringify({
-        error: `Cannot make direct HTTP calls to '${targetUrl}' from an HTTPS Web App due to browser Mixed Content restrictions.`,
-        solution: 'To connect this Web App to your local APIs on localhost, launch the installed RestStudio Desktop Application on your computer.'
-      }, null, 2),
-      size: 0,
-      duration: Math.round(performance.now() - startTime),
-      timestamp: Date.now(),
-      ok: false,
-      error: 'Localhost inaccessible from HTTPS Web App. Launch the Desktop App on your computer.',
-    };
-  }
-
-  return await executeDirectClientFetch(method, targetUrl, headers, body);
+  return directRes;
 }

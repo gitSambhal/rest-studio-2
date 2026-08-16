@@ -1,14 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { X, Sliders, Moon, Sun, MonitorCheck, Monitor, Zap, Shield, RefreshCw } from 'lucide-react';
-import { getProxyMode, setProxyMode, ProxyMode } from '../utils/httpExecutor';
-import { checkDesktopProxyHealth, DesktopProxyHealth } from '../utils/localhostBridge';
+import React, { useState } from 'react';
+import { X, Sliders, Moon, Sun, MonitorCheck } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
-  onOpenDesktopModal?: () => void;
   showToast: (type: 'success' | 'error' | 'info' | 'warning', title: string, message: string) => void;
 }
 
@@ -17,18 +14,8 @@ export function SettingsModal({
   onClose,
   isDarkMode,
   onToggleDarkMode,
-  onOpenDesktopModal,
   showToast,
 }: SettingsModalProps) {
-  const [proxyMode, setProxyModeState] = useState<ProxyMode>(() => getProxyMode());
-  const [proxyHealth, setProxyHealth] = useState<DesktopProxyHealth>({ active: false, port: 28108 });
-
-  useEffect(() => {
-    if (isOpen) {
-      checkDesktopProxyHealth().then(setProxyHealth);
-    }
-  }, [isOpen]);
-
   if (!isOpen) return null;
 
   return (
@@ -89,84 +76,23 @@ export function SettingsModal({
             </button>
           </div>
 
-          {/* Proxy Execution Settings */}
+          {/* Local Network Access Note */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                HTTP Request Proxy Mode
-              </label>
-              <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
-                proxyHealth.active
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                  : 'bg-slate-800 text-slate-400 border-slate-700'
-              }`}>
-                {proxyHealth.active ? '🟢 LOCALHOST AGENT ACTIVE' : '⚪ AGENT OFFLINE'}
-              </span>
-            </div>
-
-            <div className={`p-3 rounded-xl border space-y-3 ${
+            <label className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+              Local Network Access
+            </label>
+            <div className={`p-3 rounded-xl border space-y-1.5 ${
               isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50/80 border-slate-200'
             }`}>
-              <div className="flex items-center justify-between">
-                <span className={`text-xs font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>
-                  Execution Proxy
-                </span>
-                <select
-                  value={proxyMode}
-                  onChange={(e) => {
-                    const m = e.target.value as ProxyMode;
-                    setProxyModeState(m);
-                    setProxyMode(m);
-                    showToast('info', 'Proxy Mode Updated', `Set to ${m}`);
-                  }}
-                  className={`text-xs font-bold px-3 py-1.5 rounded-lg border focus:outline-none cursor-pointer ${
-                    isDarkMode ? 'bg-slate-900 border-slate-700 text-emerald-400' : 'bg-white border-slate-300 text-emerald-600'
-                  }`}
-                >
-                  <option value="auto">⚡ Auto (Desktop Proxy -&gt; Cloud -&gt; Direct)</option>
-                  <option value="desktop">🖥️ Force Desktop Agent (127.0.0.1:28108)</option>
-                  <option value="cloud">☁️ Force Cloud Server Proxy</option>
-                  <option value="direct">🌐 Direct Browser Fetch (CORS Enabled Only)</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
-                <p className={`text-[11px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                  Localhost Proxy Agent enables direct calls to local APIs from Netlify web app.
-                </p>
-
-                <div className="flex items-center space-x-2 shrink-0 ml-2">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const h = await checkDesktopProxyHealth();
-                      setProxyHealth(h);
-                      showToast(
-                        h.active ? 'success' : 'warning',
-                        h.active ? 'Proxy Agent Active' : 'Proxy Agent Offline',
-                        h.active ? 'Connected to http://127.0.0.1:28108' : 'Not running. Click Setup to launch.'
-                      );
-                    }}
-                    className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition-colors cursor-pointer"
-                    title="Re-check Proxy Agent Health"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                  </button>
-
-                  {onOpenDesktopModal && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onClose();
-                        onOpenDesktopModal();
-                      }}
-                      className="px-2.5 py-1 bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 font-bold text-[11px] rounded-lg border border-teal-500/40 transition-colors cursor-pointer"
-                    >
-                      Setup
-                    </button>
-                  )}
-                </div>
-              </div>
+              <p className={`text-[11px] leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                When you send a request to localhost or a device on your local network from the web app, your browser
+                (Chrome 142+ / Firefox 147+) will ask for permission to access your local network. Click <b>Allow</b> —
+                this is a native browser prompt, no proxy or extension required.
+              </p>
+              <p className={`text-[11px] leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                Local servers must respond with CORS headers (e.g. <code className="text-emerald-400">Access-Control-Allow-Origin: *</code>)
+                for the browser to read the response.
+              </p>
             </div>
           </div>
 
@@ -179,7 +105,8 @@ export function SettingsModal({
               <span>Native Desktop Engine</span>
             </div>
             <p className={`text-[11px] leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-              RestStudio auto-detects Neutralino or Tauri native desktop containers for 0 CORS restrictions and direct localhost access.
+              The desktop build runs on Neutralino and executes requests natively with cURL — zero CORS restrictions,
+              direct localhost access, fully independent from the web app.
             </p>
           </div>
         </div>
