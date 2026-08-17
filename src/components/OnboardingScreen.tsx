@@ -58,9 +58,12 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         }`}
       >
         <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-sm">
-            <Terminal className="w-5 h-5 text-emerald-400" />
-          </div>
+          <img
+            src="/icon.svg"
+            alt="RestStudio"
+            className="w-9 h-9 rounded-xl shrink-0 select-none pointer-events-none"
+            draggable={false}
+          />
           <div>
             <div className="flex items-center space-x-2">
               <span className="font-bold text-base tracking-tight">RestStudio</span>
