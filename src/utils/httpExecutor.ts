@@ -46,6 +46,11 @@ async function executeNeutralinoFetch(
   const neu = await getNeutralino();
   const startTime = performance.now();
 
+  // Collected from the native cURL attempts so the final error message tells the
+  // user the REAL reason (connection refused, curl missing, etc.) instead of
+  // silently falling through to the webview's CORS/LNA-restricted fetch.
+  let nativeError: string | null = null;
+
   if (neu && typeof neu.init === 'function') {
     try { neu.init(); } catch (_) {}
   }
@@ -116,6 +121,9 @@ async function executeNeutralinoFetch(
 
         console.log('[RestStudio Neutralino] Executing native cURL via config file:', curlCmd);
         const execResult = await neu.os.execCommand(curlCmd);
+        if (execResult && execResult.exitCode && execResult.exitCode !== 0 && !execResult.stdOut) {
+          nativeError = execResult.stdErr || `cURL exited with code ${execResult.exitCode}`;
+        }
 
         if (execResult && typeof execResult.stdOut === 'string' && execResult.stdOut.trim()) {
           const rawOutput = execResult.stdOut;
@@ -154,6 +162,7 @@ async function executeNeutralinoFetch(
         }
       }
     } catch (cfgErr) {
+      nativeError = cfgErr?.message || String(cfgErr);
       console.warn('[RestStudio Neutralino] Temp file cURL config execution failed, attempting direct inline fallback:', cfgErr);
     } finally {
       if (createdTempFiles && neu.filesystem && typeof neu.filesystem.removeFile === 'function') {
@@ -182,6 +191,9 @@ async function executeNeutralinoFetch(
 
       console.log('[RestStudio Neutralino] Executing inline fallback cURL:', inlineCmd);
       const execResult = await neu.os.execCommand(inlineCmd);
+      if (execResult && execResult.exitCode && execResult.exitCode !== 0 && !execResult.stdOut) {
+        nativeError = execResult.stdErr || `cURL exited with code ${execResult.exitCode}`;
+      }
       if (execResult && typeof execResult.stdOut === 'string' && execResult.stdOut.trim()) {
         const rawOutput = execResult.stdOut;
         const duration = Math.round(performance.now() - startTime);
@@ -218,6 +230,7 @@ async function executeNeutralinoFetch(
         };
       }
     } catch (inlineErr) {
+      nativeError = inlineErr?.message || String(inlineErr);
       console.warn('[RestStudio Neutralino] Inline cURL fallback error:', inlineErr);
     }
   }
@@ -247,10 +260,38 @@ async function executeNeutralinoFetch(
       contentType: res.headers?.get('content-type') || 'text/plain',
     };
   } catch (fErr) {
+    if (!nativeError) nativeError = fErr?.message || String(fErr);
     console.warn('[RestStudio Neutralino] Neutralino webview fetch error:', fErr);
   }
 
-  return null;
+  // Every native attempt failed — return a structured diagnostic instead of
+  // silently falling through to the browser's CORS/LNA-restricted fetch, which
+  // can never succeed from inside a webview and only produces confusing errors
+  // like "This browser does not support the Local Network Access permission".
+  const duration = Math.round(performance.now() - startTime);
+  const reason = nativeError
+    ? `The native request engine failed to reach ${targetUrl}: ${nativeError}`
+    : 'The native request engine could not complete the request (no error details available).';
+  return {
+    status: 0,
+    statusText: 'Native Request Failed',
+    headers: {},
+    body: JSON.stringify(
+      {
+        error: `Failed to connect to ${targetUrl}`,
+        reason,
+        solution: 'Make sure the target server is running and reachable from this machine (for localhost: the server must be started). If it is, check that cURL is available on your system.',
+        details: nativeError || 'Neutralino native request failed',
+      },
+      null,
+      2
+    ),
+    size: 0,
+    duration,
+    timestamp: Date.now(),
+    ok: false,
+    error: 'Native Request Failed',
+  };
 }
 
 /**
@@ -644,7 +685,14 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
     try {
       console.log('[RestStudio Neutralino] Executing via Neutralino Native Engine...');
       const neuRes = await executeNeutralinoFetch(method, targetUrl, headers, body);
-      if (neuRes && neuRes.status > 0) {
+      if (neuRes.status > 0) {
+        return neuRes;
+      }
+      // Local targets must NEVER fall through to the browser path in the desktop
+      // app: the webview cannot do Local Network Access, so a fallback would only
+      // produce a misleading "browser does not support LNA" error. Surface the
+      // native diagnostic instead. (Public targets keep the browser fallback.)
+      if (isLocalTargetUrl(targetUrl)) {
         return neuRes;
       }
     } catch (nErr) {

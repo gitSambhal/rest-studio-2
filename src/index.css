@@ -26,6 +26,22 @@ code,
   color: #047857;
 }
 
+/* AutocompleteInput overlay mode: the highlight layer paints the visible text
+   (with tinted {{var}} chips), so the input above it must keep its own glyphs
+   invisible. Without this, the browser paints a second, offset copy of the text
+   on top of the overlay — visibly doubled on selection (the global ::selection
+   rule above forces a color on every selection) and permanently in light mode
+   (`.light-theme input` forces input colors). These rules are un-layered and
+   important so they win over both the global rules and Tailwind's layered
+   utilities. */
+.text-transparent::selection {
+  color: transparent !important;
+}
+
+.light-theme input.text-transparent {
+  color: transparent !important;
+}
+
 body {
   background: radial-gradient(ellipse at 80% 0%, rgba(16, 185, 129, 0.07), transparent 50%),
               radial-gradient(ellipse at 10% 90%, rgba(56, 189, 248, 0.07), transparent 50%),
