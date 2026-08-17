@@ -61,7 +61,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           <img
             src="/icon.svg"
             alt="RestStudio"
-            className="w-9 h-9 rounded-xl shrink-0 select-none pointer-events-none"
+            className="w-8 h-8 rounded-xl shrink-0 select-none pointer-events-none"
             draggable={false}
           />
           <div>
