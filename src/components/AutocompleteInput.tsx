@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { EnvVariable, VariableLookupResult } from '../types';
 import { ScopeContext, getEnvAutocompleteSuggestions, getVariableLookupDetails } from '../utils/envUtils';
 import { VarTooltipCard, computeCardPosition } from './VarBadge';
@@ -59,6 +60,10 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
   const [hoveredToken, setHoveredToken] = useState<{ index: number; pos: { top?: number; bottom?: number; left: number } } | null>(null);
+  // Fixed-position anchor for the floating suggestions popover (portaled to
+  // document.body so it is never clipped by scroll containers like the body
+  // editor section).
+  const [dropdownPos, setDropdownPos] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
 
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
@@ -81,6 +86,43 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   useEffect(() => {
     setSelectedIndex(0);
   }, [autocomplete.query]);
+
+  // Position the floating suggestions popover below the input (flipping above
+  // near the viewport bottom) and keep it anchored while the user scrolls or
+  // resizes — capture-phase scroll catches container scrolls (e.g. the body
+  // editor's overflow container), so suggestions stay visible without having
+  // to scroll to them.
+  useEffect(() => {
+    if (!(isFocused && autocomplete.show)) {
+      setDropdownPos(null);
+      return;
+    }
+    const position = () => {
+      const el = inputRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const width = Math.min(Math.max(rect.width, 240), vw - 16);
+      const left = Math.min(Math.max(8, rect.left), Math.max(8, vw - width - 8));
+      const maxDropdownHeight = 240;
+      const spaceBelow = vh - rect.bottom - 8;
+      if (spaceBelow >= 120) {
+        // Room below: open downward, clamped so it never overflows the viewport.
+        setDropdownPos({ top: rect.bottom + 4, left, width, maxHeight: Math.min(maxDropdownHeight, spaceBelow) });
+      } else {
+        // Not enough room below: flip above, clamped so it never overflows the top.
+        setDropdownPos({ bottom: vh - rect.top + 4, left, width, maxHeight: Math.min(maxDropdownHeight, Math.max(40, rect.top - 8)) });
+      }
+    };
+    position();
+    window.addEventListener('resize', position);
+    window.addEventListener('scroll', position, true);
+    return () => {
+      window.removeEventListener('resize', position);
+      window.removeEventListener('scroll', position, true);
+    };
+  }, [isFocused, autocomplete.show, autocomplete.query]);
 
   const insertSuggestion = (suggestionKey: string) => {
     if (autocomplete.startIndex === -1) return;
@@ -275,10 +317,20 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
         </button>
       </div>
 
-      {/* Autocomplete Dropdown Popover */}
-      {isFocused && autocomplete.show && (
+      {/* Autocomplete Suggestions — floating popover portaled to <body> so it
+          overlays content and is never hidden inside a scrollable section. */}
+      {isFocused && autocomplete.show && dropdownPos && createPortal(
         <div
-          className="absolute z-[9999] left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl overflow-hidden max-h-60 overflow-y-auto divide-y divide-slate-700/50 animate-in fade-in duration-100"
+          onMouseDown={(e) => e.preventDefault()}
+          style={{
+            position: 'fixed',
+            top: dropdownPos.top !== undefined ? dropdownPos.top : 'auto',
+            bottom: dropdownPos.bottom !== undefined ? dropdownPos.bottom : 'auto',
+            left: dropdownPos.left,
+            width: dropdownPos.width,
+            maxHeight: dropdownPos.maxHeight,
+          }}
+          className="z-[9999] bg-slate-800 border border-slate-700 rounded-lg shadow-2xl overflow-hidden max-h-60 overflow-y-auto divide-y divide-slate-700/50 animate-in fade-in duration-100"
         >
           <div className="px-3 py-1.5 bg-slate-900/80 text-xs font-semibold text-slate-400 flex items-center justify-between">
             <span>Environment Variable Autocomplete</span>
@@ -327,7 +379,8 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
               </div>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

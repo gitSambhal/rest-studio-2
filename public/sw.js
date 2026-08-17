@@ -6,6 +6,31 @@ const STATIC_ASSETS = [
   '/icon.svg'
 ];
 
+// Local-network targets must never be intercepted: this SW's fetch handler
+// re-issues requests as a plain `fetch(event.request)`, which drops the
+// `targetAddressSpace` annotation the page set. Without it, Chrome's Local
+// Network Access check never runs for localhost / LAN requests and the
+// permission prompt never appears (it only worked after a hard refresh,
+// which bypasses the service worker). These are API calls, not static
+// assets — let them pass straight through to the network.
+function isLocalTargetUrl(url) {
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host === '0.0.0.0' || host === '::1' || host === '0:0:0:0:0:0:0:1' || host === '::ffff:127.0.0.1') return true;
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
+    const parts = host.split('.').map(Number);
+    if (parts.some((p) => p < 0 || p > 255)) return false;
+    const [a, b] = parts;
+    if (a === 127 || a === 10) return true;                 // loopback, 10.0.0.0/8
+    if (a === 169 && b === 254) return true;                // 169.254.0.0/16 link-local
+    if (a === 172 && b >= 16 && b <= 31) return true;       // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;                // 192.168.0.0/16
+    return false;
+  }
+  if (host.endsWith('.local')) return true;   // mDNS
+  if (!host.includes('.')) return true;       // single-label intranet hostnames
+  return false;
+}
+
 // 1. Install Event: Cache Core Static Shell
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -43,6 +68,7 @@ self.addEventListener('fetch', (event) => {
   if (
     event.request.method !== 'GET' ||
     !url.protocol.startsWith('http') ||
+    isLocalTargetUrl(url) ||
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/src/') ||
     url.pathname.startsWith('/node_modules/') ||
