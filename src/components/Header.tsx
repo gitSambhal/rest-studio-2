@@ -135,9 +135,12 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center space-x-1.5 sm:space-x-3 min-w-0 shrink-0 md:order-1">
           {/* Brand Logo & Name */}
           <div className="flex items-center space-x-2 shrink-0">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
-              <Zap className="w-4 h-4 text-slate-950 stroke-[2.5]" />
-            </div>
+            <img
+              src="/icon.svg"
+              alt="RestStudio"
+              className="w-8 h-8 rounded-xl shrink-0 select-none pointer-events-none"
+              draggable={false}
+            />
             <div className="flex flex-col justify-center hidden lg:flex">
               <div className="flex items-center space-x-1.5 leading-none">
                 <span className="font-bold text-sm text-white tracking-tight">RestStudio</span>
