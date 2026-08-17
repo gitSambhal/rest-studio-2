@@ -68,7 +68,11 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   const [copiedModalCurl, setCopiedModalCurl] = useState(false);
   const [lnaState, setLnaState] = useState<LocalNetworkPermissionState>('unsupported');
 
-  const urlForDetection = request.url.trim();
+  // Resolve env-var placeholders BEFORE deciding whether the target is local: a
+  // raw "{{baseUrl}}/users" must never be misclassified as a single-label
+  // intranet hostname, or the Local Network Access banner would show for public URLs.
+  const ctxForDetect = scopeCtx || { projectVariables: envVariables, fileVariables };
+  const urlForDetection = resolveEnvVariables(request.url.trim(), ctxForDetect).resolved;
   const detectUrl = /^https?:\/\//i.test(urlForDetection) ? urlForDetection : 'http://' + urlForDetection;
   const isLocalUrl = isLocalTargetUrl(detectUrl);
 
@@ -214,7 +218,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   };
 
   // Context for resolving variables across URL, params, headers, auth, and body
-  const ctxToUse = scopeCtx || { projectVariables: envVariables, fileVariables };
+  const ctxToUse = ctxForDetect;
 
   // 1. Resolve URL with query params
   let fullUrl = request.url;

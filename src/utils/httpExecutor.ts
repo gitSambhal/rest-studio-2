@@ -324,8 +324,10 @@ export function isLocalTargetUrl(url: string): boolean {
     // mDNS / local-network names
     if (host.endsWith('.local')) return true;
 
-    // Single-label intranet hostnames (e.g. http://mypc:8080)
-    if (!host.includes('.')) return true;
+    // Single-label intranet hostnames (e.g. http://mypc:8080). Unresolved
+    // variable placeholders (e.g. "{{baseUrl}}") are NOT hostnames — never
+    // classify them as local, or the LNA banner would appear for public URLs.
+    if (!host.includes('.') && !host.includes('{') && !host.includes('}')) return true;
 
     return false;
   } catch {
