@@ -6,6 +6,7 @@
   "url": "/",
   "documentRoot": "/dist/",
   "enableServer": true,
+  "enableNativeAPI": true,
   "enableLsp": false,
   "nativeAllowList": [
     "os.*",

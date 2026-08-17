@@ -3,6 +3,18 @@
  * Fixes copy, paste, cut, select all, and right-click text selection issues in Neutralino (nue build) and WebViews.
  */
 
+import { isNeutralinoActive } from './httpExecutor';
+
+// Only use the Neutralino clipboard when the native API is actually available
+// (SDK loaded AND NL_* globals present). The web build also loads the raw SDK
+// (see index.html) but without globals — calling it would queue a native request
+// that never resolves, hanging copy/paste instead of falling back to the browser.
+function canUseNeutralinoClipboard(): boolean {
+  if (typeof window === 'undefined') return false;
+  const w = window as any;
+  return isNeutralinoActive() && !!(w.Neutralino?.clipboard);
+}
+
 // Helper to set React input/textarea values cleanly so React state handlers fire
 function setNativeInputValue(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
   const prototype = element instanceof HTMLInputElement 
@@ -28,7 +40,7 @@ export async function readClipboardText(): Promise<string> {
   const w = window as any;
 
   // 1. Neutralino Clipboard API
-  if (w.Neutralino?.clipboard?.readText) {
+  if (canUseNeutralinoClipboard() && w.Neutralino.clipboard.readText) {
     try {
       const text = await w.Neutralino.clipboard.readText();
       if (typeof text === 'string') return text;
@@ -54,7 +66,7 @@ export async function writeClipboardText(text: string): Promise<boolean> {
   const w = window as any;
 
   // 1. Neutralino
-  if (w.Neutralino?.clipboard?.writeText) {
+  if (canUseNeutralinoClipboard() && w.Neutralino.clipboard.writeText) {
     try {
       await w.Neutralino.clipboard.writeText(text);
       return true;
