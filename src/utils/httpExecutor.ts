@@ -295,6 +295,28 @@ export function isLocalTargetUrl(url: string): boolean {
 export type LocalNetworkPermissionState = 'granted' | 'prompt' | 'denied' | 'unsupported';
 
 /**
+ * Chrome 145+ split the single LNA permission into `local-network` and
+ * `loopback-network`, and the Site-settings UI shows them as two separate
+ * entries: "Local Network" (LAN devices) and "Apps on device" (localhost /
+ * loopback). Chrome 142-144 use the single legacy "Local network access"
+ * entry. Returns the exact Site-settings entry the user must flip for a given
+ * target, so guidance never points at the wrong toggle (the #1 cause of
+ * "allowed but still blocked").
+ */
+export function getLnaPermissionLabel(targetUrl?: string): string {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const m = ua.match(/(?:Chrome|Edg|Chromium|HeadlessChrome)\/(\d+)/);
+  const major = m ? parseInt(m[1], 10) : 0;
+  if (major >= 145) {
+    if (targetUrl && isLocalTargetUrl(targetUrl) && getTargetAddressSpace(targetUrl) === 'loopback') {
+      return 'Apps on device (loopback access)';
+    }
+    return 'Local Network (local-network)';
+  }
+  return 'Local network access';
+}
+
+/**
  * Chrome's `targetAddressSpace` fetch option must EXACTLY match the target's
  * resolved IP address space or the request fails with a network error before
  * any Local Network Access check runs (and before any permission prompt can
@@ -389,10 +411,10 @@ function buildLocalFetchError(
       : 'The local server did not respond with the CORS headers required for browser access, or it is not running.';
 
   const solution = denied
-    ? 'Re-enable access: click the lock icon in the browser address bar → Site settings → Local network access → Allow. Then retry the request.'
+    ? `Re-enable access: click the lock icon in the browser address bar → Site settings → ${getLnaPermissionLabel(targetUrl)} → Allow, then retry. Chrome only asks for this permission once and will not prompt again after a denial — Site settings is the only way to restore it.`
     : unsupported
-      ? 'Ensure the server is running and that it sends CORS headers (Access-Control-Allow-Origin: *). For the permission prompt experience, use Google Chrome 142+ or Firefox 147+.'
-      : 'Make sure the server is running and responds with CORS headers, e.g. Access-Control-Allow-Origin: * (plus Access-Control-Allow-Private-Network: true for preflight). Alternatively, use the RestStudio Desktop App for zero-config localhost access.';
+      ? 'Ensure the server is running and that it sends CORS headers (Access-Control-Allow-Origin: *). For the permission prompt experience, use Google Chrome 142+.'
+      : 'Make sure the server is running and responds with CORS headers, e.g. Access-Control-Allow-Origin: * (and handle the OPTIONS preflight). Granting Local Network Access does not bypass CORS. Alternatively, use the RestStudio Desktop App for zero-config localhost access.';
 
   return {
     status: 0,
@@ -537,7 +559,7 @@ export async function executeDirectLocalFetch(
     };
   } catch (err: any) {
     const duration = Math.round(performance.now() - startTime);
-    const permState = await getLocalNetworkPermissionState();
+    const permState = await getLocalNetworkPermissionState(targetUrl);
     return buildLocalFetchError(targetUrl, permState, err?.message || 'Failed to fetch', duration);
   }
 }

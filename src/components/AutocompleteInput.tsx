@@ -257,7 +257,9 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
               placeholder={placeholder}
               onScroll={(e) => setScrollLeft(e.currentTarget.scrollLeft)}
               {...commonInputHandlers}
-              className={`w-full font-mono text-sm px-3 py-2 bg-slate-900 border border-slate-700 text-transparent caret-emerald-400 placeholder:text-slate-500 selection:text-slate-100 selection:bg-emerald-500/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all ${className}`}
+              className={`w-full font-mono text-sm px-3 py-2 bg-slate-900 border border-slate-700 ${
+                tokenSegments.length > 0 ? 'text-transparent' : 'text-slate-100'
+              } caret-emerald-400 placeholder:text-slate-500 selection:text-slate-100 selection:bg-emerald-500/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all ${className}`}
             />
           </>
         )}

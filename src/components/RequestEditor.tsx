@@ -32,7 +32,7 @@ import {
   Key,
 } from 'lucide-react';
 
-import { isLocalTargetUrl, isNeutralinoActive, isLnaPromptApplicable, getLocalNetworkPermissionState, LocalNetworkPermissionState } from '../utils/httpExecutor';
+import { isLocalTargetUrl, isNeutralinoActive, isLnaPromptApplicable, getLocalNetworkPermissionState, getLnaPermissionLabel, LocalNetworkPermissionState } from '../utils/httpExecutor';
 
 interface RequestEditorProps {
   request: RestRequest;
@@ -81,6 +81,20 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     });
     return () => { active = false; };
   }, [request.url, detectUrl]);
+  // Re-check when the tab regains focus — the user may have just flipped the
+  // permission in Site settings, and Chrome will not prompt again on its own.
+  React.useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      getLocalNetworkPermissionState(detectUrl).then(setLnaState);
+    };
+    window.addEventListener('focus', onVisible);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', onVisible);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [detectUrl]);
   // True only when the browser can actually show a Local Network Access prompt:
   // the app must be hosted on a public https origin (Chrome 142+ / Firefox 147+).
   const lnaPromptApplies = isLnaPromptApplicable();
@@ -443,7 +457,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
               )}
               <span>
                 {lnaState === 'denied'
-                  ? 'Local network access is blocked for this site. Click the lock icon in the address bar → Site settings → Local network access → Allow, then retry.'
+                  ? `Local network access is blocked for this site. Click the lock icon in the address bar → Site settings → ${getLnaPermissionLabel(detectUrl)} → Allow, then retry. Chrome only asks for this permission once — it will not prompt again after a denial.`
                   : 'This request targets your local network. Your browser will ask for permission (Local Network Access) — click Allow to proceed. No proxy or extension needed.'}
               </span>
             </div>

@@ -85,10 +85,15 @@ export function SettingsModal({
               isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50/80 border-slate-200'
             }`}>
               <p className={`text-[11px] leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                When the web app is hosted on a public <b>https</b> site, the browser (Chrome 142+ / Firefox 147+) shows a
-                native <b>Local Network Access</b> prompt the first time you send a request to localhost or a device on
-                your local network — click <b>Allow</b>, no proxy or extension required. If the site is denied, re-enable it
-                via the lock icon in the address bar → Site settings → Local network access.
+                When the web app is hosted on a public <b>https</b> site, the browser (Chrome 142+) shows a native
+                <b>Local Network Access</b> prompt the first time you send a request to localhost or a device on your
+                local network — click <b>Allow</b>, no proxy or extension required.
+              </p>
+              <p className={`text-[11px] leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                Chrome only asks <b>once</b> — after a denial it never prompts again, and Site settings is the only way
+                to restore access. In Chrome 145+ Site settings lists two separate entries:
+                localhost / <code className="text-emerald-400">127.0.0.1</code> needs <b>Apps on device</b>,
+                LAN devices need <b>Local Network</b> (Chrome 142–144 use a single <b>Local network access</b> entry).
               </p>
               <p className={`text-[11px] leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                 When the web app itself runs from a local origin (e.g. the local dev server at <code className="text-emerald-400">localhost</code>)
