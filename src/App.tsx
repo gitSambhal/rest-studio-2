@@ -40,6 +40,7 @@ import { parseRestFileContent, detectAndParsePaste } from './utils/restParser';
 import { evaluateAssertions } from './utils/testUtils';
 import { runPreRequestScript, runPostRequestScript } from './utils/scriptRunner';
 import { executeHttpRequest } from './utils/httpExecutor';
+import { getSavedTheme, applyTheme, THEMES, UIThemeId } from './utils/themeManager';
 
 export default function App() {
   // 1. Global Variables
@@ -112,29 +113,25 @@ export default function App() {
   // Main Header mode tabs ('editor', 'code', 'runner', 'history')
   const [activeTabMode, setActiveTabMode] = useState<'editor' | 'code' | 'runner' | 'history'>('editor');
 
-  // Dark Mode State & Effect
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('restpulse_theme');
-      if (saved) return saved === 'dark';
-    } catch (e) {}
-    return true;
-  });
+  // Multiple UI Themes State & Effect
+  const [currentTheme, setCurrentTheme] = useState<UIThemeId>(() => getSavedTheme());
+
+  const activeThemeObj = THEMES.find((t) => t.id === currentTheme) || THEMES[0];
+  const isDarkMode = activeThemeObj.category === 'dark';
 
   useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.remove('light-theme');
-      document.body.classList.remove('light-theme');
-    } else {
-      document.documentElement.classList.add('light-theme');
-      document.body.classList.add('light-theme');
-    }
-    try {
-      localStorage.setItem('restpulse_theme', isDarkMode ? 'dark' : 'light');
-    } catch (e) {}
-  }, [isDarkMode]);
+    applyTheme(currentTheme);
+  }, [currentTheme]);
 
-  const handleToggleDarkMode = () => setIsDarkMode((prev) => !prev);
+  const handleSelectTheme = (themeId: UIThemeId) => {
+    setCurrentTheme(themeId);
+    applyTheme(themeId);
+  };
+
+  const handleToggleDarkMode = () => {
+    const nextTheme: UIThemeId = isDarkMode ? 'light' : 'dark';
+    handleSelectTheme(nextTheme);
+  };
 
   // Custom Prompt Modal state for App
   const [appPromptState, setAppPromptState] = useState<{
@@ -759,9 +756,30 @@ export default function App() {
     handleOpenRequestInTab(targetFile.id, dummyReq.id);
   };
 
+  const handleTogglePinTab = (tabId: string) => {
+    setTabs((prevTabs) => {
+      const target = prevTabs.find((t) => t.id === tabId);
+      const isCurrentlyPinned = Boolean(target?.isPinned);
+      const updated = prevTabs.map((t) =>
+        t.id === tabId ? { ...t, isPinned: !isCurrentlyPinned } : t
+      );
+      const pinned = updated.filter((t) => t.isPinned);
+      const unpinned = updated.filter((t) => !t.isPinned);
+      showToast(
+        'info',
+        isCurrentlyPinned ? 'Tab Unpinned' : 'Tab Pinned',
+        isCurrentlyPinned ? 'Tab can now be closed normally.' : 'Pinned to start of tab bar.'
+      );
+      return [...pinned, ...unpinned];
+    });
+  };
+
   const handleCloseTab = (tabId: string) => {
+    const tabToClose = tabs.find((t) => t.id === tabId);
+    if (tabToClose?.isPinned) {
+      showToast('info', 'Pinned Tab Unpinned', 'Unpinned and closed tab.');
+    }
     if (tabs.length <= 1) {
-      // Don't close last tab, replace with onboarding
       setTabs([
         {
           id: 'tab_onboarding',
@@ -783,45 +801,55 @@ export default function App() {
   const handleCloseOtherTabs = (targetTabId: string) => {
     const targetTab = tabs.find((t) => t.id === targetTabId);
     if (targetTab) {
-      setTabs([targetTab]);
+      const newTabs = tabs.filter((t) => t.id === targetTabId || t.isPinned);
+      setTabs(newTabs);
       setActiveTabId(targetTab.id);
-      showToast('info', 'Tabs Closed', 'Closed all other tabs.');
+      showToast('info', 'Tabs Closed', 'Closed unpinned tabs.');
     }
   };
 
   const handleCloseTabsToRight = (targetTabId: string) => {
     const index = tabs.findIndex((t) => t.id === targetTabId);
     if (index !== -1) {
-      const newTabs = tabs.slice(0, index + 1);
+      const newTabs = tabs.filter((t, i) => i <= index || t.isPinned);
       setTabs(newTabs);
       if (!newTabs.some((t) => t.id === activeTabId)) {
         setActiveTabId(targetTabId);
       }
-      showToast('info', 'Tabs Closed', 'Closed tabs to the right.');
+      showToast('info', 'Tabs Closed', 'Closed unpinned tabs to the right.');
     }
   };
 
   const handleCloseTabsToLeft = (targetTabId: string) => {
     const index = tabs.findIndex((t) => t.id === targetTabId);
     if (index !== -1) {
-      const newTabs = tabs.slice(index);
+      const newTabs = tabs.filter((t, i) => i >= index || t.isPinned);
       setTabs(newTabs);
       if (!newTabs.some((t) => t.id === activeTabId)) {
         setActiveTabId(targetTabId);
       }
-      showToast('info', 'Tabs Closed', 'Closed tabs to the left.');
+      showToast('info', 'Tabs Closed', 'Closed unpinned tabs to the left.');
     }
   };
 
   const handleCloseAllTabs = () => {
-    const onboardingTab: WorkspaceTab = {
-      id: 'tab_onboarding',
-      type: 'onboarding',
-      title: 'Welcome Workspace',
-    };
-    setTabs([onboardingTab]);
-    setActiveTabId(onboardingTab.id);
-    showToast('info', 'All Tabs Closed', 'Closed all open workspace tabs.');
+    const pinnedTabs = tabs.filter((t) => t.isPinned);
+    if (pinnedTabs.length > 0) {
+      setTabs(pinnedTabs);
+      if (!pinnedTabs.some((t) => t.id === activeTabId)) {
+        setActiveTabId(pinnedTabs[0].id);
+      }
+      showToast('info', 'Unpinned Tabs Closed', 'Closed all unpinned workspace tabs.');
+    } else {
+      const onboardingTab: WorkspaceTab = {
+        id: 'tab_onboarding',
+        type: 'onboarding',
+        title: 'Welcome Workspace',
+      };
+      setTabs([onboardingTab]);
+      setActiveTabId(onboardingTab.id);
+      showToast('info', 'All Tabs Closed', 'Closed all open workspace tabs.');
+    }
   };
 
   const handleLaunchWorkspace = () => {
@@ -1665,6 +1693,8 @@ export default function App() {
           onLaunchWorkspace={handleLaunchWorkspace}
           isDarkMode={isDarkMode}
           onToggleDarkMode={handleToggleDarkMode}
+          currentTheme={currentTheme}
+          onSelectTheme={handleSelectTheme}
           onSelectSampleRequest={handleSelectSampleRequest}
         />
       ) : (
@@ -1708,6 +1738,8 @@ export default function App() {
             historyCount={history.length}
             isDarkMode={isDarkMode}
             onToggleDarkMode={handleToggleDarkMode}
+            currentTheme={currentTheme}
+            onSelectTheme={handleSelectTheme}
           />
 
           {/* Multi Tab Bar */}
@@ -1732,6 +1764,7 @@ export default function App() {
             onCloseTabsToRight={handleCloseTabsToRight}
             onCloseTabsToLeft={handleCloseTabsToLeft}
             onCloseAllTabs={handleCloseAllTabs}
+            onTogglePinTab={handleTogglePinTab}
             onNewTab={handleCreateNewTabWithDummy}
             onOpenQuickNewRequest={() => setIsQuickNewRequestOpen(true)}
             onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
@@ -2032,6 +2065,8 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         isDarkMode={isDarkMode}
         onToggleDarkMode={handleToggleDarkMode}
+        currentTheme={currentTheme}
+        onSelectTheme={handleSelectTheme}
         showToast={showToast}
       />
 

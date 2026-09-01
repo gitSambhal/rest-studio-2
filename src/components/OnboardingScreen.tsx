@@ -1,4 +1,6 @@
 import React from 'react';
+import { InlineThemeSelector } from './InlineThemeSelector';
+import { UIThemeId } from '../utils/themeManager';
 import {
   Send,
   Upload,
@@ -30,6 +32,8 @@ export interface OnboardingScreenProps {
   onLaunchWorkspace?: () => void;
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
+  currentTheme?: UIThemeId;
+  onSelectTheme?: (themeId: UIThemeId) => void;
   onSelectSampleRequest?: (sampleType: 'get_todo' | 'post_json' | 'auth' | 'github_zen') => void;
 }
 
@@ -41,6 +45,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   onLaunchWorkspace,
   isDarkMode,
   onToggleDarkMode,
+  currentTheme = 'dark',
+  onSelectTheme,
   onSelectSampleRequest,
 }) => {
   return (
@@ -78,6 +84,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         </div>
 
         <div className="flex items-center space-x-3">
+          {onSelectTheme && (
+            <InlineThemeSelector
+              currentTheme={currentTheme}
+              onSelectTheme={onSelectTheme}
+              isDarkMode={isDarkMode}
+              onToggleDarkMode={onToggleDarkMode}
+            />
+          )}
+
           {/* Quick Search Shortcut Badge */}
           <button
             type="button"

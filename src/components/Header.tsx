@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Organization, Project } from '../types';
+import { THEMES, UIThemeId } from '../utils/themeManager';
+import { InlineThemeSelector } from './InlineThemeSelector';
 import {
   Zap,
   Building2,
@@ -23,6 +25,7 @@ import {
   Edit2,
   Trash2,
   CheckCircle2,
+  Palette,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -54,6 +57,8 @@ interface HeaderProps {
 
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
+  currentTheme?: UIThemeId;
+  onSelectTheme?: (themeId: UIThemeId) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -81,7 +86,10 @@ export const Header: React.FC<HeaderProps> = ({
   historyCount,
   isDarkMode,
   onToggleDarkMode,
+  currentTheme = 'dark',
+  onSelectTheme,
 }) => {
+
   const activeEnv = activeProject?.environments?.find((e) => e.id === activeProject?.activeEnvId);
 
   const [isOrgOpen, setIsOrgOpen] = useState(false);
@@ -472,8 +480,17 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* SECTION 3: Settings & Tools Menu */}
+        {/* SECTION 3: Settings & Tools Menu + Inline Theme Selector */}
         <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0 md:order-3">
+          {onSelectTheme && (
+            <InlineThemeSelector
+              currentTheme={currentTheme}
+              onSelectTheme={onSelectTheme}
+              isDarkMode={isDarkMode}
+              onToggleDarkMode={onToggleDarkMode}
+            />
+          )}
+
           <div className="relative" ref={menuRef}>
             <button
               type="button"
@@ -571,7 +588,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      onToggleDarkMode();
+                      if (onOpenSettings) onOpenSettings();
                       setIsMenuOpen(false);
                     }}
                     className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
@@ -579,17 +596,18 @@ export const Header: React.FC<HeaderProps> = ({
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      {isDarkMode ? (
-                        <Sun className="w-4 h-4 text-amber-400 shrink-0" />
-                      ) : (
-                        <Moon className="w-4 h-4 text-indigo-500 shrink-0" />
-                      )}
-                      <span className="font-semibold">Appearance Theme</span>
+                      <Palette className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <div className="flex flex-col">
+                        <span className="font-semibold leading-tight">UI Theme Presets</span>
+                        <span className={`text-[10px] font-normal ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                          {THEMES.find((t) => t.id === currentTheme)?.name || 'Dark Slate'}
+                        </span>
+                      </div>
                     </div>
                     <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded border ${
                       isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700/60' : 'bg-slate-100 text-slate-700 border-slate-200'
                     }`}>
-                      {isDarkMode ? 'Dark' : 'Light'}
+                      {THEMES.find((t) => t.id === currentTheme)?.name || 'Theme'}
                     </span>
                   </button>
 

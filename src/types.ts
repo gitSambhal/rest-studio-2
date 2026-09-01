@@ -191,6 +191,7 @@ export interface WorkspaceTab {
   requestId?: string;
   method?: HTTPMethod;
   isDirty?: boolean;
+  isPinned?: boolean;
   requestData?: RestRequest;
 }
 

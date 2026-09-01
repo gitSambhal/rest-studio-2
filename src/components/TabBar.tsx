@@ -13,6 +13,8 @@ import {
   ArrowRight,
   Maximize2,
   Trash2,
+  Pin,
+  PinOff,
 } from 'lucide-react';
 
 interface TabBarProps {
@@ -26,6 +28,7 @@ interface TabBarProps {
   onCloseTabsToRight?: (tabId: string) => void;
   onCloseTabsToLeft?: (tabId: string) => void;
   onCloseAllTabs?: () => void;
+  onTogglePinTab?: (tabId: string) => void;
   onNewTab: () => void;
   onOpenQuickNewRequest?: () => void;
   onOpenQuickCurl?: () => void;
@@ -55,6 +58,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   onCloseTabsToRight,
   onCloseTabsToLeft,
   onCloseAllTabs,
+  onTogglePinTab,
   onNewTab,
   onOpenQuickNewRequest,
   onOpenQuickCurl,
@@ -137,6 +141,8 @@ export const TabBar: React.FC<TabBarProps> = ({
     }
   };
 
+  const activeContextMenuTab = contextMenu ? tabs.find((t) => t.id === contextMenu.tabId) : null;
+
   return (
     <div className="h-10 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between px-2 overflow-x-auto scrollbar-none shrink-0 select-none relative">
       {/* Left: Open Tabs List */}
@@ -168,7 +174,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                 isActive
                   ? 'bg-slate-800 text-slate-100 border-slate-700 shadow-md'
                   : 'bg-slate-950/40 text-slate-400 border-transparent hover:bg-slate-800/50 hover:text-slate-200'
-              }`}
+              } ${tab.isPinned ? 'border-l-2 border-l-emerald-500 bg-slate-900/60' : ''}`}
             >
               {isExecutingThisTab ? (
                 <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin shrink-0" title="Request executing..." />
@@ -193,19 +199,25 @@ export const TabBar: React.FC<TabBarProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Unsaved changes" />
               )}
 
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCloseTab(tab.id);
-                }}
-                className={`p-0.5 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/20 transition-colors ${
-                  isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                }`}
-                title="Close Tab"
-              >
-                <X className="w-3 h-3" />
-              </button>
+              {tab.isPinned ? (
+                <span title="Pinned Tab (Right-click to unpin)" className="p-0.5 text-emerald-400 shrink-0">
+                  <Pin className="w-3 h-3 fill-emerald-400/20" />
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCloseTab(tab.id);
+                  }}
+                  className={`p-0.5 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/20 transition-colors ${
+                    isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                  }`}
+                  title="Close Tab"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
             </div>
           );
         })}
@@ -246,6 +258,29 @@ export const TabBar: React.FC<TabBarProps> = ({
           <button
             type="button"
             onClick={() => {
+              if (onTogglePinTab) onTogglePinTab(contextMenu.tabId);
+              setContextMenu(null);
+            }}
+            className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-slate-100 transition-colors text-left cursor-pointer font-medium"
+          >
+            {activeContextMenuTab?.isPinned ? (
+              <>
+                <PinOff className="w-3.5 h-3.5 text-amber-400" />
+                <span>Unpin Tab</span>
+              </>
+            ) : (
+              <>
+                <Pin className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Pin Tab</span>
+              </>
+            )}
+          </button>
+
+          <div className="h-px bg-slate-800 my-1" />
+
+          <button
+            type="button"
+            onClick={() => {
               onCloseTab(contextMenu.tabId);
               setContextMenu(null);
             }}
@@ -261,7 +296,7 @@ export const TabBar: React.FC<TabBarProps> = ({
               if (onCloseOtherTabs) onCloseOtherTabs(contextMenu.tabId);
               else {
                 tabs.forEach((t) => {
-                  if (t.id !== contextMenu.tabId) onCloseTab(t.id);
+                  if (t.id !== contextMenu.tabId && !t.isPinned) onCloseTab(t.id);
                 });
               }
               setContextMenu(null);

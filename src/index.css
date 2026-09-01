@@ -374,6 +374,357 @@ body {
   background: rgba(16, 185, 129, 0.6);
 }
 
+/* ==========================================
+   THEME OVERRIDES FOR MULTIPLE PRESETS
+   ========================================== */
+
+/* 1. CYBERPUNK NEON THEME */
+.theme-cyberpunk {
+  color-scheme: dark;
+}
+.theme-cyberpunk,
+.theme-cyberpunk body,
+.theme-cyberpunk #root {
+  background: radial-gradient(ellipse at 80% 0%, rgba(236, 72, 153, 0.15), transparent 50%),
+              radial-gradient(ellipse at 10% 90%, rgba(6, 182, 212, 0.15), transparent 50%),
+              linear-gradient(135deg, #090514 0%, #130b24 60%, #0d061a 100%) !important;
+  color: #fdf2f8 !important;
+}
+.theme-cyberpunk [class~="bg-slate-950"],
+.theme-cyberpunk [class*="bg-slate-950/"] {
+  background-color: #090514 !important;
+}
+.theme-cyberpunk [class~="bg-slate-900"],
+.theme-cyberpunk [class*="bg-slate-900/"] {
+  background-color: #130b24 !important;
+}
+.theme-cyberpunk [class~="bg-slate-800"],
+.theme-cyberpunk [class*="bg-slate-800/"] {
+  background-color: #1c1035 !important;
+}
+.theme-cyberpunk [class*="border-slate-800"],
+.theme-cyberpunk [class*="border-slate-700"] {
+  border-color: #3b1568 !important;
+}
+.theme-cyberpunk [class~="text-slate-100"],
+.theme-cyberpunk [class*="text-slate-100/"],
+.theme-cyberpunk [class~="text-slate-200"],
+.theme-cyberpunk [class*="text-slate-200/"] {
+  color: #fdf2f8 !important;
+}
+.theme-cyberpunk [class~="text-slate-300"],
+.theme-cyberpunk [class*="text-slate-300/"] {
+  color: #f472b6 !important;
+}
+.theme-cyberpunk [class~="text-slate-400"],
+.theme-cyberpunk [class*="text-slate-400/"] {
+  color: #e879f9 !important;
+}
+.theme-cyberpunk [class~="text-slate-500"],
+.theme-cyberpunk [class*="text-slate-500/"] {
+  color: #c084fc !important;
+}
+.theme-cyberpunk [class*="text-emerald-400"],
+.theme-cyberpunk [class*="text-emerald-500"] {
+  color: #ec4899 !important;
+}
+.theme-cyberpunk [class*="bg-emerald-500"] {
+  background-color: #ec4899 !important;
+  color: #090514 !important;
+}
+.theme-cyberpunk [class*="bg-emerald-500"] svg {
+  fill: #090514 !important;
+  stroke: #090514 !important;
+}
+
+/* 2. MIDNIGHT OLED THEME */
+.theme-midnight {
+  color-scheme: dark;
+}
+.theme-midnight,
+.theme-midnight body,
+.theme-midnight #root {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+.theme-midnight [class~="bg-slate-950"],
+.theme-midnight [class*="bg-slate-950/"] {
+  background-color: #000000 !important;
+}
+.theme-midnight [class~="bg-slate-900"],
+.theme-midnight [class*="bg-slate-900/"] {
+  background-color: #09090b !important;
+}
+.theme-midnight [class~="bg-slate-800"],
+.theme-midnight [class*="bg-slate-800/"] {
+  background-color: #121215 !important;
+}
+.theme-midnight [class*="border-slate-800"],
+.theme-midnight [class*="border-slate-700"] {
+  border-color: #27272a !important;
+}
+.theme-midnight [class~="text-slate-100"],
+.theme-midnight [class*="text-slate-100/"],
+.theme-midnight [class~="text-slate-200"],
+.theme-midnight [class*="text-slate-200/"] {
+  color: #ffffff !important;
+}
+.theme-midnight [class~="text-slate-300"],
+.theme-midnight [class*="text-slate-300/"] {
+  color: #e4e4e7 !important;
+}
+.theme-midnight [class~="text-slate-400"],
+.theme-midnight [class*="text-slate-400/"] {
+  color: #a1a1aa !important;
+}
+.theme-midnight [class~="text-slate-500"],
+.theme-midnight [class*="text-slate-500/"] {
+  color: #71717a !important;
+}
+.theme-midnight [class*="text-emerald-400"],
+.theme-midnight [class*="text-emerald-500"] {
+  color: #a78bfa !important;
+}
+.theme-midnight [class*="bg-emerald-500"] {
+  background-color: #8b5cf6 !important;
+  color: #ffffff !important;
+}
+.theme-midnight [class*="bg-emerald-500"] svg {
+  fill: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+/* 3. MONOKAI PRO THEME */
+.theme-monokai {
+  color-scheme: dark;
+}
+.theme-monokai,
+.theme-monokai body,
+.theme-monokai #root {
+  background: linear-gradient(135deg, #191919 0%, #222222 100%) !important;
+  color: #f8f8f2 !important;
+}
+.theme-monokai [class~="bg-slate-950"],
+.theme-monokai [class*="bg-slate-950/"] {
+  background-color: #191919 !important;
+}
+.theme-monokai [class~="bg-slate-900"],
+.theme-monokai [class*="bg-slate-900/"] {
+  background-color: #222222 !important;
+}
+.theme-monokai [class~="bg-slate-800"],
+.theme-monokai [class*="bg-slate-800/"] {
+  background-color: #2a2a2a !important;
+}
+.theme-monokai [class*="border-slate-800"],
+.theme-monokai [class*="border-slate-700"] {
+  border-color: #383838 !important;
+}
+.theme-monokai [class~="text-slate-100"],
+.theme-monokai [class*="text-slate-100/"],
+.theme-monokai [class~="text-slate-200"],
+.theme-monokai [class*="text-slate-200/"] {
+  color: #f8f8f2 !important;
+}
+.theme-monokai [class~="text-slate-300"],
+.theme-monokai [class*="text-slate-300/"] {
+  color: #ffd866 !important;
+}
+.theme-monokai [class~="text-slate-400"],
+.theme-monokai [class*="text-slate-400/"] {
+  color: #e2e8f0 !important;
+}
+.theme-monokai [class~="text-slate-500"],
+.theme-monokai [class*="text-slate-500/"] {
+  color: #939290 !important;
+}
+.theme-monokai [class*="text-emerald-400"],
+.theme-monokai [class*="text-emerald-500"] {
+  color: #f59e0b !important;
+}
+.theme-monokai [class*="bg-emerald-500"] {
+  background-color: #f59e0b !important;
+  color: #191919 !important;
+}
+.theme-monokai [class*="bg-emerald-500"] svg {
+  fill: #191919 !important;
+  stroke: #191919 !important;
+}
+
+/* 4. DRACULA THEME */
+.theme-dracula {
+  color-scheme: dark;
+}
+.theme-dracula,
+.theme-dracula body,
+.theme-dracula #root {
+  background: linear-gradient(135deg, #1e1f29 0%, #282a36 100%) !important;
+  color: #f8f8f2 !important;
+}
+.theme-dracula [class~="bg-slate-950"],
+.theme-dracula [class*="bg-slate-950/"] {
+  background-color: #1e1f29 !important;
+}
+.theme-dracula [class~="bg-slate-900"],
+.theme-dracula [class*="bg-slate-900/"] {
+  background-color: #282a36 !important;
+}
+.theme-dracula [class~="bg-slate-800"],
+.theme-dracula [class*="bg-slate-800/"] {
+  background-color: #343746 !important;
+}
+.theme-dracula [class*="border-slate-800"],
+.theme-dracula [class*="border-slate-700"] {
+  border-color: #44475a !important;
+}
+.theme-dracula [class~="text-slate-100"],
+.theme-dracula [class*="text-slate-100/"],
+.theme-dracula [class~="text-slate-200"],
+.theme-dracula [class*="text-slate-200/"] {
+  color: #f8f8f2 !important;
+}
+.theme-dracula [class~="text-slate-300"],
+.theme-dracula [class*="text-slate-300/"] {
+  color: #bd93f9 !important;
+}
+.theme-dracula [class~="text-slate-400"],
+.theme-dracula [class*="text-slate-400/"] {
+  color: #f1fa8c !important;
+}
+.theme-dracula [class~="text-slate-500"],
+.theme-dracula [class*="text-slate-500/"] {
+  color: #6272a4 !important;
+}
+.theme-dracula [class*="text-emerald-400"],
+.theme-dracula [class*="text-emerald-500"] {
+  color: #ff79c6 !important;
+}
+.theme-dracula [class*="bg-emerald-500"] {
+  background-color: #ff79c6 !important;
+  color: #1e1f29 !important;
+}
+.theme-dracula [class*="bg-emerald-500"] svg {
+  fill: #1e1f29 !important;
+  stroke: #1e1f29 !important;
+}
+
+/* 5. NORDIC FROST THEME */
+.theme-nordic {
+  color-scheme: dark;
+}
+.theme-nordic,
+.theme-nordic body,
+.theme-nordic #root {
+  background: linear-gradient(135deg, #1b222d 0%, #242b38 100%) !important;
+  color: #eceff4 !important;
+}
+.theme-nordic [class~="bg-slate-950"],
+.theme-nordic [class*="bg-slate-950/"] {
+  background-color: #1b222d !important;
+}
+.theme-nordic [class~="bg-slate-900"],
+.theme-nordic [class*="bg-slate-900/"] {
+  background-color: #242b38 !important;
+}
+.theme-nordic [class~="bg-slate-800"],
+.theme-nordic [class*="bg-slate-800/"] {
+  background-color: #2e3646 !important;
+}
+.theme-nordic [class*="border-slate-800"],
+.theme-nordic [class*="border-slate-700"] {
+  border-color: #3b4252 !important;
+}
+.theme-nordic [class~="text-slate-100"],
+.theme-nordic [class*="text-slate-100/"],
+.theme-nordic [class~="text-slate-200"],
+.theme-nordic [class*="text-slate-200/"] {
+  color: #eceff4 !important;
+}
+.theme-nordic [class~="text-slate-300"],
+.theme-nordic [class*="text-slate-300/"] {
+  color: #88c0d0 !important;
+}
+.theme-nordic [class~="text-slate-400"],
+.theme-nordic [class*="text-slate-400/"] {
+  color: #d8dee9 !important;
+}
+.theme-nordic [class~="text-slate-500"],
+.theme-nordic [class*="text-slate-500/"] {
+  color: #4c566a !important;
+}
+.theme-nordic [class*="text-emerald-400"],
+.theme-nordic [class*="text-emerald-500"] {
+  color: #38bdf8 !important;
+}
+.theme-nordic [class*="bg-emerald-500"] {
+  background-color: #38bdf8 !important;
+  color: #1b222d !important;
+}
+.theme-nordic [class*="bg-emerald-500"] svg {
+  fill: #1b222d !important;
+  stroke: #1b222d !important;
+}
+
+/* 6. SOLARIZED LIGHT THEME */
+.theme-solarized-light {
+  color-scheme: light;
+}
+.theme-solarized-light,
+.theme-solarized-light body,
+.theme-solarized-light #root {
+  background: #fdf6e3 !important;
+  color: #073642 !important;
+}
+.theme-solarized-light [class~="bg-slate-950"],
+.theme-solarized-light [class*="bg-slate-950/"],
+.theme-solarized-light [class~="bg-slate-900"],
+.theme-solarized-light [class*="bg-slate-900/"] {
+  background-color: #eee8d5 !important;
+}
+.theme-solarized-light [class~="bg-slate-800"],
+.theme-solarized-light [class*="bg-slate-800/"] {
+  background-color: #e0d7c3 !important;
+}
+.theme-solarized-light [class*="border-slate-800"],
+.theme-solarized-light [class*="border-slate-700"] {
+  border-color: #d3c6aa !important;
+}
+.theme-solarized-light [class~="text-slate-100"],
+.theme-solarized-light [class*="text-slate-100/"],
+.theme-solarized-light [class~="text-slate-200"],
+.theme-solarized-light [class*="text-slate-200/"] {
+  color: #073642 !important;
+}
+.theme-solarized-light [class~="text-slate-300"],
+.theme-solarized-light [class*="text-slate-300/"] {
+  color: #002b36 !important;
+}
+.theme-solarized-light [class~="text-slate-400"],
+.theme-solarized-light [class*="text-slate-400/"] {
+  color: #586e75 !important;
+}
+.theme-solarized-light [class~="text-slate-500"],
+.theme-solarized-light [class*="text-slate-500/"] {
+  color: #657b83 !important;
+}
+.theme-solarized-light [class*="text-emerald-400"],
+.theme-solarized-light [class*="text-emerald-500"] {
+  color: #2aa198 !important;
+}
+.theme-solarized-light [class*="bg-emerald-500"] {
+  background-color: #2aa198 !important;
+  color: #ffffff !important;
+}
+.theme-solarized-light [class*="bg-emerald-500"] svg {
+  fill: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+/* Universal Button Icon and Text High-Contrast Inheritance Rule */
+button svg {
+  transition: color 0.15s ease, stroke 0.15s ease;
+}
+
 /* Utility classes to completely hide scrollbars on tab bars and headers */
 .no-scrollbar::-webkit-scrollbar,
 .scrollbar-none::-webkit-scrollbar {
