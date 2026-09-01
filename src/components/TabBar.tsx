@@ -68,6 +68,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   } | null>(null);
 
   const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   // Automatically scroll the active tab to the center of the tab bar view
   useEffect(() => {
@@ -81,7 +82,10 @@ export const TabBar: React.FC<TabBarProps> = ({
   }, [activeTabId]);
 
   useEffect(() => {
-    const handleClickOutside = () => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) {
+        return;
+      }
       setContextMenu(null);
     };
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -153,6 +157,13 @@ export const TabBar: React.FC<TabBarProps> = ({
               }}
               onClick={() => onSelectTab(tab.id)}
               onContextMenu={(e) => handleContextMenu(e, tab.id)}
+              onAuxClick={(e) => {
+                if (e.button === 1) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onCloseTab(tab.id);
+                }
+              }}
               className={`group relative flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all border shrink-0 w-40 ${
                 isActive
                   ? 'bg-slate-800 text-slate-100 border-slate-700 shadow-md'
@@ -227,6 +238,7 @@ export const TabBar: React.FC<TabBarProps> = ({
       {/* Context Menu */}
       {contextMenu && (
         <div
+          ref={menuRef}
           style={{ top: contextMenu.y + 4, left: contextMenu.x }}
           className="fixed z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 w-52 text-xs font-sans text-slate-200 space-y-1 animate-in fade-in zoom-in-95 duration-100"
           onClick={(e) => e.stopPropagation()}
