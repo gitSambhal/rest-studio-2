@@ -2,6 +2,17 @@
 
 All notable changes to **RestPulse** are documented in this file.
 
+## [1.3.1] - 2026-09-01
+### Fixed
+- **Header Alignment & Layout**: Resolved multi-line wrapping and broken element order in the top navigation bar. Realigned the header into a clean 3-part layout: Left (Brand & Workspace context), Center (View mode segmented controller: Request Builder, .rest Code, Runner, History), and Right (Import, Cloud Sync, Theme, Settings, Quick Help) along a single horizontal baseline.
+- **Settings Tab Cleanup**: Removed native engine support card from the Network tab in Workspace Settings.
+
+## [1.3.0] - 2026-09-01
+### Changed
+- **Unified Workspace Settings Hub**: Consolidated fragmented settings, theme picker, cloud sync controls, environment hierarchy, network guides, and shortcuts into a unified, professional tabbed modal (`Ctrl+,` / `Cmd+,`).
+- **Streamlined Top Header Bar**: Replaced the nested "Settings & Tools" dropdown with direct, high-leverage action buttons (`Import`, `GitHub Cloud Sync`, `Theme Selector`, `Settings ⚙️`, and `Quick Help ?`), eliminating UI clutter and multiple modal hops.
+- **Global Keyboard Shortcut**: Added universal `Ctrl+,` / `Cmd+,` hotkey to open Workspace Settings instantly.
+
 ## [1.2.1] - 2026-09-01
 ### Fixed
 - **Instant Snapshot UI Reflection**: Fixed snapshot rollback where the restored commit wasn't fully reflected on the workspace screen. Restoring now immediately recalculates the active organization, active project, files, endpoints, and resets open tabs directly to the restored state.

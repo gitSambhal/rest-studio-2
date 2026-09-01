@@ -101,26 +101,10 @@ export const Header: React.FC<HeaderProps> = ({
   const [isOrgOpen, setIsOrgOpen] = useState(false);
   const [isProjectOpen, setIsProjectOpen] = useState(false);
   const [isEnvOpen, setIsEnvOpen] = useState(false);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isOnline, setIsOnline] = useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
-
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
 
   const orgRef = useRef<HTMLDivElement>(null);
   const projectRef = useRef<HTMLDivElement>(null);
   const envRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -133,46 +117,43 @@ export const Header: React.FC<HeaderProps> = ({
       if (envRef.current && !envRef.current.contains(event.target as Node)) {
         setIsEnvOpen(false);
       }
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   return (
-    <header className={`border-b px-2 sm:px-4 py-2 flex flex-col xl:flex-row xl:items-center xl:justify-between shrink-0 select-none gap-2 min-w-0 w-full transition-colors ${
-      isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
-    }`}>
-      {/* Top Row on Mobile & Tablet / Direct children on Desktop */}
-      <div className="flex flex-wrap items-center justify-between w-full xl:w-auto min-w-0 gap-2">
-        {/* SECTION 1: Brand & Workspace Context (Org, Project, Environment) */}
-        <div className="flex items-center space-x-1.5 sm:space-x-2.5 min-w-0 shrink-0">
-          {/* Brand Logo & Name */}
-          <div className="flex items-center space-x-2 shrink-0">
-            <img
-              src="/icon.svg"
-              alt="RestStudio"
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl shrink-0 select-none pointer-events-none"
-              draggable={false}
-            />
-            <div className="flex flex-col justify-center hidden sm:flex">
-              <div className="flex items-center space-x-1.5 leading-none">
-                <span className={`font-bold text-sm tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>RestStudio</span>
-                <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  v1.0
-                </span>
-              </div>
+    <header
+      className={`border-b px-3 sm:px-4 py-2 flex items-center justify-between shrink-0 select-none gap-2 sm:gap-4 min-w-0 w-full overflow-x-auto scrollbar-none transition-colors ${
+        isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
+      }`}
+    >
+      {/* SECTION 1: Brand & Workspace Context (Org, Project, Environment) */}
+      <div className="flex items-center space-x-2 sm:space-x-3 shrink-0 min-w-0">
+        {/* Brand Logo & Name */}
+        <div className="flex items-center space-x-2 shrink-0">
+          <img
+            src="/icon.svg"
+            alt="RestPulse"
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl shrink-0 select-none pointer-events-none"
+            draggable={false}
+          />
+          <div className="flex flex-col justify-center hidden sm:flex">
+            <div className="flex items-center space-x-1.5 leading-none">
+              <span className={`font-bold text-sm tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>RestPulse</span>
+              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                v1.3
+              </span>
             </div>
           </div>
+        </div>
 
-          <div className={`h-5 w-px shrink-0 hidden sm:block ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
+        <div className={`h-5 w-px shrink-0 hidden sm:block ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
 
-          {/* Unified Workspace Context Bar (Org -> Project -> Env) */}
-          <div className={`flex items-center border p-0.5 sm:p-1 rounded-xl space-x-0.5 sm:space-x-1 min-w-0 ${
-            isDarkMode ? 'bg-slate-950/90 border-slate-800' : 'bg-slate-100/80 border-slate-300'
-          }`}>
+        {/* Unified Workspace Context Bar (Org -> Project -> Env) */}
+        <div className={`flex items-center border p-0.5 sm:p-1 rounded-xl space-x-0.5 sm:space-x-1 min-w-0 ${
+          isDarkMode ? 'bg-slate-950/90 border-slate-800' : 'bg-slate-100/80 border-slate-300'
+        }`}>
             {/* 1. Organization Dropdown */}
             <div className="relative shrink-0" ref={orgRef}>
               <button
@@ -181,7 +162,6 @@ export const Header: React.FC<HeaderProps> = ({
                   setIsOrgOpen(!isOrgOpen);
                   setIsProjectOpen(false);
                   setIsEnvOpen(false);
-                  setIsMenuOpen(false);
                 }}
                 className="flex items-center space-x-1 hover:bg-slate-800/80 px-1.5 sm:px-2 py-1 rounded-lg text-slate-200 text-xs font-medium transition-all cursor-pointer"
                 title={`Organization: ${activeOrg?.name || 'Organization'}`}
@@ -293,7 +273,6 @@ export const Header: React.FC<HeaderProps> = ({
                   setIsProjectOpen(!isProjectOpen);
                   setIsOrgOpen(false);
                   setIsEnvOpen(false);
-                  setIsMenuOpen(false);
                 }}
                 className="flex items-center space-x-1 hover:bg-slate-800/80 px-1.5 sm:px-2 py-1 rounded-lg text-slate-200 text-xs font-medium transition-all cursor-pointer"
                 title={`Project: ${activeProject?.name || 'Project'}`}
@@ -405,7 +384,6 @@ export const Header: React.FC<HeaderProps> = ({
                   setIsEnvOpen(!isEnvOpen);
                   setIsOrgOpen(false);
                   setIsProjectOpen(false);
-                  setIsMenuOpen(false);
                 }}
                 className={`flex items-center space-x-1 px-1.5 sm:px-2 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                   isDarkMode ? 'text-slate-200 hover:bg-slate-800/80' : 'text-slate-700 hover:bg-slate-200/80'
@@ -490,201 +468,16 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* SECTION 3: Settings & Tools Menu + Inline Theme Selector */}
-        <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0 md:order-3">
-          {onOpenGitHubSync && (
-            <button
-              type="button"
-              onClick={onOpenGitHubSync}
-              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-sm shrink-0 ${
-                isGitHubSynced
-                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25'
-                  : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-slate-100'
-              }`}
-              title="Free Cloud Backup, GitHub Gist Sync & Git Data History"
-            >
-              <GitBranch className={`w-3.5 h-3.5 ${isGitHubSynced ? 'text-emerald-400 animate-pulse' : 'text-slate-400'}`} />
-              <span className="hidden lg:inline">{isGitHubSynced ? 'Cloud Synced' : 'GitHub Sync'}</span>
-            </button>
-          )}
-
-          {onSelectTheme && (
-            <InlineThemeSelector
-              currentTheme={currentTheme}
-              onSelectTheme={onSelectTheme}
-              isDarkMode={isDarkMode}
-              onToggleDarkMode={onToggleDarkMode}
-            />
-          )}
-
-          <div className="relative" ref={menuRef}>
-            <button
-              type="button"
-              onClick={() => {
-                setIsMenuOpen(!isMenuOpen);
-                setIsOrgOpen(false);
-                setIsProjectOpen(false);
-                setIsEnvOpen(false);
-              }}
-              className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700/80 text-slate-200 text-xs px-2 sm:px-3 py-1.5 rounded-lg font-medium border border-slate-700 transition-all cursor-pointer shadow-sm"
-              title="Settings, Tools & Preferences"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span className="font-semibold text-xs hidden sm:inline">Settings & Tools</span>
-              <span className="font-semibold text-xs sm:hidden">Settings</span>
-              <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {/* Dropdown Menu */}
-            {isMenuOpen && (
-              <div className={`absolute right-0 top-full mt-2 w-64 rounded-xl shadow-2xl z-50 divide-y p-1 space-y-1 animate-in fade-in zoom-in-95 duration-100 ${
-                isDarkMode
-                  ? 'bg-slate-900 border border-slate-700/80 divide-slate-800/60 text-slate-100'
-                  : 'bg-white border border-slate-200 divide-slate-100 text-slate-900 shadow-slate-900/10'
-              }`}>
-                {/* Category 1: Environment & Variables */}
-                <div className="p-1 space-y-0.5">
-                  <div className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Variables & Environment
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenEnvManager();
-                      setIsMenuOpen(false);
-                    }}
-                    className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium flex items-center space-x-2.5 transition-colors cursor-pointer ${
-                      isDarkMode ? 'text-slate-200 hover:bg-slate-800/80' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
-                    <Layers className="w-4 h-4 text-amber-500 shrink-0" />
-                    <div className="flex flex-col">
-                      <span className="font-semibold leading-tight">Env Hierarchy Manager</span>
-                      <span className={`text-[10px] font-normal ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Global, Org, Project & Folder vars</span>
-                    </div>
-                  </button>
-                </div>
-
-                {/* Category 2: Data Import & Export */}
-                <div className="p-1 space-y-0.5">
-                  <div className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Data & Files
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenImportExport();
-                      setIsMenuOpen(false);
-                    }}
-                    className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium flex items-center space-x-2.5 transition-colors cursor-pointer ${
-                      isDarkMode ? 'text-slate-200 hover:bg-slate-800/80' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
-                    <Upload className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <div className="flex flex-col">
-                      <span className="font-semibold leading-tight">Import / Export Suite</span>
-                      <span className={`text-[10px] font-normal ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Postman, cURL, OpenAPI & REST</span>
-                    </div>
-                  </button>
-                </div>
-
-                {/* Category 3: System & Preferences */}
-                <div className="p-1 space-y-0.5">
-                  <div className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    System & Help
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenQuickHelp();
-                      setIsMenuOpen(false);
-                    }}
-                    className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium flex items-center space-x-2.5 transition-colors cursor-pointer ${
-                      isDarkMode ? 'text-slate-200 hover:bg-slate-800/80' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
-                    <HelpCircle className="w-4 h-4 text-sky-500 shrink-0" />
-                    <div className="flex flex-col">
-                      <span className="font-semibold leading-tight">Quick Help & Docs</span>
-                      <span className={`text-[10px] font-normal ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Shortcuts, syntax & variable guide</span>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onOpenSettings) onOpenSettings();
-                      setIsMenuOpen(false);
-                    }}
-                    className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
-                      isDarkMode ? 'text-slate-200 hover:bg-slate-800/80' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-2.5">
-                      <Palette className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <div className="flex flex-col">
-                        <span className="font-semibold leading-tight">UI Theme Presets</span>
-                        <span className={`text-[10px] font-normal ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                          {THEMES.find((t) => t.id === currentTheme)?.name || 'Dark Slate'}
-                        </span>
-                      </div>
-                    </div>
-                    <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded border ${
-                      isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700/60' : 'bg-slate-100 text-slate-700 border-slate-200'
-                    }`}>
-                      {THEMES.find((t) => t.id === currentTheme)?.name || 'Theme'}
-                    </span>
-                  </button>
-
-                  <div className={`px-2.5 py-2 flex items-center justify-between text-xs border-t mt-1 ${
-                    isDarkMode ? 'text-slate-400 border-slate-800/60' : 'text-slate-500 border-slate-100'
-                  }`}>
-                    <span className="text-[11px]">Network Status</span>
-                    {isOnline ? (
-                      <div className="flex items-center space-x-1.5 text-[10px] text-emerald-500 font-mono font-semibold">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        <Wifi className="w-3 h-3 text-emerald-500" />
-                        <span>Online</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center space-x-1.5 text-[10px] text-rose-500 font-mono font-bold">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                        <WifiOff className="w-3 h-3 text-rose-500" />
-                        <span>Offline</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className={`px-2.5 py-1.5 flex items-center justify-between text-[11px] border-t mt-1 rounded-b-lg ${
-                    isDarkMode ? 'text-slate-400 border-slate-800/60 bg-slate-950/40' : 'text-slate-500 border-slate-100 bg-slate-50'
-                  }`}>
-                    <span>Developer</span>
-                    <a
-                      href="https://suhail.top"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-emerald-500 hover:text-emerald-600 font-semibold hover:underline flex items-center space-x-1"
-                    >
-                      <span>Suhail Akhtar</span>
-                      <span className={`text-[10px] font-mono font-normal ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>suhail.top</span>
-                    </a>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* SECTION 2: Center View Modes (Request Builder, .rest Code, Runner, History) */}
-      <div className={`flex items-center justify-start sm:justify-center p-1 rounded-xl border shadow-inner shrink-0 w-full xl:w-auto overflow-x-auto scrollbar-none transition-colors space-x-1 ${
-        isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-300'
-      }`}>
+      <div
+        className={`flex items-center justify-center p-1 rounded-xl border shadow-inner shrink-0 overflow-x-auto scrollbar-none transition-colors space-x-1 ${
+          isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-300'
+        }`}
+      >
         <button
           type="button"
           onClick={() => onChangeTab('editor')}
-          className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'editor'
               ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
               : isDarkMode
@@ -700,7 +493,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           type="button"
           onClick={() => onChangeTab('code')}
-          className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'code'
               ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
               : isDarkMode
@@ -716,7 +509,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           type="button"
           onClick={() => onChangeTab('runner')}
-          className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'runner'
               ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
               : isDarkMode
@@ -732,7 +525,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           type="button"
           onClick={() => onChangeTab('history')}
-          className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'history'
               ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
               : isDarkMode
@@ -744,13 +537,92 @@ export const Header: React.FC<HeaderProps> = ({
           <History className="w-3.5 h-3.5 shrink-0" />
           <span>History</span>
           {historyCount > 0 && (
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-              isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-700'
-            }`}>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-700'
+              }`}
+            >
               {historyCount}
             </span>
           )}
         </button>
+      </div>
+
+      {/* SECTION 3: Utility & Settings Actions (Import, Cloud Sync, Theme, Settings, Help) */}
+      <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+        {onOpenImportExport && (
+          <button
+            type="button"
+            onClick={onOpenImportExport}
+            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-sm shrink-0 ${
+              isDarkMode
+                ? 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-slate-100'
+                : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700 hover:text-slate-900'
+            }`}
+            title="Import Postman, cURL, OpenAPI, or .rest files"
+          >
+            <Upload className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Import</span>
+          </button>
+        )}
+
+        {onOpenGitHubSync && (
+          <button
+            type="button"
+            onClick={onOpenGitHubSync}
+            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-sm shrink-0 ${
+              isGitHubSynced
+                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25'
+                : isDarkMode
+                ? 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-slate-100'
+                : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700 hover:text-slate-900'
+            }`}
+            title="Free Cloud Backup, GitHub Gist Sync & Git Data History"
+          >
+            <GitBranch className={`w-3.5 h-3.5 ${isGitHubSynced ? 'text-emerald-400 animate-pulse' : 'text-slate-400'}`} />
+            <span className="hidden lg:inline">{isGitHubSynced ? 'Cloud Synced' : 'GitHub Sync'}</span>
+          </button>
+        )}
+
+        {onSelectTheme && (
+          <InlineThemeSelector
+            currentTheme={currentTheme}
+            onSelectTheme={onSelectTheme}
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={onToggleDarkMode}
+          />
+        )}
+
+        {onOpenSettings && (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-sm shrink-0 ${
+              isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
+            }`}
+            title="Workspace Settings & Preferences (Ctrl+,)"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="hidden sm:inline">Settings</span>
+          </button>
+        )}
+
+        {onOpenQuickHelp && (
+          <button
+            type="button"
+            onClick={onOpenQuickHelp}
+            className={`p-1.5 rounded-lg border transition-all cursor-pointer shadow-sm shrink-0 ${
+              isDarkMode
+                ? 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-slate-100'
+                : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700 hover:text-slate-900'
+            }`}
+            title="Quick Help, Syntax & Keyboard Shortcuts (Ctrl+K)"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+          </button>
+        )}
       </div>
     </header>
   );

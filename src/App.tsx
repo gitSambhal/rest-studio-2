@@ -318,6 +318,9 @@ export default function App() {
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsQuickHelpOpen(true);
+      } else if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        setIsSettingsOpen(true);
       } else if (
         ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'c') ||
         (e.altKey && e.key.toLowerCase() === 'c')
@@ -2140,6 +2143,17 @@ export default function App() {
         onToggleDarkMode={handleToggleDarkMode}
         currentTheme={currentTheme}
         onSelectTheme={handleSelectTheme}
+        activeProject={activeProject}
+        organizations={organizations}
+        activeOrgId={activeOrgId}
+        splitOrientation={splitOrientation}
+        onToggleSplitOrientation={() =>
+          setSplitOrientation((prev) => (prev === 'top-bottom' ? 'left-right' : 'top-bottom'))
+        }
+        onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
+        onOpenImportExport={() => setIsImportExportOpen(true)}
+        onOpenEnvManager={() => setIsEnvManagerOpen(true)}
+        onOpenQuickHelp={() => setIsQuickHelpOpen(true)}
         showToast={showToast}
       />
 
