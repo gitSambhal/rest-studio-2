@@ -1975,15 +1975,30 @@ export default function App() {
                   {activeFile ? (
                     <RestFileEditor
                       file={activeFile}
+                      isDarkMode={isDarkMode}
+                      envVariables={scopeCtx.projectVariables || []}
                       scopeCtx={scopeCtx}
-                      onSaveFileContent={(fId, rawText, parsedRequests) => {
+                      onSaveFileContent={(fId, rawText, parsedRequests, parsedFileVars) => {
                         if (!activeProject) return;
                         const updatedFiles = (activeProject.files || []).map((f) =>
-                          f.id === fId ? { ...f, rawContent: rawText, requests: parsedRequests } : f
+                          f.id === fId
+                            ? {
+                                ...f,
+                                rawContent: rawText,
+                                requests: parsedRequests,
+                                fileVariables: parsedFileVars || f.fileVariables,
+                              }
+                            : f
                         );
                         updateProjectFiles(updatedFiles);
                       }}
                       onRunSingleRequest={(req) => handleExecuteRequest(req)}
+                      onOpenInBuilder={(req) => {
+                        if (activeFile) {
+                          handleOpenRequestInTab(activeFile.id, req.id);
+                        }
+                      }}
+                      showToast={showToast}
                     />
                   ) : (
                     <div className="flex-1 flex items-center justify-center text-slate-500 font-mono text-xs">

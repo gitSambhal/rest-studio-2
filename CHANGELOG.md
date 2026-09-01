@@ -2,6 +2,11 @@
 
 All notable changes to **RestPulse** are documented in this file.
 
+## [1.3.2] - 2026-09-01
+### Fixed
+- **Executable Block Run Execution**: Fixed `.rest` code editor executable blocks where clicking "Run" did not provide visual execution feedback or display response data. Added async execution handling with live loading spinners (`Running...`), instant status code badges (`200 OK`, `404 Not Found`, etc.), latency/size indicators, sequential "Run All" batch execution, and an embedded multi-tab Response Inspector (Body, Headers, Tests, and Script Logs).
+- **File Variable Resolution in .rest Code Mode**: Ensured `@variable = value` definitions parsed within `.rest` files are properly stored and synchronized with the scope context during execution.
+
 ## [1.3.1] - 2026-09-01
 ### Fixed
 - **Header Alignment & Layout**: Resolved multi-line wrapping and broken element order in the top navigation bar. Realigned the header into a clean 3-part layout: Left (Brand & Workspace context), Center (View mode segmented controller: Request Builder, .rest Code, Runner, History), and Right (Import, Cloud Sync, Theme, Settings, Quick Help) along a single horizontal baseline.
