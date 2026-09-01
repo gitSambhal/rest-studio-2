@@ -26,6 +26,8 @@ import {
   Trash2,
   CheckCircle2,
   Palette,
+  Cloud,
+  GitBranch,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -53,6 +55,8 @@ interface HeaderProps {
   onOpenSettings?: () => void;
   onOpenQuickNewRequest?: () => void;
   onOpenQuickCurl?: () => void;
+  onOpenGitHubSync?: () => void;
+  isGitHubSynced?: boolean;
   historyCount: number;
 
   isDarkMode: boolean;
@@ -83,6 +87,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   onOpenQuickNewRequest,
   onOpenQuickCurl,
+  onOpenGitHubSync,
+  isGitHubSynced = false,
   historyCount,
   isDarkMode,
   onToggleDarkMode,
@@ -136,22 +142,24 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   return (
-    <header className="bg-slate-900 border-b border-slate-800 px-2 sm:px-4 py-2 md:py-0 md:h-16 flex flex-col md:flex-row md:items-center md:justify-between shrink-0 select-none gap-2 md:gap-4 min-w-0">
-      {/* Top Row on Mobile / Direct children on Desktop */}
-      <div className="flex items-center justify-between w-full md:contents min-w-0 gap-2">
+    <header className={`border-b px-2 sm:px-4 py-2 flex flex-col xl:flex-row xl:items-center xl:justify-between shrink-0 select-none gap-2 min-w-0 w-full transition-colors ${
+      isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
+    }`}>
+      {/* Top Row on Mobile & Tablet / Direct children on Desktop */}
+      <div className="flex flex-wrap items-center justify-between w-full xl:w-auto min-w-0 gap-2">
         {/* SECTION 1: Brand & Workspace Context (Org, Project, Environment) */}
-        <div className="flex items-center space-x-1.5 sm:space-x-3 min-w-0 shrink-0 md:order-1">
+        <div className="flex items-center space-x-1.5 sm:space-x-2.5 min-w-0 shrink-0">
           {/* Brand Logo & Name */}
           <div className="flex items-center space-x-2 shrink-0">
             <img
               src="/icon.svg"
               alt="RestStudio"
-              className="w-8 h-8 rounded-xl shrink-0 select-none pointer-events-none"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl shrink-0 select-none pointer-events-none"
               draggable={false}
             />
-            <div className="flex flex-col justify-center hidden lg:flex">
+            <div className="flex flex-col justify-center hidden sm:flex">
               <div className="flex items-center space-x-1.5 leading-none">
-                <span className="font-bold text-sm text-white tracking-tight">RestStudio</span>
+                <span className={`font-bold text-sm tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>RestStudio</span>
                 <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   v1.0
                 </span>
@@ -159,10 +167,12 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          <div className="h-5 w-px bg-slate-800 shrink-0 hidden lg:block" />
+          <div className={`h-5 w-px shrink-0 hidden sm:block ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
 
           {/* Unified Workspace Context Bar (Org -> Project -> Env) */}
-          <div className="flex items-center bg-slate-950/90 border border-slate-800 p-1 rounded-xl space-x-1 min-w-0">
+          <div className={`flex items-center border p-0.5 sm:p-1 rounded-xl space-x-0.5 sm:space-x-1 min-w-0 ${
+            isDarkMode ? 'bg-slate-950/90 border-slate-800' : 'bg-slate-100/80 border-slate-300'
+          }`}>
             {/* 1. Organization Dropdown */}
             <div className="relative shrink-0" ref={orgRef}>
               <button
@@ -482,6 +492,22 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* SECTION 3: Settings & Tools Menu + Inline Theme Selector */}
         <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0 md:order-3">
+          {onOpenGitHubSync && (
+            <button
+              type="button"
+              onClick={onOpenGitHubSync}
+              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-sm shrink-0 ${
+                isGitHubSynced
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25'
+                  : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-slate-100'
+              }`}
+              title="Free Cloud Backup, GitHub Gist Sync & Git Data History"
+            >
+              <GitBranch className={`w-3.5 h-3.5 ${isGitHubSynced ? 'text-emerald-400 animate-pulse' : 'text-slate-400'}`} />
+              <span className="hidden lg:inline">{isGitHubSynced ? 'Cloud Synced' : 'GitHub Sync'}</span>
+            </button>
+          )}
+
           {onSelectTheme && (
             <InlineThemeSelector
               currentTheme={currentTheme}
@@ -652,15 +678,18 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* SECTION 2: Center View Modes (Request Builder, .rest Code, Runner, History) */}
-      {/* Moves to a dedicated row on small screens and centers on desktop */}
-      <div className="flex items-center justify-start md:justify-center bg-slate-950 p-1 rounded-xl border border-slate-800 shadow-inner shrink-0 w-full md:w-auto overflow-x-auto scrollbar-none md:order-2 space-x-1">
+      <div className={`flex items-center justify-start sm:justify-center p-1 rounded-xl border shadow-inner shrink-0 w-full xl:w-auto overflow-x-auto scrollbar-none transition-colors space-x-1 ${
+        isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-300'
+      }`}>
         <button
           type="button"
           onClick={() => onChangeTab('editor')}
           className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'editor'
               ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              : isDarkMode
+              ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
           }`}
           title="Request Builder Interface"
         >
@@ -674,7 +703,9 @@ export const Header: React.FC<HeaderProps> = ({
           className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'code'
               ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              : isDarkMode
+              ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
           }`}
           title="Raw .rest / .http Script Code View"
         >
@@ -688,7 +719,9 @@ export const Header: React.FC<HeaderProps> = ({
           className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'runner'
               ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              : isDarkMode
+              ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
           }`}
           title="Batch REST File Runner"
         >
@@ -702,14 +735,18 @@ export const Header: React.FC<HeaderProps> = ({
           className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'history'
               ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              : isDarkMode
+              ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
           }`}
           title="Execution History Log"
         >
           <History className="w-3.5 h-3.5 shrink-0" />
           <span>History</span>
           {historyCount > 0 && (
-            <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded-full font-mono">
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-700'
+            }`}>
               {historyCount}
             </span>
           )}

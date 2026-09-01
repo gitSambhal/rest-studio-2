@@ -32,6 +32,8 @@ import { SettingsModal } from './components/SettingsModal';
 import { PromptModal } from './components/PromptModal';
 import { QuickNewRequestModal } from './components/QuickNewRequestModal';
 import { QuickCurlModal } from './components/QuickCurlModal';
+import { GitHubSyncModal } from './components/GitHubSyncModal';
+import { getSavedGitHubToken, SyncPayload } from './services/githubSyncService';
 import { TabBar } from './components/TabBar';
 import { OnboardingScreen } from './components/OnboardingScreen';
 import { ToastContainer, ToastMessage } from './components/ToastContainer';
@@ -208,7 +210,19 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isQuickNewRequestOpen, setIsQuickNewRequestOpen] = useState<boolean>(false);
   const [isQuickCurlOpen, setIsQuickCurlOpen] = useState<boolean>(false);
+  const [isGitHubSyncOpen, setIsGitHubSyncOpen] = useState<boolean>(false);
   const [initialPasteText, setInitialPasteText] = useState<string>('');
+
+  const handleApplySyncedData = (payload: SyncPayload) => {
+    if (payload.organizations && payload.organizations.length > 0) {
+      setOrganizations(payload.organizations);
+      if (payload.activeOrgId) setActiveOrgId(payload.activeOrgId);
+      if (payload.activeProjectId) setActiveProjectId(payload.activeProjectId);
+    }
+    if (payload.history && Array.isArray(payload.history)) {
+      setHistory(payload.history);
+    }
+  };
 
   // Global Paste Listener (Auto-detect cURL / Smart Paste anywhere when not typing in input/textarea)
   useEffect(() => {
@@ -1735,6 +1749,8 @@ export default function App() {
             onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenQuickNewRequest={() => setIsQuickNewRequestOpen(true)}
             onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
+            onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
+            isGitHubSynced={!!getSavedGitHubToken()}
             historyCount={history.length}
             isDarkMode={isDarkMode}
             onToggleDarkMode={handleToggleDarkMode}
@@ -2068,6 +2084,20 @@ export default function App() {
         currentTheme={currentTheme}
         onSelectTheme={handleSelectTheme}
         showToast={showToast}
+      />
+
+      {/* Free GitHub Cloud & Data Sync Modal */}
+      <GitHubSyncModal
+        isOpen={isGitHubSyncOpen}
+        onClose={() => setIsGitHubSyncOpen(false)}
+        organizations={organizations}
+        activeOrgId={activeOrgId}
+        activeProjectId={activeProjectId}
+        environments={activeProject?.environments || []}
+        history={history}
+        onApplySyncedData={handleApplySyncedData}
+        showToast={(msg, type) => showToast(type, msg)}
+        isDarkMode={isDarkMode}
       />
 
       {/* Global App Prompt Modal */}
