@@ -153,9 +153,9 @@ export const TabBar: React.FC<TabBarProps> = ({
               }}
               onClick={() => onSelectTab(tab.id)}
               onContextMenu={(e) => handleContextMenu(e, tab.id)}
-              className={`group relative flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all border shrink-0 ${
+              className={`group relative flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all border shrink-0 w-40 ${
                 isActive
-                  ? 'bg-slate-800 text-slate-100 border-slate-700 shadow-md font-semibold'
+                  ? 'bg-slate-800 text-slate-100 border-slate-700 shadow-md'
                   : 'bg-slate-950/40 text-slate-400 border-transparent hover:bg-slate-800/50 hover:text-slate-200'
               }`}
             >
@@ -164,7 +164,7 @@ export const TabBar: React.FC<TabBarProps> = ({
               ) : (
                 renderTabIcon(tab)
               )}
-              <span className="truncate max-w-[140px] font-mono text-[11px]">{tab.title}</span>
+              <span className="truncate min-w-0 flex-1 font-mono text-[11px]">{tab.title}</span>
 
               {/* Status Indicator inside Tab */}
               {!isExecutingThisTab && reqStatus?.state === 'success' && (

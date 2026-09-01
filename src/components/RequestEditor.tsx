@@ -417,27 +417,21 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
               <button
                 type="button"
                 onClick={() => onStopRequest?.(request.id)}
-                className="flex items-center space-x-2 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-400 hover:to-red-500 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-lg shadow-rose-500/20 transition-all cursor-pointer"
-                title="Click to cancel running request"
+                className="w-24 shrink-0 flex items-center justify-center space-x-1.5 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-400 hover:to-red-500 text-white font-bold text-xs px-3 py-2 rounded-lg shadow-lg shadow-rose-500/20 transition-all cursor-pointer"
+                title="Cancel Request (Ctrl+Enter)"
               >
                 <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
-                <Square className="w-3.5 h-3.5 fill-white shrink-0" />
-                <span>Stop Request</span>
-                <span className="text-[10px] font-mono bg-black/20 text-white px-1.5 py-0.5 rounded">
-                  Ctrl+Enter
-                </span>
+                <span>Cancel</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => onSendRequest(request)}
-                className="flex items-center space-x-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs px-4 py-2 rounded-lg shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+                className="w-24 shrink-0 flex items-center justify-center space-x-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs px-3 py-2 rounded-lg shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+                title="Send Request (Ctrl+Enter)"
               >
-                <Send className="w-4 h-4 fill-slate-950 shrink-0" />
-                <span>Send Request</span>
-                <span className="text-[10px] font-mono bg-slate-950/20 text-slate-950 px-1.5 py-0.5 rounded">
-                  Ctrl+Enter
-                </span>
+                <Send className="w-3.5 h-3.5 fill-slate-950 shrink-0" />
+                <span>Send</span>
               </button>
             )}
           </div>
@@ -449,7 +443,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           <select
             value={request.method}
             onChange={(e) => updateMethod(e.target.value as HTTPMethod)}
-            className={`font-mono text-xs font-bold px-3 py-2 rounded-lg border focus:outline-none transition-colors cursor-pointer ${getMethodColor(
+            className={`w-[110px] shrink-0 font-mono text-xs font-bold px-2 py-2 rounded-lg border text-center focus:outline-none transition-colors cursor-pointer ${getMethodColor(
               request.method
             )}`}
           >
@@ -507,13 +501,13 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
       </div>
 
       {/* Tabs Navigation */}
-      <div className="flex items-center px-4 bg-slate-900/60 border-b border-slate-800 text-xs font-medium space-x-6 overflow-x-auto scrollbar-none">
+      <div className="flex items-center px-4 bg-slate-900/60 border-b border-slate-800 text-xs font-semibold space-x-6 overflow-x-auto scrollbar-none">
         <button
           type="button"
           onClick={() => setActiveTab('params')}
           className={`py-2.5 border-b-2 flex items-center space-x-1.5 transition-colors ${
             activeTab === 'params'
-              ? 'border-emerald-500 text-emerald-400 font-bold'
+              ? 'border-emerald-500 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -530,7 +524,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           onClick={() => setActiveTab('headers')}
           className={`py-2.5 border-b-2 flex items-center space-x-1.5 transition-colors ${
             activeTab === 'headers'
-              ? 'border-emerald-500 text-emerald-400 font-bold'
+              ? 'border-emerald-500 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -547,7 +541,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           onClick={() => setActiveTab('auth')}
           className={`py-2.5 border-b-2 flex items-center space-x-1.5 transition-colors ${
             activeTab === 'auth'
-              ? 'border-emerald-500 text-emerald-400 font-bold'
+              ? 'border-emerald-500 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -563,7 +557,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           onClick={() => setActiveTab('body')}
           className={`py-2.5 border-b-2 flex items-center space-x-1.5 transition-colors ${
             activeTab === 'body'
-              ? 'border-emerald-500 text-emerald-400 font-bold'
+              ? 'border-emerald-500 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -581,7 +575,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           onClick={() => setActiveTab('pre-script')}
           className={`py-2.5 border-b-2 flex items-center space-x-1.5 transition-colors ${
             activeTab === 'pre-script'
-              ? 'border-emerald-500 text-emerald-400 font-bold'
+              ? 'border-emerald-500 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -597,7 +591,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           onClick={() => setActiveTab('post-script')}
           className={`py-2.5 border-b-2 flex items-center space-x-1.5 transition-colors ${
             activeTab === 'post-script'
-              ? 'border-emerald-500 text-emerald-400 font-bold'
+              ? 'border-emerald-500 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -613,7 +607,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           onClick={() => setActiveTab('tests')}
           className={`py-2.5 border-b-2 flex items-center space-x-1.5 transition-colors ${
             activeTab === 'tests'
-              ? 'border-emerald-500 text-emerald-400 font-bold'
+              ? 'border-emerald-500 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -631,7 +625,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           onClick={() => setActiveTab('env')}
           className={`py-2.5 border-b-2 flex items-center space-x-1.5 transition-colors ${
             activeTab === 'env'
-              ? 'border-emerald-500 text-emerald-400 font-bold'
+              ? 'border-emerald-500 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -644,7 +638,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           onClick={() => setActiveTab('code')}
           className={`py-2.5 border-b-2 flex items-center space-x-1.5 transition-colors ${
             activeTab === 'code'
-              ? 'border-emerald-500 text-emerald-400 font-bold'
+              ? 'border-emerald-500 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >

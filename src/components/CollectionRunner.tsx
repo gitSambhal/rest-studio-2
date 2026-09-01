@@ -137,7 +137,7 @@ export const CollectionRunner: React.FC<CollectionRunnerProps> = ({
           type="button"
           onClick={handleStartRunner}
           disabled={isRunning}
-          className="flex items-center space-x-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs px-5 py-2 rounded-lg shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50"
+          className="flex items-center justify-center space-x-2 min-w-[185px] bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs px-5 py-2 rounded-lg shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50"
         >
           {isRunning ? (
             <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />

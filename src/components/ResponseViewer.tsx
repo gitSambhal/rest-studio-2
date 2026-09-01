@@ -268,7 +268,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
           <button
             type="button"
             onClick={handleCopy}
-            className="flex items-center space-x-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700 font-medium transition-colors cursor-pointer"
+            className="flex items-center justify-center space-x-1 min-w-[76px] text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700 font-medium transition-colors cursor-pointer"
             title="Copy Response Body"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -293,13 +293,13 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
       </div>
 
       {/* Response View Navigation Tabs */}
-      <div className="flex items-center px-4 bg-slate-900/60 border-b border-slate-800 text-xs font-medium space-x-6 shrink-0 overflow-x-auto scrollbar-none">
+      <div className="flex items-center px-4 bg-slate-900/60 border-b border-slate-800 text-xs font-semibold space-x-6 shrink-0 overflow-x-auto scrollbar-none">
         <button
           type="button"
           onClick={() => setActiveTab('pretty')}
           className={`py-2 border-b-2 transition-colors ${
             activeTab === 'pretty'
-              ? 'border-emerald-500 text-emerald-400 font-bold'
+              ? 'border-emerald-500 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -311,7 +311,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
           onClick={() => setActiveTab('raw')}
           className={`py-2 border-b-2 transition-colors ${
             activeTab === 'raw'
-              ? 'border-emerald-500 text-emerald-400 font-bold'
+              ? 'border-emerald-500 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -323,7 +323,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
           onClick={() => setActiveTab('headers')}
           className={`py-2 border-b-2 flex items-center space-x-1 transition-colors ${
             activeTab === 'headers'
-              ? 'border-emerald-500 text-emerald-400 font-bold'
+              ? 'border-emerald-500 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -339,7 +339,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
             onClick={() => setActiveTab('tests')}
             className={`py-2 border-b-2 flex items-center space-x-1 transition-colors ${
               activeTab === 'tests'
-                ? 'border-emerald-500 text-emerald-400 font-bold'
+                ? 'border-emerald-500 text-emerald-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -356,7 +356,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
             onClick={() => setActiveTab('logs')}
             className={`py-2 border-b-2 flex items-center space-x-1 transition-colors ${
               activeTab === 'logs'
-                ? 'border-emerald-500 text-emerald-400 font-bold'
+                ? 'border-emerald-500 text-emerald-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >

@@ -251,19 +251,21 @@ const RenderRestFile: React.FC<RenderRestFileProps> = ({
                   <span className="truncate">{req.name}</span>
 
                   {/* Status process indicator */}
-                  {statusInfo?.state === 'loading' && (
-                    <div className="w-2.5 h-2.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin shrink-0 ml-auto" title="Executing request..." />
-                  )}
-                  {statusInfo?.state === 'success' && (
-                    <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-bold shrink-0 ml-auto" title={`Success (${statusInfo.statusCode || 200})`}>
-                      {statusInfo.statusCode || 200}
-                    </span>
-                  )}
-                  {statusInfo?.state === 'error' && (
-                    <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-rose-500/20 text-rose-400 font-bold shrink-0 ml-auto" title={`Error (${statusInfo.statusCode || 'ERR'})`}>
-                      {statusInfo.statusCode && statusInfo.statusCode > 0 ? statusInfo.statusCode : 'ERR'}
-                    </span>
-                  )}
+                  <div className="ml-auto shrink-0 min-w-[28px] flex items-center justify-end">
+                    {statusInfo?.state === 'loading' && (
+                      <div className="w-2.5 h-2.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" title="Executing request..." />
+                    )}
+                    {statusInfo?.state === 'success' && (
+                      <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-bold" title={`Success (${statusInfo.statusCode || 200})`}>
+                        {statusInfo.statusCode || 200}
+                      </span>
+                    )}
+                    {statusInfo?.state === 'error' && (
+                      <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-rose-500/20 text-rose-400 font-bold" title={`Error (${statusInfo.statusCode || 'ERR'})`}>
+                        {statusInfo.statusCode && statusInfo.statusCode > 0 ? statusInfo.statusCode : 'ERR'}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Actions Menu for Request */}
