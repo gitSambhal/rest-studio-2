@@ -214,13 +214,70 @@ export default function App() {
   const [initialPasteText, setInitialPasteText] = useState<string>('');
 
   const handleApplySyncedData = (payload: SyncPayload) => {
-    if (payload.organizations && payload.organizations.length > 0) {
-      setOrganizations(payload.organizations);
-      if (payload.activeOrgId) setActiveOrgId(payload.activeOrgId);
-      if (payload.activeProjectId) setActiveProjectId(payload.activeProjectId);
+    if (payload.organizations && Array.isArray(payload.organizations) && payload.organizations.length > 0) {
+      const incomingOrgs = payload.organizations;
+      setOrganizations(incomingOrgs);
+
+      // 1. Resolve target organization
+      const targetOrg =
+        incomingOrgs.find((o) => o.id === payload.activeOrgId) || incomingOrgs[0];
+      setActiveOrgId(targetOrg.id);
+
+      // 2. Resolve target project
+      const targetProject =
+        (targetOrg.projects || []).find((p) => p.id === payload.activeProjectId) ||
+        targetOrg.projects?.[0];
+      const newProjectId = targetProject?.id || '';
+      setActiveProjectId(newProjectId);
+
+      // 3. Resolve target file & request
+      const targetFile = targetProject?.files?.[0];
+      const newFileId = targetFile?.id || null;
+      setActiveFileId(newFileId);
+
+      const targetRequest = targetFile?.requests?.[0];
+      const newRequestId = targetRequest?.id || null;
+      setActiveRequestId(newRequestId);
+
+      // 4. Rebuild tabs immediately so restored requests are open and active
+      const newTabs: WorkspaceTab[] = [
+        {
+          id: 'tab_onboarding',
+          type: 'onboarding',
+          title: 'Welcome Workspace',
+        },
+      ];
+
+      if (targetFile && targetRequest) {
+        newTabs.push({
+          id: 'tab_req_' + targetRequest.id,
+          type: 'request',
+          title: targetRequest.name || 'REST Request',
+          fileId: targetFile.id,
+          requestId: targetRequest.id,
+          method: targetRequest.method || 'GET',
+        });
+        setActiveTabId('tab_req_' + targetRequest.id);
+      } else {
+        setActiveTabId('tab_onboarding');
+      }
+
+      setTabs(newTabs);
+      setActiveTabMode('editor');
+      setLastResponse(null);
+
+      // 5. Update LocalStorage immediately
+      try {
+        localStorage.setItem('restpulse_organizations', JSON.stringify(incomingOrgs));
+        localStorage.setItem('restpulse_tabs', JSON.stringify(newTabs));
+      } catch (e) {}
     }
+
     if (payload.history && Array.isArray(payload.history)) {
       setHistory(payload.history);
+      try {
+        localStorage.setItem('restpulse_history', JSON.stringify(payload.history));
+      } catch (e) {}
     }
   };
 

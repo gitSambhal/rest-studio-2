@@ -18,6 +18,14 @@ import {
   Zap,
   HelpCircle,
   FileCode,
+  GitMerge,
+  Layers,
+  Database,
+  ArrowRight,
+  Sparkles,
+  AlertTriangle,
+  HardDrive,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   GitHubUser,
@@ -25,6 +33,7 @@ import {
   SyncPayload,
   verifyGitHubToken,
   findOrCreateWorkspaceGist,
+  createFreshWorkspaceGist,
   pushToGitHubGist,
   pullFromGitHubGist,
   getGistRevisionHistory,
@@ -36,6 +45,9 @@ import {
   getSavedGitHubUser,
   getSavedAutoSync,
   setAutoSyncSetting,
+  countWorkspaceEntities,
+  mergeSyncPayloads,
+  peekRemoteWorkspace,
 } from '../services/githubSyncService';
 import { Organization, RequestHistoryItem, Environment } from '../types';
 
@@ -50,6 +62,24 @@ interface GitHubSyncModalProps {
   onApplySyncedData: (data: SyncPayload) => void;
   showToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
   isDarkMode?: boolean;
+}
+
+interface CloudComparisonState {
+  remote: SyncPayload;
+  remoteStats: {
+    orgCount: number;
+    projectCount: number;
+    fileCount: number;
+    requestCount: number;
+    historyCount: number;
+  };
+  localStats: {
+    orgCount: number;
+    projectCount: number;
+    fileCount: number;
+    requestCount: number;
+    historyCount: number;
+  };
 }
 
 export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
@@ -79,6 +109,9 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   const [isLoadingRevisions, setIsLoadingRevisions] = useState(false);
   const [restoringSha, setRestoringSha] = useState<string | null>(null);
 
+  // Cloud detection & conflict resolution state
+  const [detectedCloudPayload, setDetectedCloudPayload] = useState<CloudComparisonState | null>(null);
+
   useEffect(() => {
     if (token && gistId && isOpen) {
       fetchRevisions();
@@ -86,6 +119,8 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   }, [token, gistId, isOpen]);
 
   if (!isOpen) return null;
+
+  const currentLocalStats = countWorkspaceEntities(organizations);
 
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,18 +133,39 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     setStatusMessage('Verifying token with GitHub...');
 
     try {
-      const gitHubUser = await verifyGitHubToken(tokenInput.trim());
-      setStatusMessage('Finding or creating private workspace Gist...');
-      const gId = await findOrCreateWorkspaceGist(tokenInput.trim());
+      const trimmedToken = tokenInput.trim();
+      const gitHubUser = await verifyGitHubToken(trimmedToken);
+      setStatusMessage('Finding or locating your workspace Gist...');
+      const gId = await findOrCreateWorkspaceGist(trimmedToken);
 
-      setToken(tokenInput.trim());
+      setToken(trimmedToken);
       setUser(gitHubUser);
       setGistId(gId);
-      saveGitHubSession(tokenInput.trim(), gitHubUser, gId);
+      saveGitHubSession(trimmedToken, gitHubUser, gId);
 
-      showToast(`Connected as @${gitHubUser.login}! Gist initialized.`, 'success');
+      setStatusMessage('Checking remote cloud workspace data...');
+      const remotePayload = await peekRemoteWorkspace(trimmedToken, gId);
+
       setTokenInput('');
       setStatusMessage(null);
+
+      // Inspect if remote cloud has data
+      if (remotePayload && remotePayload.organizations && remotePayload.organizations.length > 0) {
+        const remoteStats = countWorkspaceEntities(remotePayload);
+        const localStats = countWorkspaceEntities(organizations);
+
+        // Show decision dialog so user can choose to pull, merge, or keep
+        setDetectedCloudPayload({
+          remote: remotePayload,
+          remoteStats,
+          localStats,
+        });
+        showToast(`Connected as @${gitHubUser.login}! Cloud workspace detected.`, 'info');
+      } else {
+        showToast(`Connected as @${gitHubUser.login}! Gist ready for cloud backup.`, 'success');
+      }
+
+      fetchRevisions();
     } catch (err: any) {
       console.error(err);
       showToast(err.message || 'Authentication failed', 'error');
@@ -125,6 +181,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     setUser(null);
     setGistId(null);
     setRevisions([]);
+    setDetectedCloudPayload(null);
     showToast('Disconnected from GitHub Sync', 'info');
   };
 
@@ -132,11 +189,114 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     const next = !autoSync;
     setAutoSync(next);
     setAutoSyncSetting(next);
-    showToast(next ? 'Auto-Sync enabled! Workspace will sync automatically.' : 'Auto-Sync disabled', 'info');
+    showToast(
+      next
+        ? 'Auto-Sync enabled! Workspace will safely sync without overwriting remote data.'
+        : 'Auto-Sync disabled',
+      'info'
+    );
+  };
+
+  const handleCreateFreshGist = async () => {
+    if (!token) return;
+    if (!window.confirm('Create a brand new private GitHub Gist for your workspace?')) return;
+
+    setIsLoading(true);
+    setStatusMessage('Creating brand new private Gist on GitHub...');
+    try {
+      const newGId = await createFreshWorkspaceGist(token);
+      setGistId(newGId);
+      if (user) {
+        saveGitHubSession(token, user, newGId);
+      }
+      showToast('Created new private Gist! Pushing your current workspace now...', 'info');
+      // Push local data into the new Gist
+      const updatedIso = await pushToGitHubGist(token, newGId, {
+        version: '1.0.0',
+        updatedAt: new Date().toISOString(),
+        organizations,
+        activeOrgId,
+        activeProjectId,
+        environments,
+        history,
+      });
+      setLastSyncTime(new Date(updatedIso).toLocaleTimeString());
+      showToast('Workspace initialized and synced in new private Gist!', 'success');
+      fetchRevisions();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to create new Gist', 'error');
+    } finally {
+      setIsLoading(false);
+      setStatusMessage(null);
+    }
+  };
+
+  const handleApplyCloudToLocal = (remotePayload: SyncPayload) => {
+    onApplySyncedData(remotePayload);
+    setLastSyncTime(new Date().toLocaleTimeString());
+    setDetectedCloudPayload(null);
+    showToast('Restored and loaded cloud workspace onto this device!', 'success');
+  };
+
+  const handleSmartMerge = async (remotePayloadToMerge?: SyncPayload) => {
+    if (!token || !gistId) return;
+
+    setIsLoading(true);
+    setStatusMessage('Merging cloud & local collections...');
+
+    try {
+      let remotePayload = remotePayloadToMerge;
+      if (!remotePayload) {
+        remotePayload = await pullFromGitHubGist(token, gistId);
+      }
+
+      const localPayload: SyncPayload = {
+        version: '1.0.0',
+        updatedAt: new Date().toISOString(),
+        organizations,
+        activeOrgId,
+        activeProjectId,
+        environments,
+        history,
+      };
+
+      const merged = mergeSyncPayloads(localPayload, remotePayload);
+      onApplySyncedData(merged);
+
+      setStatusMessage('Saving merged workspace to GitHub Gist...');
+      const updatedIso = await pushToGitHubGist(token, gistId, merged);
+      setLastSyncTime(new Date(updatedIso).toLocaleTimeString());
+      setDetectedCloudPayload(null);
+      showToast('Smart merge successful! Both device & cloud are 100% up to date.', 'success');
+      fetchRevisions();
+    } catch (err: any) {
+      showToast(err.message || 'Smart merge failed', 'error');
+    } finally {
+      setIsLoading(false);
+      setStatusMessage(null);
+    }
   };
 
   const handlePushToCloud = async () => {
     if (!token || !gistId) return;
+
+    // Safety check: peek remote to avoid accidental destructive wipeout
+    try {
+      const remote = await peekRemoteWorkspace(token, gistId);
+      if (remote && remote.organizations && remote.organizations.length > 0) {
+        const remoteStats = countWorkspaceEntities(remote);
+        const localStats = countWorkspaceEntities(organizations);
+
+        if (remoteStats.requestCount > localStats.requestCount) {
+          const confirmed = window.confirm(
+            `Cloud Safety Notice:\n\nThe remote GitHub Gist currently contains ${remoteStats.requestCount} endpoints (${remoteStats.projectCount} projects), while this local device only has ${localStats.requestCount} endpoints.\n\nPushing will overwrite the cloud Gist with this device's data.\n\nTo preserve all data from both devices, click "Cancel" and choose "Smart Merge" instead.\n\nAre you sure you want to overwrite the cloud?`
+          );
+          if (!confirmed) return;
+        }
+      }
+    } catch (e) {
+      // Continue if peek fails
+    }
 
     setIsLoading(true);
     setStatusMessage('Pushing local workspace & history to GitHub Gist...');
@@ -153,7 +313,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
       });
 
       setLastSyncTime(new Date(updatedIso).toLocaleTimeString());
-      showToast('Workspace & execution history successfully backed up to GitHub Gist!', 'success');
+      showToast('Workspace & execution history backed up to GitHub Gist!', 'success');
       fetchRevisions();
     } catch (err: any) {
       showToast(err.message || 'Push sync failed', 'error');
@@ -198,19 +358,43 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   const handleRestoreRevision = async (commitSha: string) => {
     if (!token || !gistId) return;
 
-    if (!window.confirm(`Are you sure you want to restore workspace snapshot (${commitSha.slice(0, 7)})? Current unsaved changes will be replaced.`)) {
+    if (
+      !window.confirm(
+        `Are you sure you want to restore workspace snapshot (${commitSha.slice(0, 7)})? Current unsaved changes on this device will be replaced.`
+      )
+    ) {
       return;
     }
 
     setRestoringSha(commitSha);
+    setIsLoading(true);
+    setStatusMessage(`Restoring snapshot ${commitSha.slice(0, 7)} from GitHub...`);
+
     try {
       const restoredPayload = await restoreGistRevision(token, gistId, commitSha);
+      
+      // 1. Immediately apply the restored snapshot locally
       onApplySyncedData(restoredPayload);
-      showToast(`Successfully restored workspace snapshot commit ${commitSha.slice(0, 7)}!`, 'success');
+
+      // 2. Also write this restored snapshot back to GitHub Gist HEAD so cloud and device stay synchronized
+      setStatusMessage(`Syncing restored snapshot ${commitSha.slice(0, 7)} to GitHub Cloud...`);
+      const updatedIso = await pushToGitHubGist(token, gistId, restoredPayload);
+      setLastSyncTime(new Date(updatedIso).toLocaleTimeString());
+
+      const entityCount = countWorkspaceEntities(restoredPayload.organizations);
+      showToast(
+        `Successfully restored snapshot (${entityCount.requestCount} requests across ${entityCount.projectCount} projects)!`,
+        'success'
+      );
+
+      // Refresh revision list to reflect the restoration commit
+      fetchRevisions();
     } catch (err: any) {
       showToast(err.message || 'Failed to restore snapshot', 'error');
     } finally {
       setRestoringSha(null);
+      setIsLoading(false);
+      setStatusMessage(null);
     }
   };
 
@@ -234,7 +418,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                   100% Free Forever
                 </span>
               </div>
-              <p className="text-xs text-slate-400">Zero Maintenance • Private Gist Cloud Backup • Version History</p>
+              <p className="text-xs text-slate-400">Zero Maintenance • Safe Cross-Device Sync • Version History</p>
             </div>
           </div>
 
@@ -317,7 +501,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 leading-relaxed">
-                      Click below to generate and authorize your GitHub access credentials with pre-configured <code className="bg-slate-800 text-emerald-300 px-1 py-0.5 rounded">gist</code> permissions automatically.
+                      Click below to generate and authorize your GitHub access credentials with pre-configured <code className="bg-slate-800 text-emerald-300 px-1 py-0.5 rounded">gist</code> permissions.
                     </p>
 
                     <button
@@ -345,7 +529,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                         <span>Enter GitHub Access Token</span>
                       </div>
                       <p className="text-xs text-slate-400 leading-relaxed">
-                        Paste your token starting with <code className="bg-slate-800 text-emerald-300 px-1 py-0.5 rounded">ghp_</code>. Your data is synced to your private Gist with zero server costs or management.
+                        Paste your token starting with <code className="bg-slate-800 text-emerald-300 px-1 py-0.5 rounded">ghp_</code>. When logging in on another device, RestPulse protects your cloud data and never automatically overwrites previous changes.
                       </p>
 
                       <div>
@@ -376,12 +560,12 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                           {isLoading ? (
                             <>
                               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                              <span>Connecting...</span>
+                              <span>{statusMessage || 'Connecting...'}</span>
                             </>
                           ) : (
                             <>
                               <ShieldCheck className="w-4 h-4" />
-                              <span>Connect & Initialize Gist</span>
+                              <span>Connect & Check Cloud</span>
                             </>
                           )}
                         </button>
@@ -389,8 +573,125 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                     </div>
                   </form>
                 </div>
+              ) : detectedCloudPayload ? (
+                /* SMART CONFLICT & DEVICE SYNC RESOLUTION PROMPT */
+                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                  <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
+                    <div className="flex items-center space-x-2 text-emerald-400 font-bold text-xs uppercase tracking-wider">
+                      <Sparkles className="w-4 h-4" />
+                      <span>Cloud Workspace Found on GitHub</span>
+                    </div>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      We detected existing API collections saved from your account <strong className="text-white">@{user?.login}</strong>. Your cloud data is safe and has <strong className="text-emerald-300">not</strong> been overwritten. Choose how to synchronize data on this device:
+                    </p>
+                  </div>
+
+                  {/* Comparison Stats Card */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3.5 rounded-xl bg-slate-950/60 border border-emerald-500/30 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase">GitHub Cloud Workspace</span>
+                        <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+                      </div>
+                      <div className="text-sm font-bold text-slate-100">
+                        {detectedCloudPayload.remoteStats.requestCount} Endpoints
+                      </div>
+                      <div className="text-[11px] text-slate-400 space-y-0.5">
+                        <div>{detectedCloudPayload.remoteStats.projectCount} Projects • {detectedCloudPayload.remoteStats.orgCount} Orgs</div>
+                        <div className="text-[10px] text-slate-500 truncate">
+                          Updated {new Date(detectedCloudPayload.remote.updatedAt).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono text-slate-400 font-bold uppercase">This Device (Local)</span>
+                        <HardDrive className="w-3.5 h-3.5 text-slate-400" />
+                      </div>
+                      <div className="text-sm font-bold text-slate-100">
+                        {detectedCloudPayload.localStats.requestCount} Endpoints
+                      </div>
+                      <div className="text-[11px] text-slate-400 space-y-0.5">
+                        <div>{detectedCloudPayload.localStats.projectCount} Projects • {detectedCloudPayload.localStats.orgCount} Orgs</div>
+                        <div className="text-[10px] text-slate-500">Current local browser storage</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3 Resolution Actions */}
+                  <div className="space-y-2.5 pt-1">
+                    {/* Option 1: Pull Cloud Data (Recommended for new device) */}
+                    <button
+                      type="button"
+                      disabled={isLoading}
+                      onClick={() => handleApplyCloudToLocal(detectedCloudPayload.remote)}
+                      className="w-full p-3.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-left transition-all cursor-pointer flex items-center justify-between group shadow-sm"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <CloudDownload className="w-4 h-4 text-emerald-400" />
+                          <span className="text-xs font-bold text-emerald-300">
+                            1. Load & Restore Cloud Workspace (Recommended)
+                          </span>
+                          <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded font-semibold">
+                            Safe for new device
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-300 pl-6 leading-relaxed">
+                          Replaces starter local state with all your {detectedCloudPayload.remoteStats.requestCount} saved cloud endpoints.
+                        </p>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-emerald-400 group-hover:translate-x-1 transition-transform shrink-0 ml-2" />
+                    </button>
+
+                    {/* Option 2: Smart Merge */}
+                    <button
+                      type="button"
+                      disabled={isLoading}
+                      onClick={() => handleSmartMerge(detectedCloudPayload.remote)}
+                      className="w-full p-3.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/40 text-left transition-all cursor-pointer flex items-center justify-between group shadow-sm"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <GitMerge className="w-4 h-4 text-indigo-400" />
+                          <span className="text-xs font-bold text-indigo-300">
+                            2. Smart Merge (Combine Both)
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-300 pl-6 leading-relaxed">
+                          Combines remote cloud collections with any local endpoints created on this device without losing anything.
+                        </p>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-1 transition-transform shrink-0 ml-2" />
+                    </button>
+
+                    {/* Option 3: Keep Local */}
+                    <button
+                      type="button"
+                      disabled={isLoading}
+                      onClick={() => {
+                        setDetectedCloudPayload(null);
+                        showToast('Using local device data. Cloud data is safely preserved.', 'info');
+                      }}
+                      className="w-full p-3 rounded-xl bg-slate-950/40 hover:bg-slate-800/60 border border-slate-800 text-left transition-all cursor-pointer flex items-center justify-between group"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="flex items-center space-x-2">
+                          <HardDrive className="w-4 h-4 text-slate-400" />
+                          <span className="text-xs font-semibold text-slate-300">
+                            3. Keep This Device Workspace Only
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 pl-6">
+                          Work with current local state and do not push or overwrite cloud data.
+                        </p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
               ) : (
-                /* Authenticated State */
+                /* Authenticated State Dashboard */
                 <div className="space-y-5">
                   {/* User Badge Card */}
                   <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between">
@@ -406,16 +707,26 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                           <span className="text-xs font-mono text-emerald-400">@{user?.login}</span>
                         </div>
                         <div className="text-[11px] text-slate-400 flex items-center space-x-2">
-                          <span className="truncate max-w-[200px] font-mono">Gist: {gistId?.slice(0, 10)}...</span>
+                          <span className="truncate max-w-[160px] font-mono">Gist: {gistId?.slice(0, 8)}...</span>
                           <a
                             href={`https://gist.github.com/${user?.login}/${gistId}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-emerald-400 hover:underline flex items-center space-x-0.5"
                           >
-                            <span>Open Gist</span>
+                            <span>Open</span>
                             <ExternalLink className="w-2.5 h-2.5" />
                           </a>
+                          <span className="text-slate-600">•</span>
+                          <button
+                            type="button"
+                            onClick={handleCreateFreshGist}
+                            disabled={isLoading}
+                            className="text-xs text-indigo-400 hover:text-indigo-300 hover:underline cursor-pointer"
+                            title="Create a new dedicated Gist on GitHub"
+                          >
+                            Create New Gist
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -430,37 +741,72 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                     </button>
                   </div>
 
-                  {/* Manual Sync Control Grid */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={handlePushToCloud}
-                      disabled={isLoading}
-                      className="p-4 rounded-xl bg-slate-950/40 hover:bg-slate-800/60 border border-slate-800 hover:border-emerald-500/40 text-left transition-all cursor-pointer group space-y-2"
-                    >
-                      <div className="flex items-center justify-between">
-                        <CloudUpload className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-[10px] font-mono text-slate-400">LOCAL → CLOUD</span>
-                      </div>
-                      <div className="font-bold text-xs text-slate-200">Push Local to GitHub</div>
-                      <p className="text-[11px] text-slate-400 leading-snug">
-                        Upload current workspace ({organizations.length} orgs, {history.length} request logs) to your private Gist.
-                      </p>
-                    </button>
+                  {/* Device Workspace Summary Status */}
+                  <div className="p-3 rounded-xl bg-slate-950/40 border border-slate-800 flex items-center justify-between text-xs">
+                    <div className="flex items-center space-x-2 text-slate-300">
+                      <HardDrive className="w-4 h-4 text-emerald-400" />
+                      <span>
+                        Local Device: <strong className="text-white">{currentLocalStats.requestCount} endpoints</strong> across{' '}
+                        <strong className="text-white">{currentLocalStats.projectCount} projects</strong>
+                      </span>
+                    </div>
+                    {lastSyncTime && (
+                      <span className="text-[11px] text-slate-400 font-mono">
+                        Synced: {lastSyncTime}
+                      </span>
+                    )}
+                  </div>
 
+                  {/* Manual Sync Control Grid - 3 Options */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {/* Pull from Cloud */}
                     <button
                       type="button"
                       onClick={handlePullFromCloud}
                       disabled={isLoading}
-                      className="p-4 rounded-xl bg-slate-950/40 hover:bg-slate-800/60 border border-slate-800 hover:border-emerald-500/40 text-left transition-all cursor-pointer group space-y-2"
+                      className="p-3.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/60 border border-slate-800 hover:border-emerald-500/40 text-left transition-all cursor-pointer group space-y-1.5"
                     >
                       <div className="flex items-center justify-between">
-                        <CloudDownload className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-[10px] font-mono text-slate-400">CLOUD → LOCAL</span>
+                        <CloudDownload className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                        <span className="text-[9px] font-mono text-slate-400 font-semibold">CLOUD → LOCAL</span>
                       </div>
                       <div className="font-bold text-xs text-slate-200">Pull Cloud to Local</div>
-                      <p className="text-[11px] text-slate-400 leading-snug">
-                        Restore workspace collections, environments, and execution history from GitHub Gist.
+                      <p className="text-[10.5px] text-slate-400 leading-snug">
+                        Load collections and history from your GitHub Gist onto this device.
+                      </p>
+                    </button>
+
+                    {/* Smart Merge */}
+                    <button
+                      type="button"
+                      onClick={() => handleSmartMerge()}
+                      disabled={isLoading}
+                      className="p-3.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/60 border border-slate-800 hover:border-indigo-500/40 text-left transition-all cursor-pointer group space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <GitMerge className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform" />
+                        <span className="text-[9px] font-mono text-indigo-400 font-semibold">MERGE BOTH</span>
+                      </div>
+                      <div className="font-bold text-xs text-slate-200">Smart Merge</div>
+                      <p className="text-[10.5px] text-slate-400 leading-snug">
+                        Combines cloud & local collections without deleting any endpoints.
+                      </p>
+                    </button>
+
+                    {/* Push to Cloud */}
+                    <button
+                      type="button"
+                      onClick={handlePushToCloud}
+                      disabled={isLoading}
+                      className="p-3.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/60 border border-slate-800 hover:border-amber-500/40 text-left transition-all cursor-pointer group space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <CloudUpload className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                        <span className="text-[9px] font-mono text-slate-400 font-semibold">LOCAL → CLOUD</span>
+                      </div>
+                      <div className="font-bold text-xs text-slate-200">Push Local to Cloud</div>
+                      <p className="text-[10.5px] text-slate-400 leading-snug">
+                        Backup this device's workspace to your private GitHub Gist.
                       </p>
                     </button>
                   </div>
@@ -472,7 +818,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                       <div>
                         <div className="font-bold text-xs text-slate-200">Automatic Background Sync</div>
                         <p className="text-[11px] text-slate-400">
-                          Automatically push workspace updates & execution history to GitHub on change.
+                          Periodically backup workspace updates to your private GitHub Gist.
                         </p>
                       </div>
                     </div>
@@ -491,12 +837,6 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                       />
                     </button>
                   </div>
-
-                  {lastSyncTime && (
-                    <div className="text-center text-[11px] font-mono text-slate-400">
-                      Last synced at {lastSyncTime}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -505,76 +845,75 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
           {/* TAB 2: GIT REVISION DATA HISTORY */}
           {activeTab === 'history' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="font-bold text-xs text-slate-200 flex items-center space-x-2">
-                    <Clock className="w-4 h-4 text-emerald-400" />
-                    <span>Workspace Git Revision Log</span>
+                  <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                    Snapshot Commit History
                   </h4>
-                  <p className="text-[11px] text-slate-400">
-                    Every sync creates an immutable Git commit revision in your Gist. Roll back workspace state anytime.
-                  </p>
+                  <p className="text-xs text-slate-400">Every cloud push generates an immutable Git commit version.</p>
                 </div>
 
                 <button
                   type="button"
                   onClick={fetchRevisions}
-                  disabled={isLoadingRevisions || !token}
-                  className="text-xs text-slate-400 hover:text-emerald-400 flex items-center space-x-1 p-1.5 rounded bg-slate-800 hover:bg-slate-700 cursor-pointer"
+                  disabled={isLoadingRevisions}
+                  className="p-1.5 text-xs text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition-colors flex items-center space-x-1 cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRevisions ? 'animate-spin' : ''}`} />
                   <span>Refresh</span>
                 </button>
               </div>
 
-              {!token ? (
-                <div className="py-12 text-center text-slate-500 text-xs">
-                  Connect your GitHub token to inspect and restore historical Git snapshots.
-                </div>
-              ) : isLoadingRevisions ? (
-                <div className="py-12 text-center text-slate-400 text-xs flex items-center justify-center space-x-2">
-                  <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
-                  <span>Loading Git revisions...</span>
+              {isLoadingRevisions ? (
+                <div className="p-8 text-center text-xs text-slate-400 space-y-2">
+                  <RefreshCw className="w-5 h-5 animate-spin mx-auto text-emerald-400" />
+                  <p>Loading commit snapshots from GitHub...</p>
                 </div>
               ) : revisions.length === 0 ? (
-                <div className="py-12 text-center text-slate-500 text-xs">
-                  No Git revisions recorded yet. Perform a sync to record your first snapshot!
+                <div className="p-8 text-center rounded-xl bg-slate-950/40 border border-slate-800 space-y-2">
+                  <Clock className="w-6 h-6 text-slate-600 mx-auto" />
+                  <p className="text-xs text-slate-400">No previous version commits found.</p>
+                  <p className="text-[11px] text-slate-500">Push your workspace to GitHub to create version snapshots.</p>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                <div className="space-y-2">
                   {revisions.map((rev) => (
                     <div
                       key={rev.id}
-                      className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-slate-700 flex items-center justify-between transition-all"
+                      className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between hover:border-slate-700 transition-all"
                     >
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2 font-mono text-xs">
-                          <span className="font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                            {rev.version.slice(0, 7)}
-                          </span>
-                          <span className="text-slate-300">@{rev.user.login}</span>
+                      <div className="flex items-center space-x-3">
+                        <div className="w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center font-mono text-[10px] text-emerald-400 font-bold">
+                          {rev.id.slice(0, 4)}
                         </div>
-                        <div className="text-[11px] text-slate-400 flex items-center space-x-2">
-                          <span>{new Date(rev.committed_at).toLocaleString()}</span>
-                          {rev.change_status && (
-                            <span className="font-mono text-[10px]">
-                              <span className="text-emerald-400">+{rev.change_status.additions}</span>{' '}
-                              <span className="text-rose-400">-{rev.change_status.deletions}</span>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <span className="font-mono text-xs text-slate-200 font-semibold">{rev.id.slice(0, 7)}</span>
+                            <span className="text-[11px] text-slate-400">
+                              by {rev.user?.login || user?.login || 'you'}
                             </span>
-                          )}
+                          </div>
+                          <div className="text-[10px] text-slate-500 flex items-center space-x-2">
+                            <span>{new Date(rev.committed_at).toLocaleString()}</span>
+                            {rev.change_status && (
+                              <span>
+                                (+{rev.change_status.additions} / -{rev.change_status.deletions})
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
 
                       <button
                         type="button"
-                        onClick={() => handleRestoreRevision(rev.version)}
-                        disabled={restoringSha === rev.version}
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-emerald-500/20 text-slate-200 hover:text-emerald-300 border border-slate-700 hover:border-emerald-500/40 text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-all cursor-pointer"
+                        onClick={() => handleRestoreRevision(rev.id)}
+                        disabled={restoringSha === rev.id}
+                        className="px-2.5 py-1 text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg flex items-center space-x-1 transition-all cursor-pointer"
                       >
-                        {restoringSha === rev.version ? (
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        {restoringSha === rev.id ? (
+                          <RefreshCw className="w-3 h-3 animate-spin" />
                         ) : (
-                          <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                          <RotateCcw className="w-3 h-3" />
                         )}
                         <span>Restore Snapshot</span>
                       </button>
@@ -585,58 +924,63 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
             </div>
           )}
 
-          {/* TAB 3: TOKEN GUIDE */}
+          {/* TAB 3: TOKEN SETUP GUIDE */}
           {activeTab === 'guide' && (
-            <div className="space-y-4 text-xs">
+            <div className="space-y-4 text-xs text-slate-300">
               <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
-                <h4 className="font-bold text-sm text-slate-100 flex items-center space-x-2">
-                  <FileCode className="w-4 h-4 text-emerald-400" />
-                  <span>How to create a free GitHub Token (1 Minute)</span>
-                </h4>
-
-                <ol className="list-decimal list-inside space-y-2 text-slate-300 leading-relaxed">
+                <div className="font-bold text-slate-100 flex items-center space-x-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>How to generate a Free Personal Access Token</span>
+                </div>
+                <ol className="list-decimal list-inside space-y-2 text-slate-400 leading-relaxed">
                   <li>
-                    Log in to your GitHub account and open{' '}
+                    Visit{' '}
                     <a
                       href="https://github.com/settings/tokens"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-emerald-400 hover:underline inline-flex items-center space-x-1 font-semibold"
+                      className="text-emerald-400 underline inline-flex items-center space-x-0.5"
                     >
-                      <span>GitHub Developer Settings</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>.
+                      <span>GitHub Token Settings</span>
+                      <ExternalLink className="w-3 h-3 ml-0.5" />
+                    </a>
                   </li>
-                  <li>Click <strong>"Generate new token"</strong> (Classic or Fine-grained).</li>
-                  <li>Give your token a description like <code className="bg-slate-800 text-emerald-300 px-1 rounded font-mono">RestPulse Workspace Sync</code>.</li>
+                  <li>Click <strong>Generate new token (classic)</strong>.</li>
+                  <li>Give it a Note: e.g. <code className="bg-slate-800 text-emerald-300 px-1 py-0.5 rounded">RestPulse Sync</code></li>
                   <li>
-                    Check the box for <code className="bg-slate-800 text-emerald-300 px-1.5 py-0.5 rounded font-mono font-bold">gist</code> permission (Create and edit gists).
+                    Under Scopes, check only <code className="bg-slate-800 text-emerald-300 px-1 py-0.5 rounded">gist</code> (create and read gists).
                   </li>
-                  <li>Click <strong>"Generate Token"</strong> and copy the token string starting with <code className="bg-slate-800 text-emerald-300 px-1 rounded font-mono">ghp_</code>.</li>
-                  <li>Paste your token into RestPulse to start syncing for free!</li>
+                  <li>Click <strong>Generate Token</strong> and copy the token (<code className="bg-slate-800 text-emerald-300 px-1 py-0.5 rounded">ghp_...</code>).</li>
+                  <li>Paste it into RestPulse to sync across all your laptops and browsers!</li>
                 </ol>
               </div>
 
-              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-slate-300 space-y-1">
-                <div className="font-bold text-xs text-emerald-400 flex items-center space-x-1.5">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Security & Privacy Guarantee</span>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Your token is stored locally in your browser’s secure storage and is only used to directly communicate with official GitHub Gist APIs. Zero server proxies, zero third-party databases, zero cost.
+              <div className="p-4 rounded-xl bg-slate-950/40 border border-slate-800 space-y-2">
+                <div className="font-bold text-slate-200">Safe Multi-Device Philosophy</div>
+                <p className="text-slate-400 leading-relaxed text-[11px]">
+                  RestPulse stores your collections in private Gists directly under your GitHub account. No third-party servers ever see your request payloads, API keys, or tokens. When you log in on another device, RestPulse prevents automatic overwrite and gives you full control to pull, smart-merge, or keep local data.
                 </p>
               </div>
             </div>
           )}
+        </div>
 
-          {statusMessage && (
-            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold flex items-center space-x-2 animate-pulse">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
-              <span>{statusMessage}</span>
-            </div>
-          )}
+        {/* Footer */}
+        <div className="px-6 py-3 border-t border-slate-800 bg-slate-950/40 flex items-center justify-between text-xs text-slate-400">
+          <div className="flex items-center space-x-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span>End-to-End Encrypted via Private GitHub Gists</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>
   );
 };
+
