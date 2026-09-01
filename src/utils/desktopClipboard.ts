@@ -113,10 +113,16 @@ export function initDesktopClipboardHandlers() {
       const isCmdOrCtrl = e.metaKey || e.ctrlKey;
       if (!isCmdOrCtrl) return;
 
-      const key = e.key ? e.key.toLowerCase() : '';
       const activeEl = document.activeElement as HTMLElement | null;
       const isInputOrTextarea =
         activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+
+      // If in standard web browser (not Neutralino API mode) and focused on an input/textarea,
+      // let the browser natively handle Ctrl+V, Ctrl+C, Ctrl+X, Ctrl+A, Ctrl+Z, Ctrl+Y without e.preventDefault()
+      if (!canUseNeutralinoClipboard() && isInputOrTextarea) {
+        return;
+      }
+      const key = e.key ? e.key.toLowerCase() : '';
       const isContentEditable = activeEl && (activeEl.isContentEditable || activeEl.getAttribute('contenteditable') === 'true');
       const isEditable = isInputOrTextarea || isContentEditable;
 

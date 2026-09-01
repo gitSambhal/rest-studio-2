@@ -15,6 +15,7 @@ import {
   HTTPMethod,
   RequestAuth,
   WorkspaceTab,
+  RequestStatusInfo,
 } from './types';
 import { INITIAL_ORGANIZATIONS, INITIAL_GLOBAL_VARIABLES } from './data/initialOrganizations';
 import { Header } from './components/Header';
@@ -261,9 +262,32 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Execution State
-  const [isExecuting, setIsExecuting] = useState<boolean>(false);
+  // Execution State (per-request execution tracking and abort controllers)
+  const [executingRequests, setExecutingRequests] = useState<Record<string, AbortController>>({});
+  const [requestStatuses, setRequestStatuses] = useState<Record<string, RequestStatusInfo>>({});
   const [lastResponse, setLastResponse] = useState<ExecutionResponse | null>(null);
+
+  const handleStopRequest = (requestId: string) => {
+    const controller = executingRequests[requestId];
+    if (controller) {
+      controller.abort();
+      setExecutingRequests((prev) => {
+        const next = { ...prev };
+        delete next[requestId];
+        return next;
+      });
+      setRequestStatuses((prev) => ({
+        ...prev,
+        [requestId]: {
+          state: 'error',
+          statusCode: 0,
+          error: 'Request Cancelled',
+          timestamp: Date.now(),
+        },
+      }));
+      showToast('info', 'Request Stopped', 'The request execution was cancelled.');
+    }
+  };
 
   // History State
   const [history, setHistory] = useState<RequestHistoryItem[]>(() => {
@@ -426,7 +450,15 @@ export default function App() {
 
   // Execute Request Handler
   const handleExecuteRequest = async (req: RestRequest): Promise<ExecutionResponse> => {
-    setIsExecuting(true);
+    const controller = new AbortController();
+    setExecutingRequests((prev) => ({ ...prev, [req.id]: controller }));
+    setRequestStatuses((prev) => ({
+      ...prev,
+      [req.id]: {
+        state: 'loading',
+        timestamp: Date.now(),
+      },
+    }));
 
     // 1. Resolve URL with 3-level env variables
     const urlResolution = resolveEnvVariables(req.url, scopeCtx);
@@ -534,7 +566,11 @@ export default function App() {
           scriptLogs,
         };
         setLastResponse(preErrResp);
-        setIsExecuting(false);
+        setExecutingRequests((prev) => {
+          const next = { ...prev };
+          delete next[req.id];
+          return next;
+        });
         showToast('error', 'Pre-Request Script Error', preResult.error);
         return preErrResp;
       }
@@ -556,6 +592,7 @@ export default function App() {
         url: targetUrl,
         headers: resolvedHeaders,
         body: resolvedBody,
+        signal: controller.signal,
       });
       responseData.scriptLogs = scriptLogs;
 
@@ -577,6 +614,16 @@ export default function App() {
       }
 
       setLastResponse(responseData);
+      setRequestStatuses((prev) => ({
+        ...prev,
+        [req.id]: {
+          state: responseData.ok || (responseData.status >= 200 && responseData.status < 400) ? 'success' : 'error',
+          statusCode: responseData.status,
+          duration: responseData.duration,
+          error: responseData.error,
+          timestamp: Date.now(),
+        },
+      }));
 
       if (req.assertions && req.assertions.length > 0) {
         const { assertions: evaluated } = evaluateAssertions(req.assertions, responseData);
@@ -618,9 +665,22 @@ export default function App() {
         scriptLogs,
       };
       setLastResponse(errResp);
+      setRequestStatuses((prev) => ({
+        ...prev,
+        [req.id]: {
+          state: 'error',
+          statusCode: errResp.status || 0,
+          error: errResp.error,
+          timestamp: Date.now(),
+        },
+      }));
       return errResp;
     } finally {
-      setIsExecuting(false);
+      setExecutingRequests((prev) => {
+        const next = { ...prev };
+        delete next[req.id];
+        return next;
+      });
     }
   };
 
@@ -645,18 +705,25 @@ export default function App() {
 
     const file = activeProject?.files?.find((f) => f.id === fileId);
     const req = file?.requests?.find((r) => r.id === requestId);
+    const reqName = req?.name || 'REST Request';
+    const reqMethod = req?.method || 'GET';
 
     const existingTab = tabs?.find((t) => t.requestId === requestId);
     if (existingTab) {
+      setTabs((prevTabs) =>
+        prevTabs.map((t) =>
+          t.requestId === requestId ? { ...t, title: reqName, method: reqMethod } : t
+        )
+      );
       setActiveTabId(existingTab.id);
     } else {
       const newTab: WorkspaceTab = {
         id: 'tab_' + Math.random().toString(36).substring(2, 9),
         type: 'request',
-        title: req?.name || 'REST Request',
+        title: reqName,
         fileId,
         requestId,
-        method: req?.method || 'GET',
+        method: reqMethod,
       };
       setTabs([...tabs, newTab]);
       setActiveTabId(newTab.id);
@@ -868,6 +935,13 @@ export default function App() {
       f.id === activeFile.id ? { ...f, requests: updatedRequests, updatedAt: Date.now() } : f
     );
     updateProjectFiles(updatedFiles);
+    setTabs((prevTabs) =>
+      prevTabs.map((t) =>
+        t.requestId === updatedReq.id
+          ? { ...t, title: updatedReq.name || 'REST Request', method: updatedReq.method }
+          : t
+      )
+    );
   };
 
   // FILE CRUD
@@ -1189,6 +1263,11 @@ export default function App() {
       f.id === fileId ? { ...f, requests: updatedRequests } : f
     );
     updateProjectFiles(updatedFiles);
+    setTabs((prevTabs) =>
+      prevTabs.map((t) =>
+        t.requestId === requestId ? { ...t, title: newName || 'REST Request' } : t
+      )
+    );
   };
 
   const handleDuplicateRequest = (fileId: string, requestId: string) => {
@@ -1635,6 +1714,11 @@ export default function App() {
           <TabBar
             tabs={tabs}
             activeTabId={activeTabId}
+            executingRequestIds={Object.keys(executingRequests).reduce(
+              (acc, id) => ({ ...acc, [id]: true }),
+              {} as Record<string, boolean>
+            )}
+            requestStatuses={requestStatuses}
             onSelectTab={(tabId) => {
               setActiveTabId(tabId);
               const tabObj = tabs.find((t) => t.id === tabId);
@@ -1664,6 +1748,7 @@ export default function App() {
               project={activeProject}
               activeFileId={activeFileId}
               activeRequestId={activeRequestId}
+              requestStatuses={requestStatuses}
               onSelectFile={(fId) => {
                 setActiveFileId(fId);
                 const f = activeProject?.files?.find((file) => file.id === fId);
@@ -1715,7 +1800,8 @@ export default function App() {
                           onUpdateProjectAuth={handleUpdateProjectAuth}
                           onUpdateRequest={handleUpdateActiveRequest}
                           onSendRequest={handleExecuteRequest}
-                          isLoading={isExecuting}
+                          onStopRequest={handleStopRequest}
+                          isLoading={Boolean(executingRequests[activeRequest.id])}
                           lastResponse={lastResponse}
                         />
                       </div>
@@ -1746,7 +1832,7 @@ export default function App() {
                       >
                         <ResponseViewer
                           response={lastResponse}
-                          isLoading={isExecuting}
+                          isLoading={Boolean(executingRequests[activeRequest.id])}
                           assertions={activeRequest.assertions}
                           savedResponses={activeRequest.savedResponses}
                           onSaveResponseSnapshot={(resp, name) => {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { HTTPMethod, Project, RestFile, RestFolder, RestRequest } from '../types';
+import { HTTPMethod, Project, RestFile, RestFolder, RestRequest, RequestStatusInfo } from '../types';
 import { PromptModal } from './PromptModal';
 import {
   FileCode,
@@ -25,6 +25,7 @@ interface SidebarProps {
   project: Project;
   activeFileId: string | null;
   activeRequestId: string | null;
+  requestStatuses?: Record<string, RequestStatusInfo>;
   onSelectFile: (fileId: string) => void;
   onSelectRequest: (fileId: string, requestId: string) => void;
   onCreateFile: (fileName: string, folderId?: string) => void;
@@ -49,6 +50,7 @@ interface RenderRestFileProps {
   projectFolders: RestFolder[];
   activeFileId: string | null;
   activeRequestId: string | null;
+  requestStatuses?: Record<string, RequestStatusInfo>;
   searchQuery: string;
   getMethodBadgeColor: (method: HTTPMethod) => string;
   onSelectFile: (fileId: string) => void;
@@ -78,6 +80,7 @@ const RenderRestFile: React.FC<RenderRestFileProps> = ({
   projectFolders,
   activeFileId,
   activeRequestId,
+  requestStatuses,
   searchQuery,
   getMethodBadgeColor,
   onSelectFile,
@@ -227,6 +230,7 @@ const RenderRestFile: React.FC<RenderRestFileProps> = ({
         <div className="pl-4 space-y-0.5 border-l border-slate-800 ml-3">
           {filteredRequests.map((req, reqIdx) => {
             const isReqActive = activeFileId === file.id && activeRequestId === req.id;
+            const statusInfo = requestStatuses?.[req.id];
             return (
               <div
                 key={req.id}
@@ -240,11 +244,26 @@ const RenderRestFile: React.FC<RenderRestFileProps> = ({
                     : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
                 }`}
               >
-                <div className="flex items-center space-x-1.5 min-w-0">
-                  <span className={`text-[9px] font-extrabold px-1 rounded ${getMethodBadgeColor(req.method)}`}>
+                <div className="flex items-center space-x-1.5 min-w-0 flex-1 pr-1">
+                  <span className={`text-[9px] font-extrabold px-1 rounded shrink-0 ${getMethodBadgeColor(req.method)}`}>
                     {req.method}
                   </span>
                   <span className="truncate">{req.name}</span>
+
+                  {/* Status process indicator */}
+                  {statusInfo?.state === 'loading' && (
+                    <div className="w-2.5 h-2.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin shrink-0 ml-auto" title="Executing request..." />
+                  )}
+                  {statusInfo?.state === 'success' && (
+                    <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-bold shrink-0 ml-auto" title={`Success (${statusInfo.statusCode || 200})`}>
+                      {statusInfo.statusCode || 200}
+                    </span>
+                  )}
+                  {statusInfo?.state === 'error' && (
+                    <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-rose-500/20 text-rose-400 font-bold shrink-0 ml-auto" title={`Error (${statusInfo.statusCode || 'ERR'})`}>
+                      {statusInfo.statusCode && statusInfo.statusCode > 0 ? statusInfo.statusCode : 'ERR'}
+                    </span>
+                  )}
                 </div>
 
                 {/* Actions Menu for Request */}
@@ -338,6 +357,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   project,
   activeFileId,
   activeRequestId,
+  requestStatuses,
   onSelectFile,
   onSelectRequest,
   onCreateFile,
@@ -591,6 +611,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       projectFolders={project?.folders || []}
                       activeFileId={activeFileId}
                       activeRequestId={activeRequestId}
+                      requestStatuses={requestStatuses}
                       searchQuery={searchQuery}
                       getMethodBadgeColor={getMethodBadgeColor}
                       onSelectFile={onSelectFile}
@@ -626,6 +647,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               projectFolders={project?.folders || []}
               activeFileId={activeFileId}
               activeRequestId={activeRequestId}
+              requestStatuses={requestStatuses}
               searchQuery={searchQuery}
               getMethodBadgeColor={getMethodBadgeColor}
               onSelectFile={onSelectFile}

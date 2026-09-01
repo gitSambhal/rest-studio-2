@@ -5,6 +5,7 @@ export interface HttpRequestOptions {
   url: string;
   headers?: Record<string, string>;
   body?: any;
+  signal?: AbortSignal;
 }
 
 /**
@@ -488,13 +489,15 @@ export async function executeDirectClientFetch(
   method: string,
   targetUrl: string,
   headers: Record<string, string>,
-  body?: any
+  body?: any,
+  signal?: AbortSignal
 ): Promise<ExecutionResponse> {
   const startTime = performance.now();
 
   const fetchOptions: any = {
     method: method.toUpperCase(),
     headers: { ...headers },
+    signal,
   };
 
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) && body !== undefined && body !== null) {
@@ -526,6 +529,19 @@ export async function executeDirectClientFetch(
     };
   } catch (err: any) {
     const duration = Math.round(performance.now() - startTime);
+    if (err.name === 'AbortError' || signal?.aborted) {
+      return {
+        status: 0,
+        statusText: 'Cancelled',
+        headers: {},
+        body: JSON.stringify({ message: 'Request was cancelled by user' }, null, 2),
+        size: 0,
+        duration,
+        timestamp: Date.now(),
+        ok: false,
+        error: 'Request Cancelled',
+      };
+    }
     return {
       status: 0,
       statusText: 'Network Error',
@@ -559,7 +575,8 @@ export async function executeDirectLocalFetch(
   method: string,
   targetUrl: string,
   headers: Record<string, string>,
-  body?: any
+  body?: any,
+  signal?: AbortSignal
 ): Promise<ExecutionResponse> {
   const startTime = performance.now();
 
@@ -571,6 +588,7 @@ export async function executeDirectLocalFetch(
     method: method.toUpperCase(),
     headers: { ...headers },
     targetAddressSpace: getTargetAddressSpace(targetUrl),
+    signal,
   };
 
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) && body !== undefined && body !== null) {
@@ -602,6 +620,19 @@ export async function executeDirectLocalFetch(
     };
   } catch (err: any) {
     const duration = Math.round(performance.now() - startTime);
+    if (err.name === 'AbortError' || signal?.aborted) {
+      return {
+        status: 0,
+        statusText: 'Cancelled',
+        headers: {},
+        body: JSON.stringify({ message: 'Request was cancelled by user' }, null, 2),
+        size: 0,
+        duration,
+        timestamp: Date.now(),
+        ok: false,
+        error: 'Request Cancelled',
+      };
+    }
     const permState = await getLocalNetworkPermissionState(targetUrl);
     return buildLocalFetchError(targetUrl, permState, err?.message || 'Failed to fetch', duration);
   }
@@ -615,13 +646,15 @@ async function executeServerProxyFetch(
   method: string,
   targetUrl: string,
   headers: Record<string, string>,
-  body?: any
+  body?: any,
+  signal?: AbortSignal
 ): Promise<ExecutionResponse | null> {
   try {
     const proxyRes = await fetch('/api/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ method, url: targetUrl, headers, body }),
+      signal,
     });
 
     const contentType = proxyRes.headers.get('content-type') || '';
@@ -651,7 +684,7 @@ async function executeServerProxyFetch(
  */
 export async function executeHttpRequest(options: HttpRequestOptions): Promise<ExecutionResponse> {
   const startTime = performance.now();
-  const { method = 'GET', url, headers = {}, body } = options;
+  const { method = 'GET', url, headers = {}, body, signal } = options;
 
   if (!url || typeof url !== 'string' || !url.trim()) {
     return {
@@ -690,10 +723,6 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
       if (neuRes.status > 0) {
         return neuRes;
       }
-      // Local targets must NEVER fall through to the browser path in the desktop
-      // app: the webview cannot do Local Network Access, so a fallback would only
-      // produce a misleading "browser does not support LNA" error. Surface the
-      // native diagnostic instead. (Public targets keep the browser fallback.)
       if (isLocalTargetUrl(targetUrl)) {
         return neuRes;
       }
@@ -704,16 +733,16 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
 
   // 2. Web app: local target → direct browser fetch with Local Network Access permission
   if (isLocalTargetUrl(targetUrl)) {
-    return await executeDirectLocalFetch(method, targetUrl, headers, body);
+    return await executeDirectLocalFetch(method, targetUrl, headers, body, signal);
   }
 
   // 3. Web app: public target → direct fetch first, then server proxy fallback
-  const directRes = await executeDirectClientFetch(method, targetUrl, headers, body);
-  if (directRes.status > 0) {
+  const directRes = await executeDirectClientFetch(method, targetUrl, headers, body, signal);
+  if (directRes.status > 0 || signal?.aborted) {
     return directRes;
   }
 
-  const proxyRes = await executeServerProxyFetch(method, targetUrl, headers, body);
+  const proxyRes = await executeServerProxyFetch(method, targetUrl, headers, body, signal);
   if (proxyRes) {
     return proxyRes;
   }

@@ -30,6 +30,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Key,
+  Square,
 } from 'lucide-react';
 
 import { isLocalTargetUrl, isNeutralinoActive, isLnaPromptApplicable, getLocalNetworkPermissionState, getLnaPermissionLabel, LocalNetworkPermissionState } from '../utils/httpExecutor';
@@ -43,6 +44,7 @@ interface RequestEditorProps {
   onUpdateProjectAuth?: (auth: RequestAuth) => void;
   onUpdateRequest: (updated: RestRequest) => void;
   onSendRequest: (req: RestRequest) => void;
+  onStopRequest?: (requestId: string) => void;
   isLoading: boolean;
   lastResponse?: ExecutionResponse | null;
 }
@@ -56,6 +58,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   onUpdateProjectAuth,
   onUpdateRequest,
   onSendRequest,
+  onStopRequest,
   isLoading,
   lastResponse,
 }) => {
@@ -67,6 +70,22 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   const [isCurlModalOpen, setIsCurlModalOpen] = useState(false);
   const [copiedModalCurl, setCopiedModalCurl] = useState(false);
   const [lnaState, setLnaState] = useState<LocalNetworkPermissionState>('unsupported');
+
+  // Ctrl+Enter or Cmd+Enter shortcut handler
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (isLoading) {
+          if (onStopRequest) onStopRequest(request.id);
+        } else {
+          onSendRequest(request);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isLoading, request, onSendRequest, onStopRequest]);
 
   // Resolve env-var placeholders BEFORE deciding whether the target is local: a
   // raw "{{baseUrl}}/users" must never be misclassified as a single-label
@@ -394,22 +413,33 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
               <span>cURL</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => onSendRequest(request)}
-              disabled={isLoading}
-              className="flex items-center space-x-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs px-4 py-2 rounded-lg shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 cursor-pointer"
-            >
-              {isLoading ? (
-                <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Send className="w-4 h-4 fill-slate-950" />
-              )}
-              <span>Send Request</span>
-              <span className="text-[10px] font-mono bg-slate-950/20 text-slate-950 px-1.5 py-0.5 rounded">
-                Ctrl+Enter
-              </span>
-            </button>
+            {isLoading ? (
+              <button
+                type="button"
+                onClick={() => onStopRequest?.(request.id)}
+                className="flex items-center space-x-2 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-400 hover:to-red-500 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-lg shadow-rose-500/20 transition-all cursor-pointer"
+                title="Click to cancel running request"
+              >
+                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
+                <Square className="w-3.5 h-3.5 fill-white shrink-0" />
+                <span>Stop Request</span>
+                <span className="text-[10px] font-mono bg-black/20 text-white px-1.5 py-0.5 rounded">
+                  Ctrl+Enter
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onSendRequest(request)}
+                className="flex items-center space-x-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs px-4 py-2 rounded-lg shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+              >
+                <Send className="w-4 h-4 fill-slate-950 shrink-0" />
+                <span>Send Request</span>
+                <span className="text-[10px] font-mono bg-slate-950/20 text-slate-950 px-1.5 py-0.5 rounded">
+                  Ctrl+Enter
+                </span>
+              </button>
+            )}
           </div>
         </div>
 

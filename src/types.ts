@@ -232,3 +232,11 @@ export interface RequestHistoryItem {
   response: ExecutionResponse;
 }
 
+export interface RequestStatusInfo {
+  state: 'loading' | 'success' | 'error';
+  statusCode?: number;
+  duration?: number;
+  error?: string;
+  timestamp?: number;
+}
+

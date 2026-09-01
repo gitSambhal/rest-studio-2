@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { WorkspaceTab, HTTPMethod } from '../types';
+import React, { useState, useEffect, useRef } from 'react';
+import { WorkspaceTab, HTTPMethod, RequestStatusInfo } from '../types';
 import {
   X,
   FileCode,
@@ -18,6 +18,8 @@ import {
 interface TabBarProps {
   tabs: WorkspaceTab[];
   activeTabId: string;
+  executingRequestIds?: Record<string, boolean>;
+  requestStatuses?: Record<string, RequestStatusInfo>;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onCloseOtherTabs?: (tabId: string) => void;
@@ -45,6 +47,8 @@ const METHOD_COLORS: Record<HTTPMethod, string> = {
 export const TabBar: React.FC<TabBarProps> = ({
   tabs,
   activeTabId,
+  executingRequestIds,
+  requestStatuses,
   onSelectTab,
   onCloseTab,
   onCloseOtherTabs,
@@ -62,6 +66,19 @@ export const TabBar: React.FC<TabBarProps> = ({
     y: number;
     tabId: string;
   } | null>(null);
+
+  const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Automatically scroll the active tab to the center of the tab bar view
+  useEffect(() => {
+    if (activeTabId && tabRefs.current[activeTabId]) {
+      tabRefs.current[activeTabId]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+    }
+  }, [activeTabId]);
 
   useEffect(() => {
     const handleClickOutside = () => {
@@ -122,9 +139,18 @@ export const TabBar: React.FC<TabBarProps> = ({
       <div className="flex items-center space-x-1 overflow-x-auto no-scrollbar py-1">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
+          const isExecutingThisTab = Boolean(
+            (tab.requestId && executingRequestIds?.[tab.requestId]) ||
+            (tab.requestId && requestStatuses?.[tab.requestId]?.state === 'loading')
+          );
+          const reqStatus = tab.requestId ? requestStatuses?.[tab.requestId] : undefined;
+
           return (
             <div
               key={tab.id}
+              ref={(el) => {
+                tabRefs.current[tab.id] = el;
+              }}
               onClick={() => onSelectTab(tab.id)}
               onContextMenu={(e) => handleContextMenu(e, tab.id)}
               className={`group relative flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all border shrink-0 ${
@@ -133,8 +159,24 @@ export const TabBar: React.FC<TabBarProps> = ({
                   : 'bg-slate-950/40 text-slate-400 border-transparent hover:bg-slate-800/50 hover:text-slate-200'
               }`}
             >
-              {renderTabIcon(tab)}
+              {isExecutingThisTab ? (
+                <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin shrink-0" title="Request executing..." />
+              ) : (
+                renderTabIcon(tab)
+              )}
               <span className="truncate max-w-[140px] font-mono text-[11px]">{tab.title}</span>
+
+              {/* Status Indicator inside Tab */}
+              {!isExecutingThisTab && reqStatus?.state === 'success' && (
+                <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-bold shrink-0" title={`Status: ${reqStatus.statusCode || 200}`}>
+                  {reqStatus.statusCode || 200}
+                </span>
+              )}
+              {!isExecutingThisTab && reqStatus?.state === 'error' && (
+                <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-rose-500/20 text-rose-400 font-bold shrink-0" title={`Error: ${reqStatus.statusCode || 'ERR'}`}>
+                  {reqStatus.statusCode && reqStatus.statusCode > 0 ? reqStatus.statusCode : 'ERR'}
+                </span>
+              )}
 
               {tab.isDirty && (
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Unsaved changes" />
