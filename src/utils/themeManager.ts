@@ -158,18 +158,19 @@ export function applyTheme(themeId: UIThemeId) {
   document.body.classList.add(`theme-${themeId}`);
 
   try {
+    localStorage.setItem('reststudio_theme_preset', themeId);
+    localStorage.setItem('reststudio_theme', selectedTheme.category);
     localStorage.setItem('restpulse_theme_preset', themeId);
-    localStorage.setItem('restpulse_theme', selectedTheme.category);
   } catch (e) {}
 }
 
 export function getSavedTheme(): UIThemeId {
   try {
-    const savedPreset = localStorage.getItem('restpulse_theme_preset') as UIThemeId;
+    const savedPreset = (localStorage.getItem('reststudio_theme_preset') || localStorage.getItem('restpulse_theme_preset')) as UIThemeId;
     if (savedPreset && THEMES.some((t) => t.id === savedPreset)) {
       return savedPreset;
     }
-    const legacyTheme = localStorage.getItem('restpulse_theme');
+    const legacyTheme = localStorage.getItem('reststudio_theme') || localStorage.getItem('restpulse_theme');
     if (legacyTheme === 'light') return 'light';
   } catch (e) {}
   return 'dark';

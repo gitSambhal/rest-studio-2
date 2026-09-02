@@ -118,7 +118,7 @@ export const QuickHelpModal: React.FC<QuickHelpModalProps> = ({ onClose }) => {
             }`}
           >
             <FileText className="w-4 h-4" />
-            <span>.rest Syntax</span>
+            <span>Script Syntax</span>
           </button>
 
           <button
@@ -177,25 +177,53 @@ export const QuickHelpModal: React.FC<QuickHelpModalProps> = ({ onClose }) => {
             </div>
           )}
 
-          {/* TAB 2: ENV HIERARCHY */}
+          {/* TAB 2: ENV HIERARCHY & SUPPORTED VARIABLES */}
           {activeTab === 'env' && (
-            <div className="space-y-5">
+            <div className="space-y-6">
               <div>
                 <h4 className="text-sm font-semibold text-slate-100 flex items-center space-x-2">
                   <Layers className="w-4 h-4 text-emerald-400" />
-                  <span>4-Tier Variable Scope Precedence</span>
+                  <span>Supported Variables & 4-Tier Scope Hierarchy</span>
                 </h4>
                 <p className="text-xs text-slate-400 mt-1">
-                  RestStudio resolves dynamic variables (<code className="text-emerald-400 font-mono">{`{{variable}}`}</code>) across four distinct, clean scoping tiers (highest priority first):
+                  Supported variables are dynamic placeholders enclosed in double curly braces (<code className="text-emerald-400 font-mono">{`{{variableName}}`}</code>) that allow parameterizing requests across environments without hardcoding credentials or endpoint URLs.
                 </p>
               </div>
 
+              {/* Supported Usage Locations */}
+              <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
+                <div className="text-xs font-bold text-slate-200 flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
+                  <span>Where You Can Use Supported Variables:</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 bg-slate-900/90 border border-slate-800/80 rounded-lg">
+                    <span className="font-semibold text-emerald-300">Request URLs</span>
+                    <p className="text-[11px] text-slate-400 mt-0.5"><code className="text-slate-200 font-mono">{`{{baseUrl}}/v1/users/{{userId}}`}</code></p>
+                  </div>
+                  <div className="p-2.5 bg-slate-900/90 border border-slate-800/80 rounded-lg">
+                    <span className="font-semibold text-emerald-300">Headers & Auth</span>
+                    <p className="text-[11px] text-slate-400 mt-0.5"><code className="text-slate-200 font-mono">{`Authorization: Bearer {{token}}`}</code></p>
+                  </div>
+                  <div className="p-2.5 bg-slate-900/90 border border-slate-800/80 rounded-lg">
+                    <span className="font-semibold text-emerald-300">Query Parameters</span>
+                    <p className="text-[11px] text-slate-400 mt-0.5"><code className="text-slate-200 font-mono">{`?apiKey={{key}}&tenant={{tenantId}}`}</code></p>
+                  </div>
+                  <div className="p-2.5 bg-slate-900/90 border border-slate-800/80 rounded-lg">
+                    <span className="font-semibold text-emerald-300">Request Bodies (JSON/Form)</span>
+                    <p className="text-[11px] text-slate-400 mt-0.5"><code className="text-slate-200 font-mono">{`{ "email": "{{userEmail}}" }`}</code></p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Scope Hierarchy */}
               <div className="space-y-2.5">
+                <div className="text-xs font-bold text-slate-200">4-Tier Variable Scope Precedence (Highest Priority First):</div>
                 <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-start space-x-3">
                   <span className="px-2 py-0.5 bg-emerald-500 text-slate-950 font-bold font-mono text-[11px] rounded shrink-0">1. Local Var</span>
                   <div>
                     <div className="text-xs font-bold text-emerald-300">Local / File Variables (@var = value)</div>
-                    <div className="text-[11px] text-slate-300">Defined directly in the active .rest file header or local script memory. Overrides all external environment settings.</div>
+                    <div className="text-[11px] text-slate-300">Defined directly at the top of an HTTP file header or in local script execution scope. Overrides all external environment settings.</div>
                   </div>
                 </div>
 
@@ -203,7 +231,7 @@ export const QuickHelpModal: React.FC<QuickHelpModalProps> = ({ onClose }) => {
                   <span className="px-2 py-0.5 bg-sky-500 text-slate-950 font-bold font-mono text-[11px] rounded shrink-0">2. Env</span>
                   <div>
                     <div className="text-xs font-bold text-sky-300">Active Project Environment (Dev / Staging / Prod)</div>
-                    <div className="text-[11px] text-slate-300">Variables assigned to the active Environment Profile in the current project selected in the top header.</div>
+                    <div className="text-[11px] text-slate-300">Variables assigned to the active Environment Profile in the current project selected in the top workspace selector.</div>
                   </div>
                 </div>
 
@@ -222,6 +250,78 @@ export const QuickHelpModal: React.FC<QuickHelpModalProps> = ({ onClose }) => {
                     <div className="text-[11px] text-slate-400">Universal workspace variables accessible everywhere across all organizations, projects, and requests.</div>
                   </div>
                 </div>
+              </div>
+
+              {/* Built-in Dynamic Variables */}
+              <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
+                <div className="text-xs font-bold text-amber-300 flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>Built-in Dynamic System Variables (Evaluated at Request Runtime):</span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  RestStudio automatically computes these dynamic values on every request execution without needing manual environment configuration:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                  <div className="p-2 bg-slate-900/90 border border-slate-800/80 rounded font-mono">
+                    <span className="text-amber-400 font-bold">{`{{$timestamp}}`}</span>
+                    <p className="text-[10px] text-slate-400 font-sans mt-0.5">Unix timestamp in seconds (e.g. 1712345678)</p>
+                  </div>
+                  <div className="p-2 bg-slate-900/90 border border-slate-800/80 rounded font-mono">
+                    <span className="text-amber-400 font-bold">{`{{$isoTimestamp}}`}</span>
+                    <p className="text-[10px] text-slate-400 font-sans mt-0.5">ISO 8601 UTC date (e.g. 2026-09-02T10:20:00Z)</p>
+                  </div>
+                  <div className="p-2 bg-slate-900/90 border border-slate-800/80 rounded font-mono">
+                    <span className="text-amber-400 font-bold">{`{{$guid}}`} / {`{{$randomUUID}}`}</span>
+                    <p className="text-[10px] text-slate-400 font-sans mt-0.5">Random RFC4122 v4 UUID string</p>
+                  </div>
+                  <div className="p-2 bg-slate-900/90 border border-slate-800/80 rounded font-mono">
+                    <span className="text-amber-400 font-bold">{`{{$randomInt}}`}</span>
+                    <p className="text-[10px] text-slate-400 font-sans mt-0.5">Random integer between 1 and 1000</p>
+                  </div>
+                  <div className="p-2 bg-slate-900/90 border border-slate-800/80 rounded font-mono">
+                    <span className="text-amber-400 font-bold">{`{{$randomEmail}}`}</span>
+                    <p className="text-[10px] text-slate-400 font-sans mt-0.5">Random mock email address</p>
+                  </div>
+                  <div className="p-2 bg-slate-900/90 border border-slate-800/80 rounded font-mono">
+                    <span className="text-amber-400 font-bold">{`{{$randomFullName}}`}</span>
+                    <p className="text-[10px] text-slate-400 font-sans mt-0.5">Random mock first and last name</p>
+                  </div>
+                  <div className="p-2 bg-slate-900/90 border border-slate-800/80 rounded font-mono">
+                    <span className="text-amber-400 font-bold">{`{{$randomPhoneNumber}}`}</span>
+                    <p className="text-[10px] text-slate-400 font-sans mt-0.5">Random formatted US phone number</p>
+                  </div>
+                  <div className="p-2 bg-slate-900/90 border border-slate-800/80 rounded font-mono">
+                    <span className="text-amber-400 font-bold">{`{{$randomPassword}}`}</span>
+                    <p className="text-[10px] text-slate-400 font-sans mt-0.5">Random 12-char secure password</p>
+                  </div>
+                  <div className="p-2 bg-slate-900/90 border border-slate-800/80 rounded font-mono">
+                    <span className="text-amber-400 font-bold">{`{{$randomIP}}`}</span>
+                    <p className="text-[10px] text-slate-400 font-sans mt-0.5">Random IPv4 address (e.g. 192.168.1.42)</p>
+                  </div>
+                  <div className="p-2 bg-slate-900/90 border border-slate-800/80 rounded font-mono">
+                    <span className="text-amber-400 font-bold">{`{{$randomCity}}`} / {`{{$randomCountry}}`}</span>
+                    <p className="text-[10px] text-slate-400 font-sans mt-0.5">Random geographical location</p>
+                  </div>
+                  <div className="p-2 bg-slate-900/90 border border-slate-800/80 rounded font-mono">
+                    <span className="text-amber-400 font-bold">{`{{$randomColor}}`}</span>
+                    <p className="text-[10px] text-slate-400 font-sans mt-0.5">Random hex color code (e.g. #3b82f6)</p>
+                  </div>
+                  <div className="p-2 bg-slate-900/90 border border-slate-800/80 rounded font-mono">
+                    <span className="text-amber-400 font-bold">{`{{$randomAlphaNumeric}}`}</span>
+                    <p className="text-[10px] text-slate-400 font-sans mt-0.5">Random 8-char alphanumeric string</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Helpful Tips */}
+              <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl space-y-2 text-xs">
+                <div className="font-semibold text-slate-200">Editor Productivity Features:</div>
+                <ul className="list-disc list-inside text-slate-300 space-y-1 text-[11px] leading-relaxed">
+                  <li><strong>Autocomplete:</strong> Type <code className="text-emerald-400 font-mono">{`{{`}</code> or press <code className="text-emerald-400 font-mono">Ctrl + Space</code> in any input field to open the variable picker.</li>
+                  <li><strong>Hover Inspector:</strong> Hover over any variable tag in the request bar to view its resolved value, current scope source, and secret status.</li>
+                  <li><strong>Secret Masking:</strong> Toggle the secret checkbox (<code className="text-amber-400 font-mono">secret: true</code>) on sensitive keys (passwords, tokens) to mask values in UI previews.</li>
+                  <li><strong>Script Manipulation:</strong> Access or set variables programmatically in scripts via <code className="text-emerald-400 font-mono">pm.environment.set("key", "val")</code> or <code className="text-emerald-400 font-mono">pm.variables.get("key")</code>.</li>
+                </ul>
               </div>
             </div>
           )}
@@ -260,10 +360,10 @@ export const QuickHelpModal: React.FC<QuickHelpModalProps> = ({ onClose }) => {
               <div>
                 <h4 className="text-sm font-semibold text-slate-100 flex items-center space-x-2">
                   <FileText className="w-4 h-4 text-emerald-400" />
-                  <span>Standard .rest File Syntax</span>
+                  <span>HTTP Script Format Syntax</span>
                 </h4>
                 <p className="text-xs text-slate-400 mt-1">
-                  RestStudio supports standard VS Code REST Client / IntelliJ HTTP syntax.
+                  RestStudio supports standard HTTP request script syntax.
                 </p>
               </div>
 

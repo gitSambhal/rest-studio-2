@@ -53,7 +53,7 @@ export const INITIAL_PROJECTS: Project[] = [
     files: [
       {
         id: 'file_auth',
-        name: 'auth.rest',
+        name: 'auth_collection',
         updatedAt: Date.now() - 3600000,
         rawContent: `@authService = {{baseUrl}}/auth
 
@@ -104,7 +104,7 @@ Accept: application/json
       },
       {
         id: 'file_products',
-        name: 'products.rest',
+        name: 'product_catalog',
         updatedAt: Date.now() - 7200000,
         rawContent: `### Get All Products
 GET {{baseUrl}}/products?limit={{limit}}
@@ -165,7 +165,7 @@ Content-Type: application/json
   {
     id: 'proj_weather',
     name: 'Weather & Geo APIs',
-    description: 'REST file project for location, geocoding, and open weather endpoints.',
+    description: 'API collection project for location, geocoding, and open weather endpoints.',
     createdAt: Date.now() - 86400000 * 10,
     updatedAt: Date.now() - 86400000,
     activeEnvId: 'env_weather_default',
@@ -186,7 +186,7 @@ Content-Type: application/json
     files: [
       {
         id: 'file_weather_rest',
-        name: 'forecast.rest',
+        name: 'weather_api',
         updatedAt: Date.now() - 86400000,
         rawContent: `### Get Current Weather Forecast
 GET {{apiHost}}/forecast?latitude={{lat}}&longitude={{lon}}&current_weather=true
@@ -230,7 +230,7 @@ GET {{apiHost}}/forecast?latitude={{lat}}&longitude={{lon}}&hourly=temperature_2
   {
     id: 'proj_httpbin',
     name: 'HTTP Testing & Diagnostics',
-    description: 'REST Client file suite for inspecting headers, status codes, and echoes.',
+    description: 'API collection suite for inspecting headers, status codes, and echoes.',
     createdAt: Date.now() - 86400000 * 2,
     updatedAt: Date.now() - 1800000,
     activeEnvId: 'env_httpbin',
@@ -249,7 +249,7 @@ GET {{apiHost}}/forecast?latitude={{lat}}&longitude={{lon}}&hourly=temperature_2
     files: [
       {
         id: 'file_httpbin_rest',
-        name: 'httpbin.rest',
+        name: 'httpbin_suite',
         updatedAt: Date.now() - 1800000,
         rawContent: `### Echo Headers
 GET {{baseUrl}}/headers

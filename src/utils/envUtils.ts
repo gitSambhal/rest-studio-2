@@ -20,6 +20,161 @@ export interface ResolutionResult {
   missingVars: string[];
 }
 
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+export const DYNAMIC_SYSTEM_VARIABLES: {
+  key: string;
+  description: string;
+  example: string;
+  getValue: () => string;
+}[] = [
+  {
+    key: '$timestamp',
+    description: 'Current Unix timestamp in seconds',
+    example: '1712345678',
+    getValue: () => Math.floor(Date.now() / 1000).toString(),
+  },
+  {
+    key: '$timestampMs',
+    description: 'Current Unix timestamp in milliseconds',
+    example: '1712345678901',
+    getValue: () => Date.now().toString(),
+  },
+  {
+    key: '$isoTimestamp',
+    description: 'Current UTC date & time in ISO 8601 format',
+    example: new Date().toISOString(),
+    getValue: () => new Date().toISOString(),
+  },
+  {
+    key: '$date',
+    description: 'Current local date (YYYY-MM-DD)',
+    example: new Date().toISOString().slice(0, 10),
+    getValue: () => new Date().toISOString().slice(0, 10),
+  },
+  {
+    key: '$guid',
+    description: 'Random RFC4122 v4 UUID string',
+    example: 'e4d909c2-9bad-4b2e-b6fe-208b0709b1f7',
+    getValue: () => generateUUID(),
+  },
+  {
+    key: '$uuid',
+    description: 'Alias for $guid (v4 UUID string)',
+    example: 'e4d909c2-9bad-4b2e-b6fe-208b0709b1f7',
+    getValue: () => generateUUID(),
+  },
+  {
+    key: '$randomUUID',
+    description: 'Alias for $guid (v4 UUID string)',
+    example: 'e4d909c2-9bad-4b2e-b6fe-208b0709b1f7',
+    getValue: () => generateUUID(),
+  },
+  {
+    key: '$randomInt',
+    description: 'Random integer between 1 and 1000',
+    example: '482',
+    getValue: () => Math.floor(Math.random() * 1000 + 1).toString(),
+  },
+  {
+    key: '$randomAlphaNumeric',
+    description: 'Random 8-character alphanumeric string',
+    example: 'a7B9k2P1',
+    getValue: () => Math.random().toString(36).substring(2, 10),
+  },
+  {
+    key: '$randomEmail',
+    description: 'Random mock user email address',
+    example: 'user482@example.com',
+    getValue: () => `user${Math.floor(Math.random() * 9000 + 1000)}@example.com`,
+  },
+  {
+    key: '$randomFirstName',
+    description: 'Random first name',
+    example: 'Alex',
+    getValue: () => {
+      const names = ['Alex', 'Jordan', 'Taylor', 'Morgan', 'Sam', 'Riley', 'Casey', 'Avery', 'Dakota', 'Quinn'];
+      return names[Math.floor(Math.random() * names.length)];
+    },
+  },
+  {
+    key: '$randomLastName',
+    description: 'Random last name',
+    example: 'Smith',
+    getValue: () => {
+      const names = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez'];
+      return names[Math.floor(Math.random() * names.length)];
+    },
+  },
+  {
+    key: '$randomFullName',
+    description: 'Random full name',
+    example: 'Alex Smith',
+    getValue: () => {
+      const firsts = ['Alex', 'Jordan', 'Taylor', 'Morgan', 'Sam', 'Riley'];
+      const lasts = ['Smith', 'Johnson', 'Williams', 'Brown', 'Davis'];
+      return `${firsts[Math.floor(Math.random() * firsts.length)]} ${lasts[Math.floor(Math.random() * lasts.length)]}`;
+    },
+  },
+  {
+    key: '$randomPhoneNumber',
+    description: 'Random US formatted phone number',
+    example: '+1-555-019-4821',
+    getValue: () => `+1-555-${Math.floor(Math.random() * 899 + 100)}-${Math.floor(Math.random() * 8999 + 1000)}`,
+  },
+  {
+    key: '$randomPassword',
+    description: 'Random secure alphanumeric password',
+    example: 'xK9#mP2$vL4!',
+    getValue: () => Math.random().toString(36).slice(-8) + '!' + Math.floor(Math.random() * 90 + 10),
+  },
+  {
+    key: '$randomIP',
+    description: 'Random IPv4 address',
+    example: '192.168.1.42',
+    getValue: () => `${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+  },
+  {
+    key: '$randomCity',
+    description: 'Random city name',
+    example: 'San Francisco',
+    getValue: () => {
+      const cities = ['San Francisco', 'Tokyo', 'Berlin', 'London', 'New York', 'Paris', 'Sydney', 'Toronto', 'Singapore', 'Amsterdam'];
+      return cities[Math.floor(Math.random() * cities.length)];
+    },
+  },
+  {
+    key: '$randomCountry',
+    description: 'Random country name',
+    example: 'Japan',
+    getValue: () => {
+      const countries = ['United States', 'Japan', 'Germany', 'Canada', 'Australia', 'United Kingdom', 'France', 'Netherlands', 'Singapore', 'Brazil'];
+      return countries[Math.floor(Math.random() * countries.length)];
+    },
+  },
+  {
+    key: '$randomColor',
+    description: 'Random hex color code',
+    example: '#3b82f6',
+    getValue: () => '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
+  },
+  {
+    key: '$randomBoolean',
+    description: 'Random boolean string (true or false)',
+    example: 'true',
+    getValue: () => (Math.random() > 0.5 ? 'true' : 'false'),
+  },
+];
+
 export function getVariableLookupDetails(
   varKey: string,
   scopeCtx: ScopeContext
@@ -80,6 +235,16 @@ export function getVariableLookupDetails(
     }
   }
 
+  // 5. Built-in Dynamic Variables ($timestamp, $guid, $randomInt, etc.)
+  const sysVar = DYNAMIC_SYSTEM_VARIABLES.find((s) => s.key === varKey);
+  if (sysVar) {
+    matches.push({
+      scope: 'system',
+      sourceName: 'Built-in Dynamic Variable',
+      value: sysVar.getValue(),
+    });
+  }
+
   if (matches.length === 0) return null;
 
   const winner = matches[0];
@@ -123,7 +288,7 @@ export function resolveEnvVariables(
   const matchedVars: { key: string; value: string; source: EnvVariableScope; sourceName: string }[] = [];
   const missingVarsSet = new Set<string>();
 
-  const regex = /\{\{([a-zA-Z0-9_.-]+)\}\}/g;
+  const regex = /\{\{([a-zA-Z0-9_$.-]+)\}\}/g;
   const resolved = text.replace(regex, (match, varName) => {
     const trimmedKey = varName.trim();
     const details = getVariableLookupDetails(trimmedKey, ctx);
@@ -255,6 +420,19 @@ export function getEnvAutocompleteSuggestions(
           }
         });
       }
+
+      // 5. Built-in Dynamic System Variables ($timestamp, $guid, $randomInt, etc.)
+      DYNAMIC_SYSTEM_VARIABLES.forEach((sys) => {
+        if (sys.key.toLowerCase().includes(query) && !suggestionsMap.has(sys.key)) {
+          suggestionsMap.set(sys.key, {
+            key: sys.key,
+            value: sys.example,
+            description: `Dynamic: ${sys.description}`,
+            source: 'system',
+            sourceName: 'Built-in Dynamic Variable',
+          });
+        }
+      });
 
       const suggestions = Array.from(suggestionsMap.values());
 

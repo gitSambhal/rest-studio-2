@@ -161,7 +161,7 @@ const RenderRestFile: React.FC<RenderRestFileProps> = ({
               openPrompt({
                 title: 'Rename File',
                 initialValue: file.name,
-                placeholder: 'e.g. api-v2.rest',
+                placeholder: 'e.g. api-v2',
                 confirmLabel: 'Rename',
                 onConfirm: (val) => {
                   if (val.trim()) onRenameFile(file.id, val.trim());
@@ -466,18 +466,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               type="button"
               onClick={() => {
                 openPrompt({
-                  title: 'New .rest File',
-                  message: 'Enter name for your new REST request file:',
-                  initialValue: 'api_tests.rest',
-                  placeholder: 'e.g. users.rest',
+                  title: 'New Collection File',
+                  message: 'Enter name for your new collection file:',
+                  initialValue: 'api_tests',
+                  placeholder: 'e.g. users',
                   confirmLabel: 'Create File',
                   onConfirm: (name) => {
-                    const finalName = name.endsWith('.rest') ? name : `${name}.rest`;
-                    onCreateFile(finalName);
+                    if (name) onCreateFile(name.trim());
                   },
                 });
               }}
-              title="New .rest File"
+              title="New Collection File"
               className="p-1 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded transition-colors cursor-pointer"
             >
               <FilePlus className="w-4 h-4" />
@@ -488,7 +487,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => {
                 openPrompt({
                   title: 'New Folder',
-                  message: 'Enter folder name to group your .rest files:',
+                  message: 'Enter folder name to group your collection files:',
                   initialValue: 'Authentication Suite',
                   placeholder: 'e.g. Auth Service',
                   confirmLabel: 'Create Folder',
@@ -512,7 +511,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search .rest files, endpoints..."
+            placeholder="Search collections, endpoints..."
             className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50"
           />
         </div>
@@ -548,13 +547,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       e.stopPropagation();
                       openPrompt({
                         title: `New File inside ${folder.name}`,
-                        message: 'Enter REST file name:',
-                        initialValue: 'endpoints.rest',
-                        placeholder: 'e.g. auth.rest',
+                        message: 'Enter collection file name:',
+                        initialValue: 'endpoints',
+                        placeholder: 'e.g. auth',
                         confirmLabel: 'Create File',
                         onConfirm: (name) => {
-                          const finalName = name.endsWith('.rest') ? name : `${name}.rest`;
-                          onCreateFile(finalName, folder.id);
+                          if (name) onCreateFile(name.trim(), folder.id);
                         },
                       });
                     }}
@@ -670,17 +668,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {(project?.files || []).length === 0 && (
           <div className="text-center py-8 text-slate-500 px-4">
             <FileCode className="w-8 h-8 mx-auto mb-2 opacity-40 text-emerald-400" />
-            <p className="font-semibold text-slate-400">No .rest files yet</p>
-            <p className="text-[11px] mt-1">Click the + icon above to create your first REST client file.</p>
+            <p className="font-semibold text-slate-400">No collections or files yet</p>
+            <p className="text-[11px] mt-1">Click + or Import to load Postman v2.1, Insomnia, or OpenAPI collections.</p>
           </div>
         )}
       </div>
 
       {/* Footer Info */}
       <div className="p-3 border-t border-slate-800 bg-slate-950/60 text-[11px] text-slate-400 font-mono flex items-center justify-between">
-        <div className="flex items-center space-x-1.5 text-emerald-400">
-          <Zap className="w-3.5 h-3.5" />
-          <span>Standard .rest Spec</span>
+        <div className="flex items-center space-x-1.5 text-amber-400">
+          <Zap className="w-3.5 h-3.5 text-amber-400" />
+          <span>RestStudio</span>
         </div>
         <span>{(project?.files || []).reduce((acc, f) => acc + (f.requests?.length || 0), 0)} requests</span>
       </div>

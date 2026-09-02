@@ -367,14 +367,178 @@ export function parsePostmanCollection(jsonData: any): {
   return { folders, files };
 }
 
+// ---------------------------------------------------------------------
+// Insomnia Collection v4 Parser
+// ---------------------------------------------------------------------
+export function parseInsomniaCollection(jsonData: any): {
+  folders: { id: string; name: string; fileIds: string[] }[];
+  files: RestFile[];
+  workspaceName?: string;
+  error?: string;
+} {
+  const folders: { id: string; name: string; fileIds: string[] }[] = [];
+  const files: RestFile[] = [];
+
+  if (!jsonData || typeof jsonData !== 'object') {
+    return { folders, files, error: 'Invalid Insomnia collection format: Root must be an object.' };
+  }
+
+  const resources: any[] = Array.isArray(jsonData.resources)
+    ? jsonData.resources
+    : Array.isArray(jsonData)
+    ? jsonData
+    : [];
+
+  if (resources.length === 0) {
+    return { folders, files, error: 'No resources found in Insomnia export JSON.' };
+  }
+
+  let workspaceName = 'Insomnia Workspace';
+  const folderMap = new Map<string, { id: string; name: string; parentId?: string }>();
+  const requestsByFolder = new Map<string, RestRequest[]>();
+  const rootRequests: RestRequest[] = [];
+
+  // 1. Identify Workspace & Folders
+  resources.forEach((res) => {
+    if (res._type === 'workspace' && res.name) {
+      workspaceName = res.name;
+    } else if (res._type === 'request_group' && res._id) {
+      folderMap.set(res._id, {
+        id: res._id,
+        name: res.name || 'Folder',
+        parentId: res.parentId,
+      });
+      requestsByFolder.set(res._id, []);
+    }
+  });
+
+  // 2. Parse HTTP Requests
+  resources.forEach((res) => {
+    if (res._type === 'request') {
+      const method = ((res.method || 'GET').toUpperCase() as HTTPMethod) || 'GET';
+      const url = res.url || '';
+      const name = res.name || `${method} ${url}`;
+
+      // Headers
+      const headers: KeyValuePair[] = (res.headers || []).map((h: any) => ({
+        id: 'hdr_' + Math.random().toString(36).substring(2, 9),
+        key: h.name || h.key || '',
+        value: h.value || '',
+        enabled: !h.disabled,
+      }));
+
+      // Query Params
+      const queryParams: KeyValuePair[] = (res.parameters || []).map((p: any) => ({
+        id: 'qp_' + Math.random().toString(36).substring(2, 9),
+        key: p.name || p.key || '',
+        value: p.value || '',
+        enabled: !p.disabled,
+      }));
+
+      // Body
+      let bodyRaw = '';
+      let bodyMode: RequestBody['mode'] = 'none';
+
+      if (res.body) {
+        if (typeof res.body.text === 'string') {
+          bodyRaw = res.body.text;
+          const mime = (res.body.mimeType || '').toLowerCase();
+          if (mime.includes('json') || (bodyRaw.trim().startsWith('{') && bodyRaw.trim().endsWith('}'))) {
+            bodyMode = 'json';
+          } else {
+            bodyMode = 'raw';
+          }
+        } else if (Array.isArray(res.body.params)) {
+          bodyMode = 'x-www-form-urlencoded';
+          bodyRaw = res.body.params.map((p: any) => `${p.name || p.key}=${p.value}`).join('&');
+        }
+      }
+
+      // Auth
+      const auth: RequestAuth = { type: 'none', bearerToken: '' };
+      if (res.authentication) {
+        if (res.authentication.type === 'bearer') {
+          auth.type = 'bearer';
+          auth.bearerToken = res.authentication.token || '';
+        } else if (res.authentication.type === 'basic' && (res.authentication.username || res.authentication.password)) {
+          const userPass = `${res.authentication.username || ''}:${res.authentication.password || ''}`;
+          headers.push({
+            id: 'hdr_' + Math.random().toString(36).substring(2, 9),
+            key: 'Authorization',
+            value: 'Basic ' + (typeof btoa !== 'undefined' ? btoa(userPass) : userPass),
+            enabled: true,
+          });
+        }
+      }
+
+      const reqObj: RestRequest = {
+        id: 'req_ins_' + Math.random().toString(36).substring(2, 9),
+        name,
+        method,
+        url,
+        headers,
+        queryParams,
+        body: { mode: bodyMode, rawText: bodyRaw },
+        auth,
+      };
+
+      if (res.parentId && requestsByFolder.has(res.parentId)) {
+        requestsByFolder.get(res.parentId)!.push(reqObj);
+      } else {
+        rootRequests.push(reqObj);
+      }
+    }
+  });
+
+  // Convert folders to RestFiles
+  requestsByFolder.forEach((reqs, folderId) => {
+    if (reqs.length === 0) return;
+    const folderInfo = folderMap.get(folderId);
+    const folderName = folderInfo ? folderInfo.name : 'Folder';
+    const fileId = 'file_ins_' + Math.random().toString(36).substring(2, 9);
+
+    const restFile: RestFile = {
+      id: fileId,
+      name: `${folderName.toLowerCase().replace(/[^a-z0-9_]/g, '_')}.rest`,
+      rawContent: generateRestFileContent(reqs),
+      requests: reqs,
+      updatedAt: Date.now(),
+    };
+    files.push(restFile);
+
+    folders.push({
+      id: 'fld_ins_' + Math.random().toString(36).substring(2, 9),
+      name: folderName,
+      fileIds: [fileId],
+    });
+  });
+
+  if (rootRequests.length > 0) {
+    const rootFileId = 'file_root_ins_' + Math.random().toString(36).substring(2, 9);
+    files.push({
+      id: rootFileId,
+      name: `${workspaceName.toLowerCase().replace(/[^a-z0-9_]/g, '_')}.rest`,
+      rawContent: generateRestFileContent(rootRequests),
+      requests: rootRequests,
+      updatedAt: Date.now(),
+    });
+  }
+
+  if (files.length === 0) {
+    return { folders, files, error: 'No valid request endpoints found in Insomnia export JSON.' };
+  }
+
+  return { folders, files, workspaceName };
+}
+
 export function exportToPostmanCollection(projectName: string, files: RestFile[]): any {
   const collection = {
     info: {
-      name: projectName || 'Exported REST Client Suite',
+      name: projectName || 'Postman Native API Suite',
       schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
     },
     item: files.map((file) => ({
-      name: file.name,
+      name: file.name.replace(/\.(rest|http)$/i, ''),
       item: file.requests.map((req) => ({
         name: req.name,
         request: {
@@ -395,6 +559,127 @@ export function exportToPostmanCollection(projectName: string, files: RestFile[]
   };
 
   return collection;
+}
+
+export function exportToInsomniaCollection(projectName: string, files: RestFile[]): any {
+  const workspaceId = 'wrk_' + Math.random().toString(36).substring(2, 9);
+  const resources: any[] = [
+    {
+      _id: workspaceId,
+      _type: 'workspace',
+      name: projectName || 'Postman Native Suite',
+      parentId: null,
+      created: Date.now(),
+      modified: Date.now(),
+    },
+  ];
+
+  files.forEach((file) => {
+    const groupId = 'fld_' + Math.random().toString(36).substring(2, 9);
+    resources.push({
+      _id: groupId,
+      _type: 'request_group',
+      name: file.name.replace(/\.(rest|http)$/i, ''),
+      parentId: workspaceId,
+      created: Date.now(),
+      modified: Date.now(),
+    });
+
+    file.requests.forEach((req) => {
+      resources.push({
+        _id: 'req_' + Math.random().toString(36).substring(2, 9),
+        _type: 'request',
+        parentId: groupId,
+        name: req.name,
+        method: req.method,
+        url: req.url,
+        headers: (req.headers || [])
+          .filter((h) => h.enabled)
+          .map((h) => ({ name: h.key, value: h.value })),
+        parameters: (req.queryParams || [])
+          .filter((p) => p.enabled)
+          .map((p) => ({ name: p.key, value: p.value })),
+        body:
+          req.body.mode !== 'none'
+            ? {
+                mimeType: req.body.mode === 'json' ? 'application/json' : 'text/plain',
+                text: req.body.rawText,
+              }
+            : {},
+        authentication:
+          req.auth.type === 'bearer'
+            ? { type: 'bearer', token: req.auth.bearerToken }
+            : {},
+        created: Date.now(),
+        modified: Date.now(),
+      });
+    });
+  });
+
+  return {
+    _type: 'export',
+    __export_format: 4,
+    __export_date: new Date().toISOString(),
+    __export_source: 'reststudio:v1.0.0',
+    resources,
+  };
+}
+
+export function exportToOpenApiSpec(projectName: string, files: RestFile[]): any {
+  const paths: Record<string, any> = {};
+
+  files.forEach((file) => {
+    const tagName = file.name.replace(/\.(rest|http)$/i, '');
+    file.requests.forEach((req) => {
+      let pathKey = '/';
+      try {
+        if (req.url) {
+          const u = new URL(req.url.startsWith('http') ? req.url : `https://${req.url}`);
+          pathKey = u.pathname || '/';
+        }
+      } catch (e) {
+        pathKey = req.url || '/';
+      }
+
+      if (!paths[pathKey]) paths[pathKey] = {};
+      const methodKey = (req.method || 'get').toLowerCase();
+
+      paths[pathKey][methodKey] = {
+        summary: req.name,
+        tags: [tagName],
+        parameters: (req.queryParams || []).map((qp) => ({
+          name: qp.key,
+          in: 'query',
+          required: false,
+          schema: { type: 'string', example: qp.value },
+        })),
+        requestBody:
+          req.body.mode !== 'none' && req.body.rawText
+            ? {
+                content: {
+                  'application/json': {
+                    example: req.body.rawText,
+                  },
+                },
+              }
+            : undefined,
+        responses: {
+          '200': {
+            description: 'Successful response',
+          },
+        },
+      };
+    });
+  });
+
+  return {
+    openapi: '3.0.0',
+    info: {
+      title: projectName || 'Postman Native Suite',
+      version: '1.0.0',
+    },
+    paths,
+  };
 }
 
 export function generateRestFileContent(requests: RestRequest[], fileVariables: Record<string, string> = {}): string {
@@ -592,7 +877,28 @@ export function parseCurlCommand(curlCommand: string): RestRequest | null {
         } else if (i + 1 < tokens.length) {
           bodyVal = tokens[++i];
         }
+
+        const wasDoubleQuoted = (bodyVal.startsWith('"') && bodyVal.endsWith('"')) || bodyVal.includes('\\"');
         bodyVal = bodyVal.replace(/^["']|["']$/g, '');
+
+        if (wasDoubleQuoted || bodyVal.includes('\\n') || bodyVal.includes('\\r') || bodyVal.includes('\\t')) {
+          bodyVal = bodyVal
+            .replace(/\\"/g, '"')
+            .replace(/\\n/g, '\n')
+            .replace(/\\r/g, '\r')
+            .replace(/\\t/g, '\t');
+        }
+
+        // Handle double-stringified JSON payloads e.g. "{\n \"identifiers\": ...}"
+        if (bodyVal.trim().startsWith('"') && bodyVal.trim().endsWith('"')) {
+          try {
+            const parsed = JSON.parse(bodyVal.trim());
+            if (typeof parsed === 'string' && (parsed.trim().startsWith('{') || parsed.trim().startsWith('['))) {
+              bodyVal = parsed;
+            }
+          } catch (_) {}
+        }
+
         if (bodyText) {
           bodyText += '&' + bodyVal;
         } else {
@@ -974,7 +1280,7 @@ function parseYamlToObj(yamlText: string): any {
 }
 
 export interface SmartPasteResult {
-  type: 'curl' | 'postman' | 'openapi' | 'rest_file' | 'url' | 'unknown';
+  type: 'curl' | 'postman' | 'insomnia' | 'openapi' | 'rest_file' | 'url' | 'unknown';
   title: string;
   summary: string;
   requests: RestRequest[];
@@ -990,7 +1296,7 @@ export function detectAndParsePaste(rawText: string): SmartPasteResult {
     return {
       type: 'unknown',
       title: 'Empty Content',
-      summary: 'Paste cURL, Postman Collection JSON, REST file, or OpenAPI Spec',
+      summary: 'Paste Postman Collection, Insomnia v4, cURL, .rest/.http script, or OpenAPI Spec',
       requests: [],
       files: [],
     };
@@ -1010,7 +1316,7 @@ export function detectAndParsePaste(rawText: string): SmartPasteResult {
     }
   }
 
-  // 2. Check for JSON format (Postman Collection or OpenAPI JSON)
+  // 2. Check for JSON format (Postman Collection, Insomnia JSON, or OpenAPI JSON)
   if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
     try {
       const jsonObj = JSON.parse(trimmed);
@@ -1031,6 +1337,25 @@ export function detectAndParsePaste(rawText: string): SmartPasteResult {
             summary: `Parsed Postman collection with ${allReqs.length} endpoint(s) across ${pmResult.files.length} file(s)`,
             requests: allReqs,
             files: pmResult.files,
+          };
+        }
+      }
+
+      // Insomnia v4 Collection JSON?
+      if (
+        jsonObj._type === 'export' ||
+        jsonObj.__export_format ||
+        (Array.isArray(jsonObj.resources) && jsonObj.resources.some((r: any) => r._type === 'request'))
+      ) {
+        const insResult = parseInsomniaCollection(jsonObj);
+        if (!insResult.error && insResult.files.length > 0) {
+          const allReqs = insResult.files.flatMap((f) => f.requests);
+          return {
+            type: 'insomnia',
+            title: insResult.workspaceName || 'Insomnia Collection',
+            summary: `Parsed Insomnia collection with ${allReqs.length} endpoint(s) across ${insResult.files.length} file(s)`,
+            requests: allReqs,
+            files: insResult.files,
           };
         }
       }

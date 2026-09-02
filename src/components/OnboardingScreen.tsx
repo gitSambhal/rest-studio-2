@@ -447,9 +447,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             <div className="w-9 h-9 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
               <Upload className="w-4 h-4" />
             </div>
-            <h3 className="text-sm font-bold">Postman & cURL Import</h3>
+            <h3 className="text-sm font-bold">Multi-Format Import &amp; Export</h3>
             <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-              Seamlessly import Postman v2.1 collection exports, cURL commands, OpenAPI specs, or native <span className="font-mono text-sky-400">.rest</span> files in 1 click.
+              Seamlessly import and export Postman v2.1 collections, Insomnia v4 workspaces, OpenAPI specs, and cURL commands in 1 click.
             </p>
           </div>
 
@@ -590,7 +590,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           <span>&bull;</span>
           <span className="flex items-center space-x-1">
             <Code2 className="w-3.5 h-3.5 text-slate-400" />
-            <span>REST Client (.rest) Engine</span>
+            <span>REST Client Engine</span>
           </span>
         </div>
 

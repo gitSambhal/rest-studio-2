@@ -558,7 +558,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                       type="button"
                       onClick={() => {
                         window.open(
-                          'https://github.com/settings/tokens/new?description=RestPulse%20API%20Studio%20Sync&scopes=gist',
+                          'https://github.com/settings/tokens/new?description=RestStudio%20Sync&scopes=gist',
                           'github_oauth_popup',
                           'width=700,height=800'
                         );
@@ -992,7 +992,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                     Scroll to the bottom of the GitHub page and click <strong className="text-white font-semibold">"Generate token"</strong>.
                   </li>
                   <li>
-                    Copy the token (looks like <code className="bg-slate-800 text-emerald-300 px-1 py-0.5 rounded font-mono">ghp_...</code>) and paste it into RestPulse!
+                    Copy the token (looks like <code className="bg-slate-800 text-emerald-300 px-1 py-0.5 rounded font-mono">ghp_...</code>) and paste it into RestStudio!
                   </li>
                 </ol>
               </div>
@@ -1003,7 +1003,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                   <span>Your Data Belongs to You</span>
                 </div>
                 <p className="text-slate-400 leading-relaxed text-xs">
-                  RestPulse stores your workspace in private Gists created directly under your own GitHub account. Your data is encrypted and private to you — no third-party database servers ever store your requests or secrets.
+                  RestStudio stores your workspace in private Gists created directly under your own GitHub account. Your data is encrypted and private to you — no third-party database servers ever store your requests or secrets.
                 </p>
               </div>
             </div>

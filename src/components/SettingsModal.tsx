@@ -155,7 +155,7 @@ export function SettingsModal({
               <div className="flex items-center space-x-2">
                 <h2 className="text-base font-bold tracking-tight">Workspace Settings</h2>
                 <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  RestPulse v1.2.1
+                  RestStudio v1.3.0
                 </span>
               </div>
               <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -561,7 +561,7 @@ export function SettingsModal({
                 <div>
                   <h3 className="text-sm font-bold tracking-tight">Import & Export Workspace</h3>
                   <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Migrate effortlessly between Postman, OpenAPI, cURL, and native .rest files
+                    Migrate effortlessly between Postman collections, Insomnia v4, OpenAPI, cURL, and HTTP scripts
                   </p>
                 </div>
 
@@ -577,7 +577,7 @@ export function SettingsModal({
                         <span>Import Suite</span>
                       </div>
                       <p className={`text-[11px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                        Import Postman Collections v2.1, OpenAPI/Swagger JSON/YAML, raw cURL, or .rest files.
+                        Import Postman Collections v2.1, Insomnia v4 exports, OpenAPI/Swagger JSON/YAML, raw cURL, or HTTP scripts.
                       </p>
                     </div>
 
@@ -605,7 +605,7 @@ export function SettingsModal({
                         <span>Export Project</span>
                       </div>
                       <p className={`text-[11px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                        Export active project ({activeProject?.name || 'Workspace'}) to standard .rest files or JSON.
+                        Export active project ({activeProject?.name || 'Workspace'}) to Postman v2.1, Insomnia v4, OpenAPI v3, or HTTP scripts.
                       </p>
                     </div>
 
@@ -633,18 +633,36 @@ export function SettingsModal({
             {activeTab === 'environments' && (
               <div className="space-y-6 max-w-2xl">
                 <div>
-                  <h3 className="text-sm font-bold tracking-tight">Variable Scopes & Hierarchy</h3>
+                  <h3 className="text-sm font-bold tracking-tight">Supported Variables & Scope Hierarchy</h3>
                   <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    RestStudio resolves variables through a clean 4-tier cascading hierarchy
+                    RestStudio resolves dynamic variables through a clean 4-tier cascading scope hierarchy
                   </p>
                 </div>
 
+                {/* What are Supported Variables box */}
+                <div className={`p-4 rounded-xl border space-y-2 text-xs ${isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className="font-bold text-emerald-400 flex items-center space-x-1.5">
+                    <span>What Are Supported Variables?</span>
+                  </div>
+                  <p className={`text-[11px] leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                    Supported variables are dynamic placeholders enclosed in double curly braces (e.g. <code className="text-emerald-400 font-mono">{`{{baseUrl}}`}</code>, <code className="text-emerald-400 font-mono">{`{{authToken}}`}</code>, <code className="text-emerald-400 font-mono">{`{{tenantId}}`}</code>). You can place them anywhere inside:
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] font-mono pt-1">
+                    <div className="p-2 bg-slate-900/60 rounded border border-slate-800/60 text-slate-300">1. Request URLs & Paths</div>
+                    <div className="p-2 bg-slate-900/60 rounded border border-slate-800/60 text-slate-300">2. Request Headers & Auth Tokens</div>
+                    <div className="p-2 bg-slate-900/60 rounded border border-slate-800/60 text-slate-300">3. Query Key-Value Parameters</div>
+                    <div className="p-2 bg-slate-900/60 rounded border border-slate-800/60 text-slate-300">4. Request Bodies (JSON/Form)</div>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
+                  <div className="text-xs font-bold">5-Tier Resolution Hierarchy (Highest Priority First):</div>
                   {[
-                    { level: '1. Local Variables (Local Var)', desc: '@baseUrl = https://api.example.com defined in .rest file header or local script memory', tag: 'Highest Priority' },
+                    { level: '1. Local Variables (Local Var)', desc: '@baseUrl = https://api.example.com defined in file header or local script memory', tag: 'Highest Priority' },
                     { level: '2. Project Environment (Env)', desc: 'Active environment variables (Development, Staging, Production) in the current project', tag: 'High Priority' },
                     { level: '3. Organization Defaults (Org)', desc: 'Org-wide shared base variables across all projects in the active organization', tag: 'Medium Priority' },
                     { level: '4. Global Workspace (Global)', desc: 'Universal fallback variables accessible everywhere across all organizations and projects', tag: 'Base Level' },
+                    { level: '5. Built-in Dynamic System Vars', desc: '{{$timestamp}}, {{$guid}}, {{$randomInt}}, {{$randomEmail}}, etc. evaluated at runtime', tag: 'Auto Evaluated' },
                   ].map((item, idx) => (
                     <div
                       key={idx}
@@ -754,7 +772,7 @@ export function SettingsModal({
                     }`}
                   >
                     <FileCode className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Open Full .rest Syntax & Scripting Guide</span>
+                    <span>Open Full Script Syntax & Scripting Guide</span>
                   </button>
                 )}
               </div>
@@ -764,9 +782,9 @@ export function SettingsModal({
             {activeTab === 'about' && (
               <div className="space-y-6 max-w-2xl">
                 <div>
-                  <h3 className="text-sm font-bold tracking-tight">About RestPulse</h3>
+                  <h3 className="text-sm font-bold tracking-tight">About RestStudio</h3>
                   <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Offline-first, developer-friendly REST API Studio with native .rest support
+                    Offline-first, developer-friendly REST API Studio with Postman, Insomnia, and OpenAPI support
                   </p>
                 </div>
 
@@ -776,12 +794,12 @@ export function SettingsModal({
                   }`}
                 >
                   <div className="flex items-center space-x-3">
-                    <img src="/icon.svg" alt="RestPulse" className="w-10 h-10 rounded-xl" />
+                    <img src="/icon.svg" alt="RestStudio" className="w-10 h-10 rounded-xl" />
                     <div>
                       <div className="flex items-center space-x-2">
-                        <span className="font-bold text-sm">RestPulse API Studio</span>
+                        <span className="font-bold text-sm">RestStudio API Studio</span>
                         <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          v1.2.1
+                          v1.3.0
                         </span>
                       </div>
                       <p className={`text-[11px] mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -799,7 +817,7 @@ export function SettingsModal({
                 >
                   <div className="text-xs font-bold text-emerald-400">Created by Suhail Akhtar</div>
                   <p className={`text-[11px] leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                    RestPulse is designed and engineered by <b>Suhail Akhtar</b>. Visit{' '}
+                    RestStudio is designed and engineered by <b>Suhail Akhtar</b>. Visit{' '}
                     <a
                       href="https://suhail.top"
                       target="_blank"

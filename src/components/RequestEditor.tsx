@@ -308,7 +308,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   // Extract variables referenced anywhere in current request
   const reqVarsText = JSON.stringify(request);
   const requestVarKeys = Array.from(
-    new Set(Array.from(reqVarsText.matchAll(/\{\{([a-zA-Z0-9_.-]+)\}\}/g)).map((m) => m[1]))
+    new Set(Array.from(reqVarsText.matchAll(/\{\{([a-zA-Z0-9_$.-]+)\}\}/g)).map((m) => m[1]))
   );
 
   const handleCopyCode = () => {
@@ -1232,7 +1232,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
                     const ctxToUseForVal = scopeCtx || { projectVariables: envVariables, fileVariables };
                     const resolvedForVal = resolveEnvVariables(request.body.rawText, ctxToUseForVal).resolved;
                     const status = validateJsonSyntax(resolvedForVal);
-                    const hasVars = /\{\{[a-zA-Z0-9_.-]+\}\}/.test(request.body.rawText);
+                    const hasVars = /\{\{[a-zA-Z0-9_$.-]+\}\}/.test(request.body.rawText);
 
                     if (status.isValid) {
                       return (
@@ -1259,7 +1259,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
             {request.body.mode !== 'none' && (() => {
               const bodyVarKeys = Array.from(
                 new Set(
-                  Array.from(request.body.rawText.matchAll(/\{\{([a-zA-Z0-9_.-]+)\}\}/g)).map(
+                  Array.from(request.body.rawText.matchAll(/\{\{([a-zA-Z0-9_$.-]+)\}\}/g)).map(
                     (m) => m[1]
                   )
                 )

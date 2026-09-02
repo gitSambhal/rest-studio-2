@@ -1,6 +1,6 @@
 export type HTTPMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS' | 'QUERY';
 
-export type EnvVariableScope = 'global' | 'org' | 'env' | 'local' | 'organization' | 'project' | 'file';
+export type EnvVariableScope = 'global' | 'org' | 'env' | 'local' | 'organization' | 'project' | 'file' | 'system';
 
 export interface KeyValuePair {
   id: string;

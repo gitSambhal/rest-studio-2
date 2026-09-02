@@ -36,7 +36,6 @@ export const QuickNewRequestModal: React.FC<QuickNewRequestModalProps> = ({
   onCreateRequest,
   onCreateNewFileAndRequest,
 }) => {
-  if (!isOpen) return null;
   const files = project?.files || [];
   const defaultTargetFileId = activeFileId || (files.length > 0 ? files[0].id : 'NEW_FILE');
 
@@ -44,10 +43,11 @@ export const QuickNewRequestModal: React.FC<QuickNewRequestModalProps> = ({
   const [requestName, setRequestName] = useState('');
   const [requestUrl, setRequestUrl] = useState(initialPasteText || '{{baseUrl}}/users');
   const [targetFileId, setTargetFileId] = useState<string>(defaultTargetFileId);
-  const [newFileName, setNewFileName] = useState('api_endpoints.rest');
+  const [newFileName, setNewFileName] = useState('api_endpoints');
   const [extraProps, setExtraProps] = useState<Partial<RestRequest> | null>(null);
 
   useEffect(() => {
+    if (!isOpen) return;
     if (initialPasteText) {
       setRequestUrl(initialPasteText);
       const res = detectAndParsePaste(initialPasteText);
@@ -66,7 +66,9 @@ export const QuickNewRequestModal: React.FC<QuickNewRequestModalProps> = ({
         });
       }
     }
-  }, [initialPasteText]);
+  }, [initialPasteText, isOpen]);
+
+  if (!isOpen) return null;
 
   const activeEnv = project?.environments?.find((e) => e.id === project?.activeEnvId);
   const targetFile = files.find((f) => f.id === targetFileId);
@@ -103,7 +105,7 @@ export const QuickNewRequestModal: React.FC<QuickNewRequestModalProps> = ({
     const finalUrl = requestUrl.trim() || '{{baseUrl}}/endpoint';
 
     if (targetFileId === 'NEW_FILE') {
-      const validFileName = newFileName.endsWith('.rest') ? newFileName : `${newFileName}.rest`;
+      const validFileName = newFileName.trim() || 'api_endpoints';
       onCreateNewFileAndRequest(validFileName, selectedMethod, finalName, finalUrl, extraProps || undefined);
     } else {
       onCreateRequest(targetFileId, selectedMethod, finalName, finalUrl, extraProps || undefined);
@@ -327,7 +329,7 @@ export const QuickNewRequestModal: React.FC<QuickNewRequestModalProps> = ({
           {/* Target File Selector */}
           <div>
             <label className={`text-xs font-bold block mb-1.5 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-              Target .rest File
+              Target Collection File
             </label>
             <select
               value={targetFileId}
@@ -341,7 +343,7 @@ export const QuickNewRequestModal: React.FC<QuickNewRequestModalProps> = ({
                   📄 {file.name} ({file.requests.length} endpoints)
                 </option>
               ))}
-              <option value="NEW_FILE">✨ Create New .rest File</option>
+              <option value="NEW_FILE">✨ Create New Collection File</option>
             </select>
           </div>
 
@@ -352,13 +354,13 @@ export const QuickNewRequestModal: React.FC<QuickNewRequestModalProps> = ({
             }`}>
               <div className="flex items-center space-x-1.5 text-xs font-bold text-emerald-500">
                 <FileCode className="w-4 h-4" />
-                <span>New REST File Details</span>
+                <span>New Collection File Details</span>
               </div>
               <input
                 type="text"
                 value={newFileName}
                 onChange={(e) => setNewFileName(e.target.value)}
-                placeholder="e.g. user_service.rest"
+                placeholder="e.g. user_service"
                 className={`w-full border rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
                   isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
                 }`}

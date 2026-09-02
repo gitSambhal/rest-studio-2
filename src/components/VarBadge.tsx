@@ -238,12 +238,12 @@ export const RenderTextWithVars: React.FC<RenderTextWithVarsProps> = ({
 }) => {
   if (!text) return null;
 
-  const parts = text.split(/(\{\{[a-zA-Z0-9_.-]+\}\})/g);
+  const parts = text.split(/(\{\{[a-zA-Z0-9_$.-]+\}\})/g);
 
   return (
     <span className={className}>
       {parts.map((part, i) => {
-        const match = part.match(/^\{\{([a-zA-Z0-9_.-]+)\}\}$/);
+        const match = part.match(/^\{\{([a-zA-Z0-9_$.-]+)\}\}$/);
         if (match) {
           const varKey = match[1];
           return (

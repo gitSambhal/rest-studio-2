@@ -185,14 +185,14 @@ export function smartFormatJson(rawText: string, indent = 2): { formatted: strin
       let counter = 0;
 
       // Replace quoted variables: "{{varName}}" -> "__REST_VAR_Q_0__"
-      let replaced = rawText.replace(/"\{\{([a-zA-Z0-9_.-]+)\}\}"/g, (match) => {
+      let replaced = rawText.replace(/"\{\{([a-zA-Z0-9_$.-]+)\}\}"/g, (match) => {
         const placeholder = `__REST_VAR_Q_${counter++}__`;
         varMap.set(placeholder, { orig: match, isQuoted: true });
         return `"${placeholder}"`;
       });
 
       // Replace unquoted variables: {{varName}} -> "__REST_VAR_U_0__"
-      replaced = replaced.replace(/\{\{([a-zA-Z0-9_.-]+)\}\}/g, (match) => {
+      replaced = replaced.replace(/\{\{([a-zA-Z0-9_$.-]+)\}\}/g, (match) => {
         const placeholder = `__REST_VAR_U_${counter++}__`;
         varMap.set(placeholder, { orig: match, isQuoted: false });
         return `"${placeholder}"`;
@@ -223,7 +223,7 @@ export function smartFormatJson(rawText: string, indent = 2): { formatted: strin
 export function validateJsonSyntax(rawText: string): { isValid: boolean; hasVars: boolean; error?: string } {
   if (!rawText || !rawText.trim()) return { isValid: true, hasVars: false };
 
-  const hasVars = /\{\{[a-zA-Z0-9_.-]+\}\}/.test(rawText);
+  const hasVars = /\{\{[a-zA-Z0-9_$.-]+\}\}/.test(rawText);
 
   try {
     JSON.parse(rawText);

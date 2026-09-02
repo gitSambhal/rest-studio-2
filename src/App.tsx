@@ -48,7 +48,7 @@ export default function App() {
   // 1. Global Variables
   const [globalVariables, setGlobalVariables] = useState<EnvVariable[]>(() => {
     try {
-      const saved = localStorage.getItem('restpulse_global_vars');
+      const saved = localStorage.getItem('reststudio_global_vars') || localStorage.getItem('restpulse_global_vars');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
     return INITIAL_GLOBAL_VARIABLES;
@@ -57,7 +57,7 @@ export default function App() {
   // 2. Organizations & Projects
   const [organizations, setOrganizations] = useState<Organization[]>(() => {
     try {
-      const saved = localStorage.getItem('restpulse_organizations');
+      const saved = localStorage.getItem('reststudio_organizations') || localStorage.getItem('restpulse_organizations');
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.error('Failed to load saved organizations:', e);
@@ -89,7 +89,7 @@ export default function App() {
   // 3. Multi-Tab System
   const [tabs, setTabs] = useState<WorkspaceTab[]>(() => {
     try {
-      const saved = localStorage.getItem('restpulse_tabs');
+      const saved = localStorage.getItem('reststudio_tabs') || localStorage.getItem('restpulse_tabs');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
     return [
@@ -370,7 +370,7 @@ export default function App() {
   // History State
   const [history, setHistory] = useState<RequestHistoryItem[]>(() => {
     try {
-      const saved = localStorage.getItem('restpulse_history');
+      const saved = localStorage.getItem('reststudio_history') || localStorage.getItem('restpulse_history');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
     return [];
@@ -379,24 +379,28 @@ export default function App() {
   // LocalStorage Persistence
   useEffect(() => {
     try {
+      localStorage.setItem('reststudio_global_vars', JSON.stringify(globalVariables));
       localStorage.setItem('restpulse_global_vars', JSON.stringify(globalVariables));
     } catch (e) {}
   }, [globalVariables]);
 
   useEffect(() => {
     try {
+      localStorage.setItem('reststudio_organizations', JSON.stringify(organizations));
       localStorage.setItem('restpulse_organizations', JSON.stringify(organizations));
     } catch (e) {}
   }, [organizations]);
 
   useEffect(() => {
     try {
+      localStorage.setItem('reststudio_tabs', JSON.stringify(tabs));
       localStorage.setItem('restpulse_tabs', JSON.stringify(tabs));
     } catch (e) {}
   }, [tabs]);
 
   useEffect(() => {
     try {
+      localStorage.setItem('reststudio_history', JSON.stringify(history));
       localStorage.setItem('restpulse_history', JSON.stringify(history));
     } catch (e) {}
   }, [history]);
@@ -1341,14 +1345,14 @@ export default function App() {
       // Create a default file if project has no files
       const newFile: RestFile = {
         id: 'file_' + Math.random().toString(36).substring(2, 9),
-        name: 'curl_requests.rest',
+        name: 'curl_requests',
         rawContent: '',
         requests: [req],
         updatedAt: Date.now(),
       };
       updateProjectFiles([newFile]);
       handleOpenRequestInTab(newFile.id, req.id);
-      showToast('success', 'cURL Endpoint Imported', `Imported "${req.name}" into new curl_requests.rest file.`);
+      showToast('success', 'cURL Endpoint Imported', `Imported "${req.name}" into new collection file.`);
       return;
     }
 
@@ -1522,7 +1526,7 @@ export default function App() {
               files: [
                 {
                   id: 'file_init',
-                  name: 'payments.rest',
+                  name: 'payments_collection',
                   updatedAt: Date.now(),
                   rawContent: `### Get Payment Status\nGET {{baseUrl}}/todos/1\n`,
                   requests: [
@@ -1581,7 +1585,7 @@ export default function App() {
           files: [
             {
               id: 'file_default_' + Date.now(),
-              name: 'api.rest',
+              name: 'api_collection',
               updatedAt: Date.now(),
               rawContent: `### Get All Items\nGET {{baseUrl}}/posts\n`,
               requests: [
@@ -1718,7 +1722,7 @@ export default function App() {
             files: [
               {
                 id: 'file_default',
-                name: 'default.rest',
+                name: 'default_collection',
                 updatedAt: Date.now(),
                 rawContent: `### Health Check\nGET {{baseUrl}}/todos/1\n`,
                 requests: [

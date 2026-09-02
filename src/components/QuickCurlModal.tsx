@@ -118,7 +118,6 @@ export const QuickCurlModal: React.FC<QuickCurlModalProps> = ({
   onImportPostman,
   onImportRestFile,
 }) => {
-  if (!isOpen) return null;
   const files = project?.files || [];
   const defaultTargetFileId = activeFileId || (files.length > 0 ? files[0].id : '');
 
@@ -128,9 +127,12 @@ export const QuickCurlModal: React.FC<QuickCurlModalProps> = ({
 
   // Live Auto-Detection Effect
   useEffect(() => {
+    if (!isOpen) return;
     const result = detectAndParsePaste(inputText);
     setParseResult(result);
-  }, [inputText]);
+  }, [inputText, isOpen]);
+
+  if (!isOpen) return null;
 
   const handleImport = (e: React.FormEvent) => {
     e.preventDefault();
@@ -268,7 +270,7 @@ export const QuickCurlModal: React.FC<QuickCurlModalProps> = ({
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               rows={6}
-              placeholder={`Paste anything here:\n- cURL: curl -X POST "https://..." -H "Content-Type: application/json"\n- Postman Collection JSON\n- REST File (.rest / .http) snippet\n- OpenAPI / Swagger JSON or YAML`}
+              placeholder={`Paste anything here:\n- cURL: curl -X POST "https://..." -H "Content-Type: application/json"\n- Postman Collection JSON\n- HTTP Request Code snippet\n- OpenAPI / Swagger JSON or YAML`}
               className={`w-full font-mono border rounded-xl p-3 text-xs leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-500 ${
                 isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-600' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400'
               }`}

@@ -30,17 +30,17 @@ export interface SyncPayload {
   globalVariables?: EnvVariable[];
 }
 
-const GIST_DESCRIPTION = 'RestPulse API Client - Free Unlimited Workspace & History Sync';
-const WORKSPACE_FILE = 'restpulse-workspace.json';
-const HISTORY_FILE = 'restpulse-history.json';
-const STORAGE_TOKEN_KEY = 'restpulse_github_pat';
-const STORAGE_GIST_ID_KEY = 'restpulse_github_gist_id';
-const STORAGE_USER_KEY = 'restpulse_github_user';
-const STORAGE_AUTO_SYNC_KEY = 'restpulse_github_auto_sync';
+const GIST_DESCRIPTION = 'RestStudio API Client - Free Unlimited Workspace & History Sync';
+const WORKSPACE_FILE = 'reststudio-workspace.json';
+const HISTORY_FILE = 'reststudio-history.json';
+const STORAGE_TOKEN_KEY = 'reststudio_github_pat';
+const STORAGE_GIST_ID_KEY = 'reststudio_github_gist_id';
+const STORAGE_USER_KEY = 'reststudio_github_user';
+const STORAGE_AUTO_SYNC_KEY = 'reststudio_github_auto_sync';
 
 export const getSavedGitHubToken = (): string | null => {
   try {
-    return localStorage.getItem(STORAGE_TOKEN_KEY);
+    return localStorage.getItem(STORAGE_TOKEN_KEY) || localStorage.getItem('restpulse_github_pat');
   } catch {
     return null;
   }

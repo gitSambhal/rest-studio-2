@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Project, RestRequest, RestFile } from '../types';
-import { parseRestFileContent, parseCurlCommand, parsePostmanCollection, parseOpenApiSpec, exportToPostmanCollection } from '../utils/restParser';
-import { X, Upload, Download, FileCode, Terminal, Check, FolderArchive, FileJson, Sparkles, AlertCircle, FileText, Zap } from 'lucide-react';
+import {
+  parseRestFileContent,
+  parseCurlCommand,
+  parsePostmanCollection,
+  parseInsomniaCollection,
+  parseOpenApiSpec,
+  exportToPostmanCollection,
+  exportToInsomniaCollection,
+  exportToOpenApiSpec,
+} from '../utils/restParser';
+import { X, Upload, Download, FileCode, Terminal, Check, FolderArchive, FileJson, Sparkles, AlertCircle, FileText, Zap, Layers } from 'lucide-react';
 
 interface ImportExportModalProps {
   project: Project;
@@ -20,9 +29,9 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   onImportPostman,
   isDarkMode = true,
 }) => {
-  const [activeTab, setActiveTab] = useState<'import_rest' | 'import_postman' | 'import_openapi' | 'import_curl' | 'export'>('import_rest');
+  const [activeTab, setActiveTab] = useState<'import_postman' | 'import_insomnia' | 'import_rest' | 'import_openapi' | 'import_curl' | 'export'>('import_postman');
   const [inputText, setInputText] = useState('');
-  const [fileName, setFileName] = useState('imported.rest');
+  const [fileName, setFileName] = useState('imported_collection.json');
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [autoDetectMsg, setAutoDetectMsg] = useState('');
@@ -46,6 +55,15 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       return;
     }
 
+    // Insomnia detection
+    if (trimmed.includes('"_type": "export"') || trimmed.includes('"__export_format"') || (trimmed.includes('"resources"') && trimmed.includes('"_type"'))) {
+      if (activeTab !== 'import_insomnia') {
+        setActiveTab('import_insomnia');
+        setAutoDetectMsg('🔮 Detected Insomnia v4 Collection format!');
+      }
+      return;
+    }
+
     // OpenAPI detection
     if (
       (trimmed.includes('"openapi"') || trimmed.includes('openapi:') || trimmed.includes('"swagger"') || trimmed.includes('swagger:')) &&
@@ -59,10 +77,10 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     }
 
     // Postman detection
-    if (trimmed.includes('"_postman_id"') || (trimmed.includes('"schema"') && trimmed.includes('getpostman.com')) || trimmed.includes('"info"') && trimmed.includes('"item"')) {
+    if (trimmed.includes('"_postman_id"') || (trimmed.includes('"schema"') && trimmed.includes('getpostman.com')) || (trimmed.includes('"info"') && trimmed.includes('"item"'))) {
       if (activeTab !== 'import_postman') {
         setActiveTab('import_postman');
-        setAutoDetectMsg('📦 Detected Postman Collection format!');
+        setAutoDetectMsg('📦 Detected Postman Collection v2.1 format!');
       }
       return;
     }
@@ -79,11 +97,15 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       setInputText(text);
 
       if (file.name.endsWith('.json') || file.name.endsWith('.yaml') || file.name.endsWith('.yml')) {
-        if (text.includes('openapi') || text.includes('swagger') || text.includes('"paths"')) {
+        if (text.includes('"_type": "export"') || text.includes('__export_format') || text.includes('insomnia')) {
+          setActiveTab('import_insomnia');
+          setAutoDetectMsg('🔮 Detected Insomnia v4 Collection file!');
+        } else if (text.includes('openapi') || text.includes('swagger') || text.includes('"paths"')) {
           setActiveTab('import_openapi');
           setAutoDetectMsg('✨ Detected OpenAPI / Swagger File!');
         } else {
           setActiveTab('import_postman');
+          setAutoDetectMsg('📦 Detected Postman Collection file!');
         }
       } else if (file.name.endsWith('.rest') || file.name.endsWith('.http')) {
         setActiveTab('import_rest');
@@ -157,13 +179,30 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
           return;
         }
         onImportPostman(folders, files);
-        setSuccessMsg(`Successfully imported ${files.length} REST files from Postman collection!`);
+        setSuccessMsg(`Successfully imported Postman collection (${files.length} collections/files)!`);
         setTimeout(() => {
           setSuccessMsg('');
           onClose();
         }, 1000);
       } catch (e: any) {
         setErrorMsg(`Invalid JSON file format: ${e.message || 'Syntax error in collection JSON'}`);
+      }
+    } else if (activeTab === 'import_insomnia') {
+      try {
+        const json = JSON.parse(inputText);
+        const { folders, files, workspaceName, error } = parseInsomniaCollection(json);
+        if (error || files.length === 0) {
+          setErrorMsg(error || 'No valid HTTP request endpoints found in Insomnia export JSON.');
+          return;
+        }
+        onImportPostman(folders, files);
+        setSuccessMsg(`Successfully imported Insomnia collection "${workspaceName}" (${files.length} collections/files)!`);
+        setTimeout(() => {
+          setSuccessMsg('');
+          onClose();
+        }, 1000);
+      } catch (e: any) {
+        setErrorMsg(`Invalid Insomnia export JSON: ${e.message || 'Syntax error in Insomnia file'}`);
       }
     } else if (activeTab === 'import_openapi') {
       try {
@@ -206,6 +245,32 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', dataStr);
     downloadAnchor.setAttribute('download', `${projName.toLowerCase().replace(/\s+/g, '_')}_postman_collection.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  const handleExportInsomnia = () => {
+    const projName = project?.name || 'Project';
+    const projFiles = project?.files || [];
+    const insomniaData = exportToInsomniaCollection(projName, projFiles);
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(insomniaData, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `${projName.toLowerCase().replace(/\s+/g, '_')}_insomnia_v4.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  const handleExportOpenApi = () => {
+    const projName = project?.name || 'Project';
+    const projFiles = project?.files || [];
+    const openApiData = exportToOpenApiSpec(projName, projFiles);
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(openApiData, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `${projName.toLowerCase().replace(/\s+/g, '_')}_openapi_v3.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -265,7 +330,10 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
         }`}>
           <div className="flex items-center space-x-2">
             <Upload className="w-5 h-5 text-emerald-500" />
-            <h3 className={`font-bold text-sm ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>Import / Export REST Suite</h3>
+            <div>
+              <h3 className={`font-bold text-sm ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>Import &amp; Export Workspace</h3>
+              <p className="text-[11px] text-slate-400">Postman Collections, Insomnia, OpenAPI &amp; cURL</p>
+            </div>
           </div>
 
           <button
@@ -286,6 +354,40 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
           <button
             type="button"
             onClick={() => {
+              setActiveTab('import_postman');
+              setInputText('');
+              setAutoDetectMsg('');
+            }}
+            className={`py-2.5 px-3.5 border-b-2 whitespace-nowrap flex items-center space-x-1.5 transition-colors cursor-pointer ${
+              activeTab === 'import_postman'
+                ? 'border-emerald-500 text-emerald-500 font-bold'
+                : isDarkMode ? 'border-transparent text-slate-400 hover:text-slate-200' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <FileJson className="w-3.5 h-3.5 text-amber-500" />
+            <span>Postman Collection (v2.1)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('import_insomnia');
+              setInputText('');
+              setAutoDetectMsg('');
+            }}
+            className={`py-2.5 px-3.5 border-b-2 whitespace-nowrap flex items-center space-x-1.5 transition-colors cursor-pointer ${
+              activeTab === 'import_insomnia'
+                ? 'border-emerald-500 text-emerald-500 font-bold'
+                : isDarkMode ? 'border-transparent text-slate-400 hover:text-slate-200' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5 text-purple-400" />
+            <span>Insomnia v4</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
               setActiveTab('import_rest');
               setInputText('');
               setAutoDetectMsg('');
@@ -296,7 +398,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                 : isDarkMode ? 'border-transparent text-slate-400 hover:text-slate-200' : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            .rest / .http File
+            HTTP Script
           </button>
 
           <button
@@ -314,22 +416,6 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
             <span>OpenAPI / Swagger</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('import_postman');
-              setInputText('');
-              setAutoDetectMsg('');
-            }}
-            className={`py-2.5 px-3.5 border-b-2 whitespace-nowrap transition-colors cursor-pointer ${
-              activeTab === 'import_postman'
-                ? 'border-emerald-500 text-emerald-500 font-bold'
-                : isDarkMode ? 'border-transparent text-slate-400 hover:text-slate-200' : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Postman Collection (v2.1)
           </button>
 
           <button
@@ -399,7 +485,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               <Upload className="w-12 h-12 text-emerald-500 animate-bounce" />
               <div className="text-center">
                 <p className="text-sm font-bold text-emerald-600">Drop file anywhere to import</p>
-                <p className={`text-xs mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Supports OpenAPI JSON/YAML, .rest, Postman, or cURL</p>
+                <p className={`text-xs mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Supports Postman, Insomnia, OpenAPI, or cURL</p>
               </div>
             </div>
           )}
@@ -416,12 +502,12 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               >
                 <Upload className="w-6 h-6 text-emerald-500 group-hover:scale-110 transition-transform mb-1.5" />
                 <span className={`text-xs font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>
-                  Drag &amp; Drop <code className="text-emerald-500 font-mono">.rest / .http / .txt</code> file here
+                  Drag &amp; Drop HTTP script or collection file here
                 </span>
                 <span className={`text-[11px] mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>or click to browse from device</span>
                 <input
                   type="file"
-                  accept=".rest,.http,.txt"
+                  accept=".rest,.http,.txt,.json"
                   onChange={handleFileUpload}
                   className="hidden"
                 />
@@ -440,7 +526,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               </div>
 
               <div>
-                <label className={`text-xs font-semibold block mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Paste or Edit .rest Syntax:</label>
+                <label className={`text-xs font-semibold block mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Paste or Edit HTTP Script Syntax:</label>
                 <textarea
                   value={inputText}
                   onChange={(e) => handleTextChange(e.target.value)}
@@ -542,41 +628,99 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
             </div>
           )}
 
+          {activeTab === 'import_insomnia' && (
+            <div className="space-y-3">
+              {/* Drag & Drop Dropzone Box */}
+              <label
+                className={`border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-colors group ${
+                  isDarkMode
+                    ? 'border-slate-800 hover:border-purple-500/60 bg-slate-950 hover:bg-slate-900/60'
+                    : 'border-slate-200 hover:border-purple-500 bg-slate-50 hover:bg-slate-100/80'
+                }`}
+              >
+                <Layers className="w-6 h-6 text-purple-400 group-hover:scale-110 transition-transform mb-1.5" />
+                <span className={`text-xs font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>
+                  Drag &amp; Drop <code className="text-purple-400 font-mono">Insomnia v4 Export JSON</code> file here
+                </span>
+                <span className={`text-[11px] mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Supports workspace resources, request groups, and headers</span>
+                <input
+                  type="file"
+                  accept=".json,.txt"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+              </label>
+
+              <div>
+                <label className={`text-xs font-semibold block mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Paste Insomnia Export JSON:</label>
+                <textarea
+                  value={inputText}
+                  onChange={(e) => handleTextChange(e.target.value)}
+                  rows={8}
+                  placeholder={`{\n  "_type": "export",\n  "__export_format": 4,\n  "resources": [\n    { "_type": "workspace", "name": "My Workspace" },\n    { "_type": "request", "name": "Get Users", "url": "https://api.example.com/users", "method": "GET" }\n  ]\n}`}
+                  className={`w-full font-mono border rounded-xl p-3 text-xs leading-relaxed ${
+                    isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-900'
+                  }`}
+                />
+              </div>
+            </div>
+          )}
+
           {activeTab === 'export' && (
             <div className="space-y-4 py-4 text-center">
               <p className="text-xs text-slate-300">
-                Choose an export format for <strong className="text-emerald-400">{project.name}</strong> or export all organizations:
+                Export <strong className="text-emerald-400">{project.name}</strong> to Postman, Insomnia, OpenAPI, HTTP scripts, or full workspace backup:
               </p>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <button
                   type="button"
-                  onClick={handleExportRestFileBundle}
-                  className="flex flex-col items-center justify-center p-3.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-200 transition-colors space-y-2 group cursor-pointer"
+                  onClick={handleExportPostman}
+                  className="flex flex-col items-center justify-center p-3.5 bg-slate-950 hover:bg-slate-800 border border-amber-500/40 hover:border-amber-500 rounded-xl text-slate-200 transition-colors space-y-1.5 group cursor-pointer"
                 >
-                  <FileCode className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
-                  <span className="font-bold text-xs text-slate-100">.rest Files</span>
-                  <span className="text-[10px] text-slate-400 font-mono">REST Client Syntax</span>
+                  <FileJson className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
+                  <span className="font-bold text-xs text-slate-100">Postman v2.1</span>
+                  <span className="text-[10px] text-slate-400 font-mono">Native Collection JSON</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={handleExportPostman}
-                  className="flex flex-col items-center justify-center p-3.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-200 transition-colors space-y-2 group cursor-pointer"
+                  onClick={handleExportInsomnia}
+                  className="flex flex-col items-center justify-center p-3.5 bg-slate-950 hover:bg-slate-800 border border-purple-500/40 hover:border-purple-500 rounded-xl text-slate-200 transition-colors space-y-1.5 group cursor-pointer"
                 >
-                  <FileJson className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
-                  <span className="font-bold text-xs text-slate-100">Postman v2.1</span>
-                  <span className="text-[10px] text-slate-400 font-mono">Collection JSON</span>
+                  <Layers className="w-5 h-5 text-purple-400 group-hover:scale-110 transition-transform" />
+                  <span className="font-bold text-xs text-slate-100">Insomnia v4</span>
+                  <span className="text-[10px] text-slate-400 font-mono">Workspace Export JSON</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExportOpenApi}
+                  className="flex flex-col items-center justify-center p-3.5 bg-slate-950 hover:bg-slate-800 border border-teal-500/40 hover:border-teal-500 rounded-xl text-slate-200 transition-colors space-y-1.5 group cursor-pointer"
+                >
+                  <Sparkles className="w-5 h-5 text-teal-400 group-hover:scale-110 transition-transform" />
+                  <span className="font-bold text-xs text-slate-100">OpenAPI v3.0</span>
+                  <span className="text-[10px] text-slate-400 font-mono">Swagger API Spec</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExportRestFileBundle}
+                  className="flex flex-col items-center justify-center p-3.5 bg-slate-950 hover:bg-slate-800 border border-emerald-500/40 hover:border-emerald-500 rounded-xl text-slate-200 transition-colors space-y-1.5 group cursor-pointer"
+                >
+                  <FileCode className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
+                  <span className="font-bold text-xs text-slate-100">HTTP Script</span>
+                  <span className="text-[10px] text-slate-400 font-mono">Raw Code Export</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleExportWorkspaceJson}
-                  className="flex flex-col items-center justify-center p-3.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-200 transition-colors space-y-2 group cursor-pointer"
+                  className="flex flex-col items-center justify-center p-3.5 bg-slate-950 hover:bg-slate-800 border border-blue-500/40 hover:border-blue-500 rounded-xl text-slate-200 transition-colors space-y-1.5 group cursor-pointer"
                 >
                   <Download className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />
                   <span className="font-bold text-xs text-slate-100">Project JSON</span>
-                  <span className="text-[10px] text-slate-400 font-mono">Files & Envs</span>
+                  <span className="text-[10px] text-slate-400 font-mono">Files &amp; Envs</span>
                 </button>
 
                 <button
@@ -587,7 +731,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                       const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(rawData);
                       const downloadAnchor = document.createElement('a');
                       downloadAnchor.setAttribute('href', dataStr);
-                      downloadAnchor.setAttribute('download', `restpulse_all_organizations_backup.json`);
+                      downloadAnchor.setAttribute('download', `reststudio_all_organizations_backup.json`);
                       document.body.appendChild(downloadAnchor);
                       downloadAnchor.click();
                       downloadAnchor.remove();
@@ -595,11 +739,11 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                       alert('No saved organization data found.');
                     }
                   }}
-                  className="flex flex-col items-center justify-center p-3.5 bg-slate-950 hover:bg-slate-800 border border-purple-500/30 hover:border-purple-500/60 rounded-xl text-slate-200 transition-colors space-y-2 group cursor-pointer"
+                  className="flex flex-col items-center justify-center p-3.5 bg-slate-950 hover:bg-slate-800 border border-slate-700 hover:border-slate-500 rounded-xl text-slate-200 transition-colors space-y-1.5 group cursor-pointer"
                 >
-                  <FolderArchive className="w-5 h-5 text-purple-400 group-hover:scale-110 transition-transform" />
-                  <span className="font-bold text-xs text-purple-300">All Orgs Backup</span>
-                  <span className="text-[10px] text-slate-400 font-mono">Full Export JSON</span>
+                  <FolderArchive className="w-5 h-5 text-slate-400 group-hover:scale-110 transition-transform" />
+                  <span className="font-bold text-xs text-slate-300">All Orgs Backup</span>
+                  <span className="text-[10px] text-slate-400 font-mono">Full Storage JSON</span>
                 </button>
               </div>
             </div>

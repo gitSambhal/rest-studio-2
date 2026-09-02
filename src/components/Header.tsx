@@ -146,15 +146,15 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center space-x-1.5 shrink-0">
           <img
             src="/icon.svg"
-            alt="RestPulse"
+            alt="RestStudio"
             className="w-6 h-6 sm:w-7 sm:h-7 rounded-xl shrink-0 select-none pointer-events-none"
             draggable={false}
           />
           <div className="flex flex-col justify-center hidden xl:flex">
             <div className="flex items-center space-x-1.5 leading-none">
-              <span className={`font-bold text-sm tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>RestPulse</span>
+              <span className={`font-bold text-sm tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>RestStudio</span>
               <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                v1.3
+                v1.3.0
               </span>
             </div>
           </div>
@@ -332,7 +332,7 @@ export const Header: React.FC<HeaderProps> = ({
                           <span className={`text-[10px] font-mono shrink-0 whitespace-nowrap px-1.5 py-0.5 rounded border ${
                             isDarkMode ? 'bg-slate-800/60 text-slate-400 border-slate-700/50' : 'bg-slate-100 text-slate-600 border-slate-200'
                           }`}>
-                            {proj.files?.length || 0} .rest
+                            {proj.files?.length || 0} collections
                           </span>
                           {onRenameProject && (
                             <button
@@ -512,10 +512,10 @@ export const Header: React.FC<HeaderProps> = ({
               ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
           }`}
-          title="Raw .rest / .http Script Code View"
+          title="Raw Script Code View"
         >
           <FileCode className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden lg:inline">.rest</span>
+          <span className="hidden lg:inline">Code</span>
         </button>
 
         <button
@@ -528,7 +528,7 @@ export const Header: React.FC<HeaderProps> = ({
               ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
           }`}
-          title="Batch REST File Runner"
+          title="Batch Collection Runner"
         >
           <PlayCircle className="w-3.5 h-3.5 shrink-0" />
           <span className="hidden lg:inline">Runner</span>
@@ -573,7 +573,7 @@ export const Header: React.FC<HeaderProps> = ({
                   ? 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-slate-100'
                   : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700 hover:text-slate-900'
               }`}
-              title="Import Postman, cURL, OpenAPI, or .rest files"
+              title="Import Postman Collections, Insomnia, cURL, or OpenAPI"
             >
               <Upload className="w-3.5 h-3.5 text-emerald-400" />
               <span>Import</span>
@@ -727,13 +727,13 @@ export const Header: React.FC<HeaderProps> = ({
                 {/* Header info */}
                 <div className="px-2.5 py-1.5 flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <img src="/icon.svg" alt="RestPulse" className="w-4 h-4 rounded-md" />
+                    <img src="/icon.svg" alt="RestStudio" className="w-4 h-4 rounded-md" />
                     <span className="font-bold text-xs">Workspace Tools</span>
                   </div>
                   <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${
                     isDarkMode ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-slate-100 text-slate-500 border-slate-200'
                   }`}>
-                    RestPulse v1.3
+                    RestStudio v1.3.0
                   </span>
                 </div>
 
@@ -754,7 +754,7 @@ export const Header: React.FC<HeaderProps> = ({
                         <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
                         <div>
                           <div className="font-semibold">Import / Export</div>
-                          <div className="text-[10px] text-slate-400">Postman, cURL, OpenAPI, .rest</div>
+                          <div className="text-[10px] text-slate-400">Postman, Insomnia, OpenAPI, cURL</div>
                         </div>
                       </div>
                     </button>

@@ -105,7 +105,7 @@ export const RestFileEditor: React.FC<RestFileEditorProps> = ({
   const extractedVarKeys = Array.from(
     new Set([
       ...Object.keys(fileVars),
-      ...Array.from(content.matchAll(/\{\{([a-zA-Z0-9_.-]+)\}\}/g)).map((m) => m[1]),
+      ...Array.from(content.matchAll(/\{\{([a-zA-Z0-9_$.-]+)\}\}/g)).map((m) => m[1]),
     ])
   );
 
@@ -375,7 +375,7 @@ export const RestFileEditor: React.FC<RestFileEditorProps> = ({
                 ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
                 : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'
             }`}
-            title="Copy full .rest file content to clipboard"
+            title="Copy full script content to clipboard"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
             <span>{copied ? 'Copied' : 'Copy Text'}</span>
@@ -385,7 +385,7 @@ export const RestFileEditor: React.FC<RestFileEditorProps> = ({
 
       {/* Main Grid: Code Textarea + Executable Request Blocks & Live Inspector */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden min-h-0">
-        {/* Left: Interactive `.rest` Code Textarea (7 cols on lg) */}
+        {/* Left: Interactive Code Textarea (7 cols on lg) */}
         <div
           className={`lg:col-span-7 p-3 sm:p-4 border-b lg:border-b-0 lg:border-r flex flex-col overflow-y-auto space-y-3 ${
             isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'
@@ -393,7 +393,7 @@ export const RestFileEditor: React.FC<RestFileEditorProps> = ({
         >
           <div className="text-xs font-mono flex items-center justify-between">
             <span className={isDarkMode ? 'text-slate-400' : 'text-slate-500'}>
-              Standard REST Client (<code className="text-emerald-400">.rest</code> / <code className="text-emerald-400">.http</code>) Syntax
+              HTTP Request Script Code
             </span>
             <span className="text-emerald-400 text-[11px]">
               @var = val &nbsp;|&nbsp; ### Request Name
