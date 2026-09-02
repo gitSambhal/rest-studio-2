@@ -1,6 +1,6 @@
 export type HTTPMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS' | 'QUERY';
 
-export type EnvVariableScope = 'global' | 'organization' | 'project' | 'folder' | 'file';
+export type EnvVariableScope = 'global' | 'org' | 'env' | 'local' | 'organization' | 'project' | 'file';
 
 export interface KeyValuePair {
   id: string;
@@ -82,7 +82,7 @@ export interface PreRequestScript {
     customBody?: string;
     tokenJsonPath?: string;
     saveToVarName?: string;
-    targetScope?: 'file' | 'environment' | 'global';
+    targetScope?: 'local' | 'env' | 'org' | 'global' | 'file' | 'environment';
     autoInjectHeader?: boolean;
   };
   validationConfig?: {
@@ -98,7 +98,7 @@ export interface VariableExtractorItem {
   source: 'body_json' | 'body_regex' | 'header';
   sourcePath: string;
   targetVarName: string;
-  targetScope: 'file' | 'environment' | 'global';
+  targetScope: 'local' | 'env' | 'org' | 'global' | 'file' | 'environment';
   enabled: boolean;
 }
 

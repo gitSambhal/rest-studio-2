@@ -24,7 +24,6 @@ interface EnvironmentManagerProps {
   onUpdateGlobalVariables: (vars: EnvVariable[]) => void;
   onUpdateOrganizationVariables: (vars: EnvVariable[]) => void;
   onUpdateProjectEnvironments: (updatedEnvironments: Environment[], activeEnvId: string | null) => void;
-  onUpdateFolderVariables: (folderId: string, vars: EnvVariable[]) => void;
 }
 
 interface ScopeVarTableProps {
@@ -168,9 +167,8 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
   onUpdateGlobalVariables,
   onUpdateOrganizationVariables,
   onUpdateProjectEnvironments,
-  onUpdateFolderVariables,
 }) => {
-  const [activeScopeTab, setActiveScopeTab] = useState<'global' | 'organization' | 'project' | 'folder'>(
+  const [activeScopeTab, setActiveScopeTab] = useState<'global' | 'organization' | 'project'>(
     'project'
   );
 
@@ -185,16 +183,6 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
   const [selectedEnvId, setSelectedEnvId] = useState<string>(
     project?.activeEnvId || (project?.environments?.[0]?.id ?? '')
   );
-
-  // Local state for Folder selection
-  const [selectedFolderId, setSelectedFolderId] = useState<string>(project?.folders?.[0]?.id || '');
-  const [folderVarsMap, setFolderVarsMap] = useState<Record<string, EnvVariable[]>>(() => {
-    const map: Record<string, EnvVariable[]> = {};
-    (project?.folders || []).forEach((f) => {
-      map[f.id] = f.variables || [];
-    });
-    return map;
-  });
 
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
 
@@ -215,7 +203,6 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
   });
 
   const activeEnv = (environments || []).find((e) => e.id === selectedEnvId) || environments?.[0];
-  const activeFolder = project?.folders?.find((f) => f.id === selectedFolderId) || project?.folders?.[0];
 
   // Helper to manage variables array edits
   const handleAddVarToTarget = (
@@ -255,9 +242,6 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
     onUpdateGlobalVariables(localGlobalVars);
     onUpdateOrganizationVariables(localOrgVars);
     onUpdateProjectEnvironments(environments, selectedEnvId);
-    Object.entries(folderVarsMap).forEach(([fId, vars]) => {
-      onUpdateFolderVariables(fId, vars);
-    });
     onClose();
   };
 
@@ -287,7 +271,7 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
             <div>
               <h3 className="font-bold text-slate-100 text-sm">Environment Variable Hierarchy Manager</h3>
               <p className="text-xs text-slate-400">
-                Variable Precedence (Highest &rarr; Base): <span className="font-mono text-sky-400 font-bold">1. Project</span> &gt; <span className="font-mono text-purple-400 font-bold">2. Organization</span> &gt; <span className="font-mono text-amber-400 font-bold">3. Global</span>
+                Variable Precedence (Highest &rarr; Base): <span className="font-mono text-emerald-400 font-bold">1. Local Var</span> &gt; <span className="font-mono text-sky-400 font-bold">2. Env ({activeEnv?.name || 'Active Profile'})</span> &gt; <span className="font-mono text-purple-400 font-bold">3. Org ({organization?.name || 'Org'})</span> &gt; <span className="font-mono text-amber-400 font-bold">4. Global</span>
               </p>
             </div>
           </div>
@@ -349,7 +333,7 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
             }`}
           >
             <FolderOpen className="w-3.5 h-3.5 text-sky-400" />
-            <span>3. Project ({project?.name || 'Project'})</span>
+            <span>3. Env ({project?.name || 'Project'})</span>
             <span className="text-[10px] bg-sky-500/10 text-sky-400 px-1.5 py-0.2 rounded-full border border-sky-500/20">
               {activeEnv?.variables.length || 0}
             </span>
@@ -498,60 +482,6 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
                     setEnvironments(
                       environments.map((e) => (e.id === activeEnv.id ? { ...e, variables: newVars } : e))
                     );
-                  }}
-                />
-              )}
-            </div>
-          )}
-
-          {activeScopeTab === 'folder' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
-                <div className="flex items-center space-x-3">
-                  <span className="text-xs text-slate-400 font-mono">Select Folder:</span>
-                  <select
-                    value={selectedFolderId}
-                    onChange={(e) => setSelectedFolderId(e.target.value)}
-                    className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1 font-mono focus:outline-none"
-                  >
-                    {project?.folders.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {activeFolder && (
-                <ScopeVarTable
-                  title={`Folder Scope: ${activeFolder.name}`}
-                  subtitle="Variables defined here override Project, Org, and Global variables for requests inside this folder."
-                  badgeColor="bg-teal-500/10 text-teal-400 border-teal-500/20"
-                  variables={folderVarsMap[activeFolder.id] || []}
-                  showSecrets={showSecrets}
-                  setShowSecrets={setShowSecrets}
-                  onAddVar={() => {
-                    const current = folderVarsMap[activeFolder.id] || [];
-                    const newVar: EnvVariable = {
-                      id: 'v_' + Math.random().toString(36).substring(2, 9),
-                      key: '',
-                      value: '',
-                      enabled: true,
-                    };
-                    setFolderVarsMap({ ...folderVarsMap, [activeFolder.id]: [...current, newVar] });
-                  }}
-                  onUpdateVar={(id, fields) => {
-                    const current = folderVarsMap[activeFolder.id] || [];
-                    const updated = current.map((v) => (v.id === id ? { ...v, ...fields } : v));
-                    setFolderVarsMap({ ...folderVarsMap, [activeFolder.id]: updated });
-                  }}
-                  onDeleteVar={(id) => {
-                    const current = folderVarsMap[activeFolder.id] || [];
-                    setFolderVarsMap({
-                      ...folderVarsMap,
-                      [activeFolder.id]: current.filter((v) => v.id !== id),
-                    });
                   }}
                 />
               )}

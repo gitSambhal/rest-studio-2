@@ -2,12 +2,14 @@ import { ExecutionResponse, KeyValuePair, PostRequestScript, PreRequestScript, R
 import { resolveEnvVariables, ScopeContext } from './envUtils';
 import { executeHttpRequest } from './httpExecutor';
 
+export type ScriptTargetScope = 'local' | 'env' | 'org' | 'global' | 'file' | 'environment';
+
 export interface PreRequestRunResult {
   success: boolean;
   error?: string;
   logs: string[];
   newVariables: Record<string, string>;
-  targetScope: 'environment' | 'file' | 'global';
+  targetScope: ScriptTargetScope;
   modifiedUrl?: string;
   modifiedHeaders?: Record<string, string>;
   modifiedBody?: string;
@@ -16,7 +18,7 @@ export interface PreRequestRunResult {
 export interface PostRequestRunResult {
   logs: string[];
   newVariables: Record<string, string>;
-  targetScope: 'environment' | 'file' | 'global';
+  targetScope: ScriptTargetScope;
   assertions?: TestAssertion[];
 }
 
@@ -45,7 +47,7 @@ export async function runPreRequestScript(
   const modifiedHeaders: Record<string, string> = { ...initialHeaders };
   let modifiedUrl = initialUrl;
   let modifiedBody = initialBody;
-  let targetScope: 'environment' | 'file' | 'global' = 'environment';
+  let targetScope: ScriptTargetScope = 'environment';
 
   const script = req.preRequestScript;
   if (!script || !script.enabled) {
@@ -331,7 +333,7 @@ export function runPostRequestScript(
 ): PostRequestRunResult {
   const logs: string[] = [];
   const newVariables: Record<string, string> = {};
-  let targetScope: 'environment' | 'file' | 'global' = 'environment';
+  let targetScope: ScriptTargetScope = 'environment';
   const assertions: TestAssertion[] = [];
 
   const script = req.postRequestScript;

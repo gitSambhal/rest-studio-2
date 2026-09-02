@@ -4,12 +4,14 @@ export interface ScopeContext {
   globalVariables?: EnvVariable[];
   organizationVariables?: EnvVariable[];
   organizationName?: string;
-  projectVariables?: EnvVariable[];
+  envVariables?: EnvVariable[];
+  projectVariables?: EnvVariable[]; // alias for envVariables
+  envName?: string;
   projectName?: string;
-  folderVariables?: EnvVariable[];
-  folderName?: string;
-  fileVariables?: Record<string, string>;
+  localVariables?: Record<string, string>;
+  fileVariables?: Record<string, string>; // alias for localVariables
   fileName?: string;
+  localName?: string;
 }
 
 export interface ResolutionResult {
@@ -24,47 +26,40 @@ export function getVariableLookupDetails(
 ): VariableLookupResult | null {
   const matches: { scope: EnvVariableScope; sourceName: string; value: string; secret?: boolean }[] = [];
 
-  // 1. File
-  if (scopeCtx.fileVariables && varKey in scopeCtx.fileVariables) {
+  // 1. Local Var (Highest Priority)
+  const localVars = scopeCtx.localVariables || scopeCtx.fileVariables;
+  if (localVars && varKey in localVars) {
     matches.push({
-      scope: 'file',
-      sourceName: scopeCtx.fileName ? `File (${scopeCtx.fileName})` : 'File Variable',
-      value: scopeCtx.fileVariables[varKey],
+      scope: 'local',
+      sourceName: scopeCtx.fileName ? `Local Var (${scopeCtx.fileName})` : 'Local Variable',
+      value: localVars[varKey],
     });
   }
 
-  // 2. Folder
-  if (scopeCtx.folderVariables) {
-    const fv = scopeCtx.folderVariables.find((v) => v.enabled !== false && v.key === varKey);
-    if (fv) {
+  // 2. Environment Variables (High Priority - Active Project Environment)
+  const envVars = scopeCtx.envVariables || scopeCtx.projectVariables;
+  if (envVars) {
+    const ev = envVars.find((v) => v.enabled !== false && v.key === varKey);
+    if (ev) {
       matches.push({
-        scope: 'folder',
-        sourceName: scopeCtx.folderName ? `Folder (${scopeCtx.folderName})` : 'Folder Level',
-        value: fv.value,
-        secret: fv.secret,
+        scope: 'env',
+        sourceName: scopeCtx.envName
+          ? `Env (${scopeCtx.envName})`
+          : scopeCtx.projectName
+          ? `Env (${scopeCtx.projectName})`
+          : 'Environment',
+        value: ev.value,
+        secret: ev.secret,
       });
     }
   }
 
-  // 3. Project
-  if (scopeCtx.projectVariables) {
-    const pv = scopeCtx.projectVariables.find((v) => v.enabled !== false && v.key === varKey);
-    if (pv) {
-      matches.push({
-        scope: 'project',
-        sourceName: scopeCtx.projectName ? `Project (${scopeCtx.projectName})` : 'Project Environment',
-        value: pv.value,
-        secret: pv.secret,
-      });
-    }
-  }
-
-  // 4. Organization
+  // 3. Organization Variables (Medium Priority)
   if (scopeCtx.organizationVariables) {
     const ov = scopeCtx.organizationVariables.find((v) => v.enabled !== false && v.key === varKey);
     if (ov) {
       matches.push({
-        scope: 'organization',
+        scope: 'org',
         sourceName: scopeCtx.organizationName ? `Org (${scopeCtx.organizationName})` : 'Organization',
         value: ov.value,
         secret: ov.secret,
@@ -72,7 +67,7 @@ export function getVariableLookupDetails(
     }
   }
 
-  // 5. Global
+  // 4. Global Variables (Base Level)
   if (scopeCtx.globalVariables) {
     const gv = scopeCtx.globalVariables.find((v) => v.enabled !== false && v.key === varKey);
     if (gv) {
@@ -116,7 +111,9 @@ export function resolveEnvVariables(
   let ctx: ScopeContext;
   if (Array.isArray(scopeCtxOrLegacyEnvs)) {
     ctx = {
+      envVariables: scopeCtxOrLegacyEnvs,
       projectVariables: scopeCtxOrLegacyEnvs,
+      localVariables: legacyFileVars || {},
       fileVariables: legacyFileVars || {},
     };
   } else {
@@ -175,7 +172,9 @@ export function getEnvAutocompleteSuggestions(
   let ctx: ScopeContext;
   if (Array.isArray(scopeCtxOrLegacyEnvs)) {
     ctx = {
+      envVariables: scopeCtxOrLegacyEnvs,
       projectVariables: scopeCtxOrLegacyEnvs,
+      localVariables: legacyFileVars || {},
       fileVariables: legacyFileVars || {},
     };
   } else {
@@ -191,52 +190,43 @@ export function getEnvAutocompleteSuggestions(
       const query = textAfterBrace.toLowerCase();
       const suggestionsMap = new Map<string, AutocompleteSuggestion>();
 
-      // Priority order: File -> Folder -> Project -> Org -> Global
-      // 1. File
-      if (ctx.fileVariables) {
-        Object.entries(ctx.fileVariables).forEach(([k, val]) => {
+      // Precedence order: Local Var -> Env -> Org -> Global
+      // 1. Local Var
+      const localVars = ctx.localVariables || ctx.fileVariables;
+      if (localVars) {
+        Object.entries(localVars).forEach(([k, val]) => {
           if (k.toLowerCase().includes(query) && !suggestionsMap.has(k)) {
             suggestionsMap.set(k, {
               key: k,
               value: val,
-              description: ctx.fileName ? `File Var (${ctx.fileName})` : 'File Variable',
-              source: 'file',
+              description: ctx.fileName ? `Local Var (${ctx.fileName})` : 'Local Variable',
+              source: 'local',
             });
           }
         });
       }
 
-      // 2. Folder
-      if (ctx.folderVariables) {
-        ctx.folderVariables.forEach((v) => {
+      // 2. Env Variables (Project Environment)
+      const envVars = ctx.envVariables || ctx.projectVariables;
+      if (envVars) {
+        envVars.forEach((v) => {
           if (v.enabled !== false && v.key && v.key.toLowerCase().includes(query) && !suggestionsMap.has(v.key)) {
             suggestionsMap.set(v.key, {
               key: v.key,
               value: v.value,
-              description: ctx.folderName ? `Folder Var (${ctx.folderName})` : 'Folder Variable',
-              source: 'folder',
+              description: ctx.envName
+                ? `Env (${ctx.envName})`
+                : ctx.projectName
+                ? `Env (${ctx.projectName})`
+                : 'Project Env Var',
+              source: 'env',
               secret: v.secret,
             });
           }
         });
       }
 
-      // 3. Project
-      if (ctx.projectVariables) {
-        ctx.projectVariables.forEach((v) => {
-          if (v.enabled !== false && v.key && v.key.toLowerCase().includes(query) && !suggestionsMap.has(v.key)) {
-            suggestionsMap.set(v.key, {
-              key: v.key,
-              value: v.value,
-              description: ctx.projectName ? `Project Env (${ctx.projectName})` : 'Project Env Var',
-              source: 'project',
-              secret: v.secret,
-            });
-          }
-        });
-      }
-
-      // 4. Organization
+      // 3. Organization Variables
       if (ctx.organizationVariables) {
         ctx.organizationVariables.forEach((v) => {
           if (v.enabled !== false && v.key && v.key.toLowerCase().includes(query) && !suggestionsMap.has(v.key)) {
@@ -244,14 +234,14 @@ export function getEnvAutocompleteSuggestions(
               key: v.key,
               value: v.value,
               description: ctx.organizationName ? `Org Var (${ctx.organizationName})` : 'Organization Var',
-              source: 'organization',
+              source: 'org',
               secret: v.secret,
             });
           }
         });
       }
 
-      // 5. Global
+      // 4. Global Variables
       if (ctx.globalVariables) {
         ctx.globalVariables.forEach((v) => {
           if (v.enabled !== false && v.key && v.key.toLowerCase().includes(query) && !suggestionsMap.has(v.key)) {

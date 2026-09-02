@@ -253,18 +253,18 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
                   </span>
                   <span
                     className={`text-[10px] uppercase font-semibold px-1 py-0.5 rounded ${
-                      item.source === 'project'
+                      item.source === 'local' || item.source === 'file'
                         ? 'bg-emerald-500/20 text-emerald-300'
-                        : item.source === 'organization'
+                        : item.source === 'env' || item.source === 'project'
+                        ? 'bg-sky-500/20 text-sky-300'
+                        : item.source === 'org' || item.source === 'organization'
                         ? 'bg-purple-500/20 text-purple-300'
-                        : item.source === 'folder'
+                        : item.source === 'global'
                         ? 'bg-amber-500/20 text-amber-300'
-                        : item.source === 'file'
-                        ? 'bg-blue-500/20 text-blue-300'
                         : 'bg-slate-500/20 text-slate-300'
                     }`}
                   >
-                    {item.source}
+                    {item.source === 'file' ? 'local' : item.source === 'project' ? 'env' : item.source === 'organization' ? 'org' : item.source}
                   </span>
                 </div>
               </div>

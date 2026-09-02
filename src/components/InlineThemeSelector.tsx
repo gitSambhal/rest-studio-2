@@ -58,10 +58,10 @@ export const InlineThemeSelector: React.FC<InlineThemeSelectorProps> = ({
       {/* Non-modal Live Preview Popover Dropdown */}
       {isOpen && (
         <div
-          className={`absolute right-0 top-full mt-1.5 w-64 rounded-xl shadow-2xl z-50 p-2 border animate-in fade-in zoom-in-95 duration-150 ${
+          className={`absolute right-0 top-full mt-1.5 w-64 rounded-xl shadow-2xl z-[999] p-2 border animate-in fade-in zoom-in-95 duration-150 ${
             isDarkMode
-              ? 'bg-slate-900/95 border-slate-700 text-slate-100 backdrop-blur-md'
-              : 'bg-white/95 border-slate-200 text-slate-900 backdrop-blur-md shadow-slate-900/15'
+              ? 'bg-slate-900/95 border-slate-700 text-slate-100 backdrop-blur-md shadow-black/80'
+              : 'bg-white/95 border-slate-200 text-slate-900 backdrop-blur-md shadow-slate-900/20'
           }`}
         >
           <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800/80 px-1">

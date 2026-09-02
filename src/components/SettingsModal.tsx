@@ -12,14 +12,10 @@ import {
   Upload,
   Download,
   Layers,
-  Globe,
-  Wifi,
-  WifiOff,
   Keyboard,
   FileCode,
   Info,
   ExternalLink,
-  ShieldCheck,
   CheckCircle2,
   RefreshCw,
   Search,
@@ -32,13 +28,13 @@ import {
 } from 'lucide-react';
 import { THEMES, UIThemeId } from '../utils/themeManager';
 import { Project, Organization } from '../types';
+import { getSavedGitHubUser } from '../services/githubSyncService';
 
 export type SettingsTabId =
   | 'appearance'
   | 'cloud'
   | 'import-export'
   | 'environments'
-  | 'network'
   | 'shortcuts'
   | 'about';
 
@@ -89,6 +85,7 @@ export function SettingsModal({
   const currentThemeObj = THEMES.find((t) => t.id === currentTheme) || THEMES[0];
   const isGitHubConfigured = typeof window !== 'undefined' && !!localStorage.getItem('restpulse_github_pat');
   const gistId = typeof window !== 'undefined' ? localStorage.getItem('restpulse_github_gist_id') : null;
+  const githubUser = typeof window !== 'undefined' ? getSavedGitHubUser() : null;
   const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
   const allShortcuts = [
@@ -112,10 +109,14 @@ export function SettingsModal({
 
   const navItems: { id: SettingsTabId; label: string; icon: React.FC<{ className?: string }>; badge?: string }[] = [
     { id: 'appearance', label: 'Appearance & Themes', icon: Palette },
-    { id: 'cloud', label: 'Cloud Sync & GitHub', icon: Cloud, badge: isGitHubConfigured ? 'Connected' : undefined },
+    {
+      id: 'cloud',
+      label: 'Cloud Sync & GitHub',
+      icon: Cloud,
+      badge: isGitHubConfigured ? (githubUser?.login ? `@${githubUser.login}` : 'Connected') : undefined,
+    },
     { id: 'import-export', label: 'Import & Export', icon: Upload },
     { id: 'environments', label: 'Variable Scopes', icon: Layers },
-    { id: 'network', label: 'Network & Engine', icon: Globe },
     { id: 'shortcuts', label: 'Shortcuts & Syntax', icon: Keyboard },
     { id: 'about', label: 'About & Attribution', icon: Info },
   ];
@@ -158,7 +159,7 @@ export function SettingsModal({
                 </span>
               </div>
               <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                Configure themes, free cloud sync, variable scopes, and local network engine
+                Configure themes, free cloud sync, variable scopes, and keyboard shortcuts
               </p>
             </div>
           </div>
@@ -455,7 +456,7 @@ export function SettingsModal({
                 </div>
 
                 <div
-                  className={`p-4 rounded-2xl border space-y-3 ${
+                  className={`p-4 rounded-2xl border space-y-3.5 ${
                     isGitHubConfigured
                       ? isDarkMode
                         ? 'bg-emerald-500/10 border-emerald-500/30'
@@ -465,16 +466,41 @@ export function SettingsModal({
                       : 'bg-slate-50 border-slate-200'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2.5">
-                      <GitBranch className={`w-5 h-5 ${isGitHubConfigured ? 'text-emerald-400' : 'text-slate-400'}`} />
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center space-x-3">
+                      {isGitHubConfigured && githubUser?.avatar_url ? (
+                        <img
+                          src={githubUser.avatar_url}
+                          alt={githubUser.login}
+                          className="w-10 h-10 rounded-full border-2 border-emerald-400 object-cover shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                          <GitBranch className={`w-5 h-5 ${isGitHubConfigured ? 'text-emerald-400' : 'text-slate-400'}`} />
+                        </div>
+                      )}
                       <div>
-                        <div className="text-xs font-bold">
-                          {isGitHubConfigured ? 'GitHub Cloud Sync Connected' : 'Cloud Sync Not Configured'}
+                        <div className="flex items-center space-x-2 flex-wrap">
+                          <div className="text-xs font-bold">
+                            {isGitHubConfigured
+                              ? githubUser?.name || githubUser?.login || 'GitHub Cloud Sync Connected'
+                              : 'Cloud Sync Not Configured'}
+                          </div>
+                          {isGitHubConfigured && githubUser?.login && (
+                            <a
+                              href={githubUser.html_url || `https://github.com/${githubUser.login}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] font-mono text-emerald-400 hover:underline flex items-center space-x-0.5"
+                            >
+                              <span>@{githubUser.login}</span>
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
                         </div>
                         <p className={`text-[11px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                           {isGitHubConfigured
-                            ? `Gist ID: ${gistId ? gistId.slice(0, 10) + '...' : 'Active'}`
+                            ? `Connected Account • Gist ID: ${gistId ? gistId.slice(0, 10) + '...' : 'Active'}`
                             : 'Connect with a personal access token (gist scope only)'}
                         </p>
                       </div>
@@ -486,7 +512,7 @@ export function SettingsModal({
                         onClose();
                         if (onOpenGitHubSync) onOpenGitHubSync();
                       }}
-                      className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-sm flex items-center space-x-1.5"
+                      className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-sm flex items-center justify-center space-x-1.5 shrink-0"
                     >
                       <Cloud className="w-3.5 h-3.5" />
                       <span>{isGitHubConfigured ? 'Manage Cloud Sync' : 'Connect GitHub Gist'}</span>
@@ -609,17 +635,16 @@ export function SettingsModal({
                 <div>
                   <h3 className="text-sm font-bold tracking-tight">Variable Scopes & Hierarchy</h3>
                   <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    RestPulse resolves variables through a 6-tier cascading hierarchy
+                    RestStudio resolves variables through a clean 4-tier cascading hierarchy
                   </p>
                 </div>
 
                 <div className="space-y-2">
                   {[
-                    { level: '1. File-Local Variables', desc: '@baseUrl = https://api.example.com defined at the top of .rest file', tag: 'Highest Priority' },
-                    { level: '2. Folder Variables', desc: 'Variables scoped to a specific project folder', tag: 'High Priority' },
-                    { level: '3. Active Project Environment', desc: 'Active environment variables (Development, Staging, Production)', tag: 'Medium Priority' },
-                    { level: '4. Organization Defaults', desc: 'Org-wide shared base variables across multiple projects', tag: 'Inherited' },
-                    { level: '5. Dynamic System Variables', desc: 'Built-ins: {{$uuid}}, {{$timestamp}}, {{$isoTimestamp}}, {{$randomInt}}', tag: 'Dynamic' },
+                    { level: '1. Local Variables (Local Var)', desc: '@baseUrl = https://api.example.com defined in .rest file header or local script memory', tag: 'Highest Priority' },
+                    { level: '2. Project Environment (Env)', desc: 'Active environment variables (Development, Staging, Production) in the current project', tag: 'High Priority' },
+                    { level: '3. Organization Defaults (Org)', desc: 'Org-wide shared base variables across all projects in the active organization', tag: 'Medium Priority' },
+                    { level: '4. Global Workspace (Global)', desc: 'Universal fallback variables accessible everywhere across all organizations and projects', tag: 'Base Level' },
                   ].map((item, idx) => (
                     <div
                       key={idx}
@@ -662,42 +687,7 @@ export function SettingsModal({
               </div>
             )}
 
-            {/* 5. NETWORK & ENGINE */}
-            {activeTab === 'network' && (
-              <div className="space-y-6 max-w-2xl">
-                <div>
-                  <h3 className="text-sm font-bold tracking-tight">Network & Localhost Access</h3>
-                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Localhost access, private LAN routing, and browser Local Network Access (LNA) standards
-                  </p>
-                </div>
-
-                {/* Local Network Access info */}
-                <div
-                  className={`p-4 rounded-2xl border space-y-2.5 ${
-                    isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2 text-xs font-bold text-emerald-400">
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>Chrome Local Network Access (LNA)</span>
-                  </div>
-                  <p className={`text-[11px] leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    In modern browsers (Chrome 142+), requests to <code className="text-emerald-400">localhost</code> or private LAN addresses prompt a native <b>Local Network Access</b> permission banner. Clicking <b>Allow</b> enables direct communication without requiring any external proxy.
-                  </p>
-                  <div
-                    className={`p-2.5 rounded-xl border text-[10px] font-mono space-y-1 ${
-                      isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-300' : 'bg-white border-slate-200 text-slate-700'
-                    }`}
-                  >
-                    <div>• Localhost (<code className="text-emerald-400">127.0.0.1</code>) → Needs &quot;Apps on device&quot; in Site Settings</div>
-                    <div>• LAN IP (<code className="text-emerald-400">192.168.x.x</code>) → Needs &quot;Local Network&quot; in Site Settings</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 6. SHORTCUTS & SYNTAX */}
+            {/* 5. SHORTCUTS & SYNTAX */}
             {activeTab === 'shortcuts' && (
               <div className="space-y-6 max-w-2xl">
                 <div className="flex items-center justify-between">

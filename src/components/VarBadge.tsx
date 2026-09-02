@@ -4,9 +4,11 @@ import { ScopeContext, getVariableLookupDetails } from '../utils/envUtils';
 import { Variable, Copy, Check, Eye, EyeOff, Layers } from 'lucide-react';
 
 const SCOPE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  local: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/40' },
   file: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/40' },
-  folder: { bg: 'bg-teal-500/20', text: 'text-teal-300', border: 'border-teal-500/40' },
+  env: { bg: 'bg-sky-500/20', text: 'text-sky-300', border: 'border-sky-500/40' },
   project: { bg: 'bg-sky-500/20', text: 'text-sky-300', border: 'border-sky-500/40' },
+  org: { bg: 'bg-purple-500/20', text: 'text-purple-300', border: 'border-purple-500/40' },
   organization: { bg: 'bg-purple-500/20', text: 'text-purple-300', border: 'border-purple-500/40' },
   global: { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/40' },
 };
@@ -32,7 +34,7 @@ export interface VarTooltipCardProps {
 
 /**
  * Shared floating card showing a variable's exact resolved value, its source
- * (file/folder/project/organization/global), secret reveal, copy, and the
+ * (local/env/org/global), secret reveal, copy, and the
  * scope override hierarchy. Used by both VarBadge and in-field tokens.
  */
 export const VarTooltipCard: React.FC<VarTooltipCardProps> = ({ varKey, lookup, popupPos }) => {

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Organization, Project } from '../types';
 import { THEMES, UIThemeId } from '../utils/themeManager';
 import { InlineThemeSelector } from './InlineThemeSelector';
+import { getSavedGitHubUser } from '../services/githubSyncService';
 import {
   Zap,
   Building2,
@@ -28,6 +29,9 @@ import {
   Palette,
   Cloud,
   GitBranch,
+  MoreVertical,
+  Menu,
+  Check,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -101,10 +105,12 @@ export const Header: React.FC<HeaderProps> = ({
   const [isOrgOpen, setIsOrgOpen] = useState(false);
   const [isProjectOpen, setIsProjectOpen] = useState(false);
   const [isEnvOpen, setIsEnvOpen] = useState(false);
+  const [isOverflowOpen, setIsOverflowOpen] = useState(false);
 
   const orgRef = useRef<HTMLDivElement>(null);
   const projectRef = useRef<HTMLDivElement>(null);
   const envRef = useRef<HTMLDivElement>(null);
+  const overflowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -117,28 +123,34 @@ export const Header: React.FC<HeaderProps> = ({
       if (envRef.current && !envRef.current.contains(event.target as Node)) {
         setIsEnvOpen(false);
       }
+      if (overflowRef.current && !overflowRef.current.contains(event.target as Node)) {
+        setIsOverflowOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const activeThemeObj = THEMES.find((t) => t.id === currentTheme) || THEMES[0];
+  const githubUser = typeof window !== 'undefined' ? getSavedGitHubUser() : null;
+
   return (
     <header
-      className={`border-b px-3 sm:px-4 py-2 flex items-center justify-between shrink-0 select-none gap-2 sm:gap-4 min-w-0 w-full overflow-x-auto scrollbar-none transition-colors ${
+      className={`relative z-40 border-b px-2 sm:px-3 lg:px-4 py-2 flex items-center justify-between shrink-0 select-none gap-1 sm:gap-2 w-full transition-colors ${
         isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
       }`}
     >
       {/* SECTION 1: Brand & Workspace Context (Org, Project, Environment) */}
-      <div className="flex items-center space-x-2 sm:space-x-3 shrink-0 min-w-0">
+      <div className="flex items-center space-x-1 sm:space-x-2 shrink-0 min-w-0">
         {/* Brand Logo & Name */}
-        <div className="flex items-center space-x-2 shrink-0">
+        <div className="flex items-center space-x-1.5 shrink-0">
           <img
             src="/icon.svg"
             alt="RestPulse"
-            className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl shrink-0 select-none pointer-events-none"
+            className="w-6 h-6 sm:w-7 sm:h-7 rounded-xl shrink-0 select-none pointer-events-none"
             draggable={false}
           />
-          <div className="flex flex-col justify-center hidden sm:flex">
+          <div className="flex flex-col justify-center hidden xl:flex">
             <div className="flex items-center space-x-1.5 leading-none">
               <span className={`font-bold text-sm tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>RestPulse</span>
               <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -148,10 +160,10 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        <div className={`h-5 w-px shrink-0 hidden sm:block ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
+        <div className={`h-4 w-px shrink-0 hidden xl:block ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
 
         {/* Unified Workspace Context Bar (Org -> Project -> Env) */}
-        <div className={`flex items-center border p-0.5 sm:p-1 rounded-xl space-x-0.5 sm:space-x-1 min-w-0 ${
+        <div className={`flex items-center border p-0.5 rounded-xl space-x-0.5 min-w-0 ${
           isDarkMode ? 'bg-slate-950/90 border-slate-800' : 'bg-slate-100/80 border-slate-300'
         }`}>
             {/* 1. Organization Dropdown */}
@@ -163,11 +175,11 @@ export const Header: React.FC<HeaderProps> = ({
                   setIsProjectOpen(false);
                   setIsEnvOpen(false);
                 }}
-                className="flex items-center space-x-1 hover:bg-slate-800/80 px-1.5 sm:px-2 py-1 rounded-lg text-slate-200 text-xs font-medium transition-all cursor-pointer"
+                className="flex items-center space-x-1 hover:bg-slate-800/80 px-1 sm:px-1.5 py-1 rounded-lg text-slate-200 text-xs font-medium transition-all cursor-pointer"
                 title={`Organization: ${activeOrg?.name || 'Organization'}`}
               >
                 <Building2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                <span className="hidden sm:inline max-w-[70px] md:max-w-[110px] truncate font-semibold">{activeOrg?.name || 'Org'}</span>
+                <span className="hidden md:inline max-w-[55px] lg:max-w-[90px] truncate font-semibold">{activeOrg?.name || 'Org'}</span>
                 <ChevronDown
                   className={`w-3 h-3 text-slate-400 transition-transform ${isOrgOpen ? 'rotate-180' : ''}`}
                 />
@@ -175,10 +187,10 @@ export const Header: React.FC<HeaderProps> = ({
 
               {/* Org Menu */}
               {isOrgOpen && (
-                <div className={`absolute left-0 top-full mt-2 w-72 rounded-xl shadow-2xl z-50 divide-y p-1 space-y-1 animate-in fade-in zoom-in-95 duration-100 ${
+                <div className={`absolute left-0 top-full mt-2 w-72 max-w-[calc(100vw-24px)] rounded-xl shadow-2xl z-[999] divide-y p-1 space-y-1 animate-in fade-in zoom-in-95 duration-100 ${
                   isDarkMode
-                    ? 'bg-slate-900 border border-slate-700/80 divide-slate-800/60 text-slate-100'
-                    : 'bg-white border border-slate-200 divide-slate-100 text-slate-900 shadow-slate-900/10'
+                    ? 'bg-slate-900 border border-slate-700/80 divide-slate-800/60 text-slate-100 shadow-black/80'
+                    : 'bg-white border border-slate-200 divide-slate-100 text-slate-900 shadow-slate-900/20'
                 }`}>
                   <div className="p-1 space-y-0.5 max-h-56 overflow-y-auto">
                     <div className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -274,11 +286,11 @@ export const Header: React.FC<HeaderProps> = ({
                   setIsOrgOpen(false);
                   setIsEnvOpen(false);
                 }}
-                className="flex items-center space-x-1 hover:bg-slate-800/80 px-1.5 sm:px-2 py-1 rounded-lg text-slate-200 text-xs font-medium transition-all cursor-pointer"
+                className="flex items-center space-x-1 hover:bg-slate-800/80 px-1 sm:px-1.5 py-1 rounded-lg text-slate-200 text-xs font-medium transition-all cursor-pointer"
                 title={`Project: ${activeProject?.name || 'Project'}`}
               >
                 <FolderOpen className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="max-w-[70px] sm:max-w-[100px] md:max-w-[130px] truncate font-semibold">{activeProject?.name || 'Project'}</span>
+                <span className="max-w-[60px] sm:max-w-[75px] md:max-w-[90px] lg:max-w-[130px] truncate font-semibold">{activeProject?.name || 'Project'}</span>
                 <ChevronDown
                   className={`w-3 h-3 text-slate-400 transition-transform ${isProjectOpen ? 'rotate-180' : ''}`}
                 />
@@ -286,10 +298,10 @@ export const Header: React.FC<HeaderProps> = ({
 
               {/* Project Menu */}
               {isProjectOpen && (
-                <div className={`absolute left-0 top-full mt-2 w-72 sm:w-80 rounded-xl shadow-2xl z-50 divide-y p-1 space-y-1 animate-in fade-in zoom-in-95 duration-100 ${
+                <div className={`absolute left-0 top-full mt-2 w-72 sm:w-80 max-w-[calc(100vw-24px)] rounded-xl shadow-2xl z-[999] divide-y p-1 space-y-1 animate-in fade-in zoom-in-95 duration-100 ${
                   isDarkMode
-                    ? 'bg-slate-900 border border-slate-700/80 divide-slate-800/60 text-slate-100'
-                    : 'bg-white border border-slate-200 divide-slate-100 text-slate-900 shadow-slate-900/10'
+                    ? 'bg-slate-900 border border-slate-700/80 divide-slate-800/60 text-slate-100 shadow-black/80'
+                    : 'bg-white border border-slate-200 divide-slate-100 text-slate-900 shadow-slate-900/20'
                 }`}>
                   <div className="p-1 space-y-0.5 max-h-60 overflow-y-auto">
                     <div className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -385,7 +397,7 @@ export const Header: React.FC<HeaderProps> = ({
                   setIsOrgOpen(false);
                   setIsProjectOpen(false);
                 }}
-                className={`flex items-center space-x-1 px-1.5 sm:px-2 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                className={`flex items-center space-x-1 px-1 sm:px-1.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                   isDarkMode ? 'text-slate-200 hover:bg-slate-800/80' : 'text-slate-700 hover:bg-slate-200/80'
                 }`}
                 title={`Environment: ${activeEnv ? activeEnv.name : 'No Env'}`}
@@ -394,7 +406,7 @@ export const Header: React.FC<HeaderProps> = ({
                   className="w-2 h-2 rounded-full shrink-0"
                   style={{ backgroundColor: activeEnv?.color || '#94a3b8' }}
                 />
-                <span className="max-w-[60px] sm:max-w-[80px] md:max-w-[110px] truncate text-xs font-mono font-semibold">
+                <span className="max-w-[45px] sm:max-w-[60px] md:max-w-[75px] lg:max-w-[110px] truncate text-xs font-mono font-semibold">
                   {activeEnv ? activeEnv.name : 'No Env'}
                 </span>
                 <ChevronDown className="w-3 h-3 opacity-60 transition-transform" />
@@ -402,10 +414,10 @@ export const Header: React.FC<HeaderProps> = ({
 
               {/* Environment Menu */}
               {isEnvOpen && (
-                <div className={`absolute left-0 top-full mt-2 w-72 rounded-xl shadow-2xl z-50 divide-y p-1 space-y-1 animate-in fade-in zoom-in-95 duration-100 ${
+                <div className={`absolute left-0 top-full mt-2 w-72 max-w-[calc(100vw-24px)] rounded-xl shadow-2xl z-[999] divide-y p-1 space-y-1 animate-in fade-in zoom-in-95 duration-100 ${
                   isDarkMode
-                    ? 'bg-slate-900 border border-slate-700/80 divide-slate-800/60 text-slate-100'
-                    : 'bg-white border border-slate-200 divide-slate-100 text-slate-900 shadow-slate-900/10'
+                    ? 'bg-slate-900 border border-slate-700/80 divide-slate-800/60 text-slate-100 shadow-black/80'
+                    : 'bg-white border border-slate-200 divide-slate-100 text-slate-900 shadow-slate-900/20'
                 }`}>
                   <div className="p-1 space-y-0.5 max-h-60 overflow-y-auto">
                     <div className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider flex items-center justify-between ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -470,30 +482,30 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* SECTION 2: Center View Modes (Request Builder, .rest Code, Runner, History) */}
       <div
-        className={`flex items-center justify-center p-1 rounded-xl border shadow-inner shrink-0 overflow-x-auto scrollbar-none transition-colors space-x-1 ${
+        className={`flex items-center justify-center p-0.5 sm:p-1 rounded-xl border shadow-inner shrink-0 transition-colors space-x-0.5 sm:space-x-1 ${
           isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-300'
         }`}
       >
         <button
           type="button"
           onClick={() => onChangeTab('editor')}
-          className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center space-x-1 px-1.5 sm:px-2 lg:px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'editor'
               ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
               : isDarkMode
               ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
           }`}
-          title="Request Builder Interface"
+          title="Visual Request Builder Interface"
         >
           <Zap className="w-3.5 h-3.5 shrink-0" />
-          <span>Request Builder</span>
+          <span className="hidden lg:inline">Builder</span>
         </button>
 
         <button
           type="button"
           onClick={() => onChangeTab('code')}
-          className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center space-x-1 px-1.5 sm:px-2 lg:px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'code'
               ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
               : isDarkMode
@@ -503,13 +515,13 @@ export const Header: React.FC<HeaderProps> = ({
           title="Raw .rest / .http Script Code View"
         >
           <FileCode className="w-3.5 h-3.5 shrink-0" />
-          <span>.rest Code</span>
+          <span className="hidden lg:inline">.rest</span>
         </button>
 
         <button
           type="button"
           onClick={() => onChangeTab('runner')}
-          className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center space-x-1 px-1.5 sm:px-2 lg:px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'runner'
               ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
               : isDarkMode
@@ -519,13 +531,13 @@ export const Header: React.FC<HeaderProps> = ({
           title="Batch REST File Runner"
         >
           <PlayCircle className="w-3.5 h-3.5 shrink-0" />
-          <span>Runner</span>
+          <span className="hidden lg:inline">Runner</span>
         </button>
 
         <button
           type="button"
           onClick={() => onChangeTab('history')}
-          className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center space-x-1 px-1.5 sm:px-2 lg:px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'history'
               ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
               : isDarkMode
@@ -535,7 +547,7 @@ export const Header: React.FC<HeaderProps> = ({
           title="Execution History Log"
         >
           <History className="w-3.5 h-3.5 shrink-0" />
-          <span>History</span>
+          <span className="hidden lg:inline">History</span>
           {historyCount > 0 && (
             <span
               className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
@@ -548,81 +560,374 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
       </div>
 
-      {/* SECTION 3: Utility & Settings Actions (Import, Cloud Sync, Theme, Settings, Help) */}
-      <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
-        {onOpenImportExport && (
+      {/* SECTION 3: Responsive Utility & Settings Actions */}
+      <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
+        {/* Full Toolbar on XL screens */}
+        <div className="hidden xl:flex items-center space-x-1.5 shrink-0">
+          {onOpenImportExport && (
+            <button
+              type="button"
+              onClick={onOpenImportExport}
+              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-sm shrink-0 ${
+                isDarkMode
+                  ? 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-slate-100'
+                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700 hover:text-slate-900'
+              }`}
+              title="Import Postman, cURL, OpenAPI, or .rest files"
+            >
+              <Upload className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Import</span>
+            </button>
+          )}
+
+          {onOpenGitHubSync && (
+            <button
+              type="button"
+              onClick={onOpenGitHubSync}
+              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-sm shrink-0 ${
+                isGitHubSynced
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25'
+                  : isDarkMode
+                  ? 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-slate-100'
+                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700 hover:text-slate-900'
+              }`}
+              title={
+                isGitHubSynced
+                  ? `Cloud Synced ${githubUser?.login ? `(@${githubUser.login})` : ''}`
+                  : 'Free Cloud Backup, GitHub Gist Sync & Git Data History'
+              }
+            >
+              {isGitHubSynced && githubUser?.avatar_url ? (
+                <img
+                  src={githubUser.avatar_url}
+                  alt={githubUser.login}
+                  className="w-4 h-4 rounded-full border border-emerald-400 object-cover shrink-0"
+                />
+              ) : (
+                <GitBranch className={`w-3.5 h-3.5 ${isGitHubSynced ? 'text-emerald-400 animate-pulse' : 'text-slate-400'}`} />
+              )}
+              <span className="truncate max-w-[120px]">
+                {isGitHubSynced
+                  ? githubUser?.login
+                    ? `@${githubUser.login}`
+                    : 'Cloud Synced'
+                  : 'Sync'}
+              </span>
+            </button>
+          )}
+
+          {onSelectTheme && (
+            <InlineThemeSelector
+              currentTheme={currentTheme}
+              onSelectTheme={onSelectTheme}
+              isDarkMode={isDarkMode}
+              onToggleDarkMode={onToggleDarkMode}
+            />
+          )}
+
+          {onOpenSettings && (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-sm shrink-0 ${
+                isDarkMode
+                  ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                  : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
+              }`}
+              title="Workspace Settings & Preferences (Ctrl+,)"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>Settings</span>
+            </button>
+          )}
+
+          {onOpenQuickHelp && (
+            <button
+              type="button"
+              onClick={onOpenQuickHelp}
+              className={`p-1.5 rounded-lg border transition-all cursor-pointer shadow-sm shrink-0 ${
+                isDarkMode
+                  ? 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-slate-100'
+                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700 hover:text-slate-900'
+              }`}
+              title="Quick Help, Syntax & Keyboard Shortcuts (Ctrl+K)"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+            </button>
+          )}
+        </div>
+
+        {/* Compact Responsive Toolbar + Overflow Menu on Constrained Screens (< XL) */}
+        <div className="flex xl:hidden items-center space-x-1 shrink-0">
+          {/* Quick Dark Mode Switcher */}
           <button
             type="button"
-            onClick={onOpenImportExport}
-            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-sm shrink-0 ${
-              isDarkMode
-                ? 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-slate-100'
-                : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700 hover:text-slate-900'
-            }`}
-            title="Import Postman, cURL, OpenAPI, or .rest files"
-          >
-            <Upload className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">Import</span>
-          </button>
-        )}
-
-        {onOpenGitHubSync && (
-          <button
-            type="button"
-            onClick={onOpenGitHubSync}
-            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-sm shrink-0 ${
-              isGitHubSynced
-                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25'
-                : isDarkMode
-                ? 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-slate-100'
-                : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700 hover:text-slate-900'
-            }`}
-            title="Free Cloud Backup, GitHub Gist Sync & Git Data History"
-          >
-            <GitBranch className={`w-3.5 h-3.5 ${isGitHubSynced ? 'text-emerald-400 animate-pulse' : 'text-slate-400'}`} />
-            <span className="hidden lg:inline">{isGitHubSynced ? 'Cloud Synced' : 'GitHub Sync'}</span>
-          </button>
-        )}
-
-        {onSelectTheme && (
-          <InlineThemeSelector
-            currentTheme={currentTheme}
-            onSelectTheme={onSelectTheme}
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={onToggleDarkMode}
-          />
-        )}
-
-        {onOpenSettings && (
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-sm shrink-0 ${
-              isDarkMode
-                ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-                : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
-            }`}
-            title="Workspace Settings & Preferences (Ctrl+,)"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="hidden sm:inline">Settings</span>
-          </button>
-        )}
-
-        {onOpenQuickHelp && (
-          <button
-            type="button"
-            onClick={onOpenQuickHelp}
+            onClick={onToggleDarkMode}
             className={`p-1.5 rounded-lg border transition-all cursor-pointer shadow-sm shrink-0 ${
               isDarkMode
-                ? 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-slate-100'
+                ? 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-amber-300 hover:text-amber-200'
                 : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700 hover:text-slate-900'
             }`}
-            title="Quick Help, Syntax & Keyboard Shortcuts (Ctrl+K)"
+            title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
-            <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+            {isDarkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
           </button>
-        )}
+
+          {/* Direct Settings Icon Button */}
+          {onOpenSettings && (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className={`hidden sm:flex p-1.5 rounded-lg border transition-all cursor-pointer shadow-sm shrink-0 ${
+                isDarkMode
+                  ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                  : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
+              }`}
+              title="Workspace Settings (Ctrl+,)"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            </button>
+          )}
+
+          {/* Dedicated Hamburger / Overflow Menu Button */}
+          <div className="relative shrink-0" ref={overflowRef}>
+            <button
+              type="button"
+              onClick={() => {
+                setIsOverflowOpen(!isOverflowOpen);
+                setIsOrgOpen(false);
+                setIsProjectOpen(false);
+                setIsEnvOpen(false);
+              }}
+              className={`flex items-center justify-center p-1.5 rounded-lg border transition-all cursor-pointer shadow-sm shrink-0 ${
+                isOverflowOpen
+                  ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 ring-1 ring-emerald-500/30'
+                  : isDarkMode
+                  ? 'bg-slate-800/90 hover:bg-slate-700 border-slate-700 text-slate-200'
+                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-800'
+              }`}
+              title="Menu & Workspace Tools"
+              aria-label="Menu and options"
+            >
+              <Menu className="w-4 h-4 shrink-0" />
+              {isGitHubSynced && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse absolute -top-0.5 -right-0.5" />
+              )}
+            </button>
+
+            {/* Overflow Dropdown Popover */}
+            {isOverflowOpen && (
+              <div
+                className={`absolute right-0 top-full mt-2 w-72 sm:w-80 max-w-[calc(100vw-24px)] max-h-[calc(100vh-70px)] overflow-y-auto rounded-2xl shadow-2xl z-[999] divide-y p-2 space-y-1.5 animate-in fade-in zoom-in-95 duration-100 border ${
+                  isDarkMode
+                    ? 'bg-slate-900 border-slate-700/90 divide-slate-800 text-slate-100 shadow-black/80'
+                    : 'bg-white border-slate-200 divide-slate-100 text-slate-900 shadow-slate-900/20'
+                }`}
+              >
+                {/* Header info */}
+                <div className="px-2.5 py-1.5 flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <img src="/icon.svg" alt="RestPulse" className="w-4 h-4 rounded-md" />
+                    <span className="font-bold text-xs">Workspace Tools</span>
+                  </div>
+                  <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${
+                    isDarkMode ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-slate-100 text-slate-500 border-slate-200'
+                  }`}>
+                    RestPulse v1.3
+                  </span>
+                </div>
+
+                {/* Primary Actions */}
+                <div className="p-1 space-y-0.5">
+                  {onOpenImportExport && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenImportExport();
+                        setIsOverflowOpen(false);
+                      }}
+                      className={`w-full text-left px-2.5 py-2 rounded-xl text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                        isDarkMode ? 'hover:bg-slate-800 text-slate-200' : 'hover:bg-slate-100 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <div>
+                          <div className="font-semibold">Import / Export</div>
+                          <div className="text-[10px] text-slate-400">Postman, cURL, OpenAPI, .rest</div>
+                        </div>
+                      </div>
+                    </button>
+                  )}
+
+                  {onOpenGitHubSync && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenGitHubSync();
+                        setIsOverflowOpen(false);
+                      }}
+                      className={`w-full text-left px-2.5 py-2 rounded-xl text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                        isDarkMode ? 'hover:bg-slate-800 text-slate-200' : 'hover:bg-slate-100 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        {isGitHubSynced && githubUser?.avatar_url ? (
+                          <img
+                            src={githubUser.avatar_url}
+                            alt={githubUser.login}
+                            className="w-4 h-4 rounded-full border border-emerald-400 object-cover shrink-0"
+                          />
+                        ) : (
+                          <GitBranch className={`w-4 h-4 shrink-0 ${isGitHubSynced ? 'text-emerald-400' : 'text-slate-400'}`} />
+                        )}
+                        <div>
+                          <div className="font-semibold flex items-center space-x-1.5">
+                            <span>Cloud & GitHub Sync</span>
+                            {isGitHubSynced && githubUser?.login && (
+                              <span className="text-[10px] text-emerald-400 font-mono">(@{githubUser.login})</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400">Free Gist Backup & Git History</div>
+                        </div>
+                      </div>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono border ${
+                          isGitHubSynced
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 font-bold'
+                            : 'bg-slate-800/60 text-slate-400 border-slate-700/50'
+                        }`}
+                      >
+                        {isGitHubSynced ? 'Synced' : 'Off'}
+                      </span>
+                    </button>
+                  )}
+
+                  {onOpenQuickCurl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenQuickCurl();
+                        setIsOverflowOpen(false);
+                      }}
+                      className={`w-full text-left px-2.5 py-2 rounded-xl text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                        isDarkMode ? 'hover:bg-slate-800 text-slate-200' : 'hover:bg-slate-100 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <Terminal className="w-4 h-4 text-purple-400 shrink-0" />
+                        <div>
+                          <div className="font-semibold">Import cURL Command</div>
+                          <div className="text-[10px] text-slate-400">Paste raw curl command</div>
+                        </div>
+                      </div>
+                      <kbd className="text-[10px] font-mono text-slate-400">Ctrl+Shift+C</kbd>
+                    </button>
+                  )}
+
+                  {onOpenQuickNewRequest && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenQuickNewRequest();
+                        setIsOverflowOpen(false);
+                      }}
+                      className={`w-full text-left px-2.5 py-2 rounded-xl text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                        isDarkMode ? 'hover:bg-slate-800 text-slate-200' : 'hover:bg-slate-100 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <Plus className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <div>
+                          <div className="font-semibold">New Quick Request</div>
+                          <div className="text-[10px] text-slate-400">Add to active collection</div>
+                        </div>
+                      </div>
+                      <kbd className="text-[10px] font-mono text-slate-400">Ctrl+N</kbd>
+                    </button>
+                  )}
+                </div>
+
+                {/* Theme & Styling Section in Overflow */}
+                {onSelectTheme && (
+                  <div className="p-2 space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">
+                      <span>Theme Preset</span>
+                      <span className="text-emerald-400 font-mono capitalize">{activeThemeObj.name}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {THEMES.map((theme) => (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          onClick={() => {
+                            onSelectTheme(theme.id);
+                          }}
+                          className={`flex items-center space-x-1.5 px-2 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+                            currentTheme === theme.id
+                              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 font-bold'
+                              : isDarkMode
+                              ? 'bg-slate-800/60 hover:bg-slate-800 border-slate-700/60 text-slate-300'
+                              : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+                          }`}
+                        >
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0 border border-slate-600/60"
+                            style={{ backgroundColor: theme.previewColors.primary }}
+                          />
+                          <span className="truncate text-[11px]">{theme.name}</span>
+                          {currentTheme === theme.id && <Check className="w-3 h-3 text-emerald-400 ml-auto shrink-0" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Settings & Help */}
+                <div className="p-1 space-y-0.5">
+                  {onOpenSettings && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenSettings();
+                        setIsOverflowOpen(false);
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                        isDarkMode ? 'hover:bg-slate-800 text-slate-200' : 'hover:bg-slate-100 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <SlidersHorizontal className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>Workspace Settings</span>
+                      </div>
+                      <kbd className="text-[10px] font-mono text-slate-400">Ctrl+,</kbd>
+                    </button>
+                  )}
+
+                  {onOpenQuickHelp && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenQuickHelp();
+                        setIsOverflowOpen(false);
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                        isDarkMode ? 'hover:bg-slate-800 text-slate-200' : 'hover:bg-slate-100 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <HelpCircle className="w-4 h-4 text-sky-400 shrink-0" />
+                        <span>Quick Help & Shortcuts</span>
+                      </div>
+                      <kbd className="text-[10px] font-mono text-slate-400">Ctrl+K</kbd>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </header>
   );

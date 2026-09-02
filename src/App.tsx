@@ -279,6 +279,13 @@ export default function App() {
         localStorage.setItem('restpulse_history', JSON.stringify(payload.history));
       } catch (e) {}
     }
+
+    if (payload.globalVariables && Array.isArray(payload.globalVariables)) {
+      setGlobalVariables(payload.globalVariables);
+      try {
+        localStorage.setItem('restpulse_global_vars', JSON.stringify(payload.globalVariables));
+      } catch (e) {}
+    }
   };
 
   // Global Paste Listener (Auto-detect cURL / Smart Paste anywhere when not typing in input/textarea)
@@ -409,18 +416,18 @@ export default function App() {
     }
   }, [activeOrgId]);
 
-  // Derive Scope Context for Variable Resolution
+  // Derive Scope Context for Variable Resolution (4 Scopes: Local > Env > Org > Global)
   const activeEnv = activeProject?.environments?.find((e) => e.id === activeProject?.activeEnvId);
-  const activeFolder = activeProject?.folders?.find((f) => activeFile && f.fileIds?.includes(activeFile.id));
 
   const scopeCtx: ScopeContext = {
     globalVariables,
     organizationVariables: activeOrg?.variables || [],
     organizationName: activeOrg?.name,
+    envVariables: activeEnv?.variables || [],
     projectVariables: activeEnv?.variables || [],
+    envName: activeEnv?.name,
     projectName: activeProject?.name,
-    folderVariables: activeFolder?.variables || [],
-    folderName: activeFolder?.name,
+    localVariables: activeFile?.fileVariables || {},
     fileVariables: activeFile?.fileVariables || {},
     fileName: activeFile?.name,
   };
@@ -2054,27 +2061,6 @@ export default function App() {
                       projects: org.projects.map((p) =>
                         p.id === activeProject.id
                           ? { ...p, environments: updatedEnvs, activeEnvId: activeEnvId }
-                          : p
-                      ),
-                    }
-                  : org
-              )
-            );
-          }}
-          onUpdateFolderVariables={(folderId, updatedVars) => {
-            setOrganizations((prev) =>
-              prev.map((org) =>
-                org.id === activeOrg.id
-                  ? {
-                      ...org,
-                      projects: org.projects.map((p) =>
-                        p.id === activeProject.id
-                          ? {
-                              ...p,
-                              folders: p.folders.map((f) =>
-                                f.id === folderId ? { ...f, variables: updatedVars } : f
-                              ),
-                            }
                           : p
                       ),
                     }

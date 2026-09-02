@@ -92,7 +92,7 @@ export const QuickHelpModal: React.FC<QuickHelpModalProps> = ({ onClose }) => {
             }`}
           >
             <Layers className="w-4 h-4" />
-            <span>3-Level Env Scope</span>
+            <span>4-Tier Variable Scopes</span>
           </button>
 
           <button
@@ -183,35 +183,43 @@ export const QuickHelpModal: React.FC<QuickHelpModalProps> = ({ onClose }) => {
               <div>
                 <h4 className="text-sm font-semibold text-slate-100 flex items-center space-x-2">
                   <Layers className="w-4 h-4 text-emerald-400" />
-                  <span>3-Level Environment Variable Precedence</span>
+                  <span>4-Tier Variable Scope Precedence</span>
                 </h4>
                 <p className="text-xs text-slate-400 mt-1">
-                  RestStudio uses a strict 3-level scope hierarchy. When a variable is referenced as <code className="text-emerald-400 font-mono">{`{{variable}}`}</code>, the system resolves it according to precedence (highest priority first):
+                  RestStudio resolves dynamic variables (<code className="text-emerald-400 font-mono">{`{{variable}}`}</code>) across four distinct, clean scoping tiers (highest priority first):
                 </p>
               </div>
 
               <div className="space-y-2.5">
                 <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-start space-x-3">
-                  <span className="px-2 py-0.5 bg-emerald-500 text-slate-950 font-bold font-mono text-[11px] rounded shrink-0">1. Highest</span>
+                  <span className="px-2 py-0.5 bg-emerald-500 text-slate-950 font-bold font-mono text-[11px] rounded shrink-0">1. Local Var</span>
                   <div>
-                    <div className="text-xs font-bold text-emerald-300">File Level Variables (@var = value)</div>
-                    <div className="text-[11px] text-slate-300">Defined directly inside a .rest file header. Overrides all external environment settings for requests in that file.</div>
+                    <div className="text-xs font-bold text-emerald-300">Local / File Variables (@var = value)</div>
+                    <div className="text-[11px] text-slate-300">Defined directly in the active .rest file header or local script memory. Overrides all external environment settings.</div>
                   </div>
                 </div>
 
-                <div className="p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-xl flex items-start space-x-3">
-                  <span className="px-2 py-0.5 bg-indigo-500 text-white font-bold font-mono text-[11px] rounded shrink-0">2. Medium</span>
+                <div className="p-3 bg-sky-500/10 border border-sky-500/30 rounded-xl flex items-start space-x-3">
+                  <span className="px-2 py-0.5 bg-sky-500 text-slate-950 font-bold font-mono text-[11px] rounded shrink-0">2. Env</span>
                   <div>
-                    <div className="text-xs font-bold text-indigo-300">Project Environment Variables (Dev / Staging / Prod)</div>
-                    <div className="text-[11px] text-slate-300">Environment variables belonging to the active project environment selected in the header.</div>
+                    <div className="text-xs font-bold text-sky-300">Active Project Environment (Dev / Staging / Prod)</div>
+                    <div className="text-[11px] text-slate-300">Variables assigned to the active Environment Profile in the current project selected in the top header.</div>
                   </div>
                 </div>
 
-                <div className="p-3 bg-slate-800/80 border border-slate-700 rounded-xl flex items-start space-x-3">
-                  <span className="px-2 py-0.5 bg-slate-700 text-slate-200 font-bold font-mono text-[11px] rounded shrink-0">3. Global</span>
+                <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl flex items-start space-x-3">
+                  <span className="px-2 py-0.5 bg-purple-500 text-white font-bold font-mono text-[11px] rounded shrink-0">3. Org</span>
                   <div>
-                    <div className="text-xs font-bold text-slate-300">Global Fallback Variables</div>
-                    <div className="text-[11px] text-slate-400">Global defaults available across all organizations, projects, and requests.</div>
+                    <div className="text-xs font-bold text-purple-300">Organization Variables</div>
+                    <div className="text-[11px] text-slate-300">Shared variables available across all projects and files in the active organization.</div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start space-x-3">
+                  <span className="px-2 py-0.5 bg-amber-500 text-slate-950 font-bold font-mono text-[11px] rounded shrink-0">4. Global</span>
+                  <div>
+                    <div className="text-xs font-bold text-amber-300">Global Fallback Variables</div>
+                    <div className="text-[11px] text-slate-400">Universal workspace variables accessible everywhere across all organizations, projects, and requests.</div>
                   </div>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import { Organization, RequestHistoryItem, Environment } from '../types';
+import { Organization, RequestHistoryItem, Environment, EnvVariable } from '../types';
 
 export interface GitHubUser {
   login: string;
@@ -27,6 +27,7 @@ export interface SyncPayload {
   activeProjectId: string;
   environments: Environment[];
   history: RequestHistoryItem[];
+  globalVariables?: EnvVariable[];
 }
 
 const GIST_DESCRIPTION = 'RestPulse API Client - Free Unlimited Workspace & History Sync';
@@ -450,7 +451,8 @@ export async function createFreshWorkspaceGist(token: string): Promise<string> {
 export async function pushToGitHubGist(
   token: string,
   gistId: string,
-  payload: SyncPayload
+  payload: SyncPayload,
+  customDescription?: string
 ): Promise<string> {
   const workspaceData = {
     version: payload.version,
@@ -459,6 +461,7 @@ export async function pushToGitHubGist(
     activeOrgId: payload.activeOrgId,
     activeProjectId: payload.activeProjectId,
     environments: payload.environments,
+    globalVariables: payload.globalVariables || {},
   };
 
   const res = await fetch(`https://api.github.com/gists/${gistId}`, {
@@ -469,13 +472,13 @@ export async function pushToGitHubGist(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      description: GIST_DESCRIPTION,
+      description: customDescription || GIST_DESCRIPTION,
       files: {
         [WORKSPACE_FILE]: {
           content: JSON.stringify(workspaceData, null, 2),
         },
         [HISTORY_FILE]: {
-          content: JSON.stringify(payload.history.slice(0, 500), null, 2),
+          content: JSON.stringify((payload.history || []).slice(0, 500), null, 2),
         },
       },
     }),
@@ -513,6 +516,7 @@ async function ensureGistInitialized(token: string, gistId: string) {
                 activeOrgId: '',
                 activeProjectId: '',
                 environments: [],
+                globalVariables: {},
               },
               null,
               2
@@ -530,37 +534,46 @@ async function ensureGistInitialized(token: string, gistId: string) {
 }
 
 /**
- * Helper to extract file text either from content or raw_url
+ * Helper to extract file text either from content or raw_url safely
  */
 async function getFileContent(fileObj: any, token: string): Promise<string | null> {
   if (!fileObj) return null;
+
+  // 1. If content is complete (not truncated) and non-empty, use it immediately
   if (fileObj.content && !fileObj.truncated) {
     return fileObj.content;
   }
+
+  // 2. If content is truncated or missing, fetch full content from raw_url
   if (fileObj.raw_url) {
+    // Try unauthenticated fetch first (works for public gists without preflight issues)
     try {
-      // Direct raw fetch without custom Authorization header (prevents CORS preflight rejection on gist.githubusercontent.com)
       const res = await fetch(fileObj.raw_url);
       if (res.ok) {
         return await res.text();
       }
+      throw new Error(`Raw URL fetch status: ${res.status}`);
     } catch (err) {
-      console.warn('Direct fetch from raw_url without auth failed, trying with headers:', err);
-      try {
-        const resWithAuth = await fetch(fileObj.raw_url, {
-          headers: {
-            Authorization: `token ${token}`,
-          },
-        });
-        if (resWithAuth.ok) {
-          return await resWithAuth.text();
-        }
-      } catch (authErr) {
-        console.error('Failed to fetch file from raw_url with auth headers', authErr);
+      console.warn('Direct fetch from raw_url without auth failed, trying with Authorization header:', err);
+    }
+
+    // Try authenticated fetch (works for private gists)
+    try {
+      const resWithAuth = await fetch(fileObj.raw_url, {
+        headers: {
+          Authorization: `token ${token}`,
+        },
+      });
+      if (resWithAuth.ok) {
+        return await resWithAuth.text();
       }
+    } catch (authErr) {
+      console.error('Failed to fetch file from raw_url with auth headers:', authErr);
     }
   }
-  return fileObj.content || null;
+
+  // 3. Fall back to fileObj.content ONLY if it wasn't truncated
+  return fileObj.truncated ? null : fileObj.content || null;
 }
 
 /**
@@ -610,7 +623,7 @@ export async function pullFromGitHubGist(
   const workspaceContent = await getFileContent(workspaceFile, token);
   if (!workspaceContent) {
     throw new Error(
-      'Gist workspace file is currently empty. Please click "Push Local to GitHub" to upload your collections first.'
+      'Gist workspace file is currently empty or failed to download. Please click "Push Local to GitHub" to upload your collections first.'
     );
   }
 
@@ -641,6 +654,7 @@ export async function pullFromGitHubGist(
     activeProjectId: workspaceData.activeProjectId || '',
     environments: workspaceData.environments || [],
     history: historyData,
+    globalVariables: workspaceData.globalVariables || {},
   };
 }
 
@@ -717,7 +731,7 @@ export async function restoreGistRevision(
 
   const workspaceContent = await getFileContent(workspaceFile, token);
   if (!workspaceContent) {
-    throw new Error('Workspace snapshot content missing or empty in this commit revision.');
+    throw new Error('Workspace snapshot content missing or truncated in this commit revision.');
   }
 
   let workspaceData: any = {};
@@ -757,5 +771,6 @@ export async function restoreGistRevision(
     activeProjectId: workspaceData.activeProjectId || organizationsData[0]?.projects?.[0]?.id || '',
     environments: workspaceData.environments || [],
     history: historyData,
+    globalVariables: workspaceData.globalVariables || {},
   };
 }
