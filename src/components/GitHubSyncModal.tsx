@@ -62,6 +62,7 @@ interface GitHubSyncModalProps {
   onApplySyncedData: (data: SyncPayload) => void;
   showToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
   isDarkMode?: boolean;
+  onUserChange?: (user: GitHubUser | null) => void;
 }
 
 interface CloudComparisonState {
@@ -93,6 +94,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   onApplySyncedData,
   showToast,
   isDarkMode = true,
+  onUserChange,
 }) => {
   const [activeTab, setActiveTab] = useState<'sync' | 'history' | 'guide'>('sync');
   const [tokenInput, setTokenInput] = useState('');
@@ -152,6 +154,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
       setUser(gitHubUser);
       setGistId(gId);
       saveGitHubSession(trimmedToken, gitHubUser, gId);
+      if (onUserChange) onUserChange(gitHubUser);
 
       setStatusMessage('Checking remote cloud workspace data...');
       const remotePayload = await peekRemoteWorkspace(trimmedToken, gId);
@@ -192,6 +195,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     setGistId(null);
     setRevisions([]);
     setDetectedCloudPayload(null);
+    if (onUserChange) onUserChange(null);
     showToast('Disconnected from GitHub Sync', 'info');
   };
 

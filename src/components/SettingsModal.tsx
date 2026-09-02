@@ -4,7 +4,6 @@ import {
   Sliders,
   Moon,
   Sun,
-  MonitorCheck,
   Palette,
   Check,
   Cloud,
@@ -17,18 +16,20 @@ import {
   Info,
   ExternalLink,
   CheckCircle2,
-  RefreshCw,
   Search,
   Code2,
   Sparkles,
-  Database,
-  ArrowRight,
   Split,
-  FolderOpen,
+  ShieldCheck,
+  FileText,
+  Zap,
+  HelpCircle,
+  BookOpen,
 } from 'lucide-react';
 import { THEMES, UIThemeId } from '../utils/themeManager';
 import { Project, Organization } from '../types';
-import { getSavedGitHubUser } from '../services/githubSyncService';
+import { getSavedGitHubUser, getSavedGitHubToken, getSavedGistId, GitHubUser } from '../services/githubSyncService';
+import { highlightJs, highlightRestSyntax } from '../utils/syntaxHighlighter';
 
 export type SettingsTabId =
   | 'appearance'
@@ -36,6 +37,9 @@ export type SettingsTabId =
   | 'import-export'
   | 'environments'
   | 'shortcuts'
+  | 'auth'
+  | 'syntax'
+  | 'scripting'
   | 'about';
 
 interface SettingsModalProps {
@@ -56,6 +60,7 @@ interface SettingsModalProps {
   onOpenQuickHelp?: () => void;
   initialTab?: SettingsTabId;
   showToast: (type: 'success' | 'error' | 'info' | 'warning', title: string, message: string) => void;
+  githubUser?: GitHubUser | null;
 }
 
 export function SettingsModal({
@@ -76,6 +81,7 @@ export function SettingsModal({
   onOpenQuickHelp,
   initialTab = 'appearance',
   showToast,
+  githubUser: propGithubUser,
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab);
   const [shortcutSearch, setShortcutSearch] = useState('');
@@ -83,42 +89,89 @@ export function SettingsModal({
   if (!isOpen) return null;
 
   const currentThemeObj = THEMES.find((t) => t.id === currentTheme) || THEMES[0];
-  const isGitHubConfigured = typeof window !== 'undefined' && !!localStorage.getItem('restpulse_github_pat');
-  const gistId = typeof window !== 'undefined' ? localStorage.getItem('restpulse_github_gist_id') : null;
-  const githubUser = typeof window !== 'undefined' ? getSavedGitHubUser() : null;
+  const isGitHubConfigured = typeof window !== 'undefined' && !!getSavedGitHubToken();
+  const gistId = typeof window !== 'undefined' ? getSavedGistId() : null;
+  const effectiveGithubUser = propGithubUser || (typeof window !== 'undefined' ? getSavedGitHubUser() : null);
   const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
-  const allShortcuts = [
-    { key: 'Ctrl + Enter / Cmd + Enter', desc: 'Execute active HTTP / REST API request immediately', category: 'Execution' },
-    { key: 'Ctrl + N / Cmd + N', desc: 'Quick New Request creator & auto-paste modal', category: 'Navigation' },
-    { key: 'Ctrl + Shift + C / Alt + C', desc: 'Direct cURL importer & parser modal', category: 'Import' },
-    { key: 'Ctrl + K / Cmd + K', desc: 'Open Quick Help & Documentation reference', category: 'Help' },
-    { key: 'Ctrl + , / Cmd + ,', desc: 'Open Workspace Settings & Control Center', category: 'General' },
-    { key: 'Ctrl + Space', desc: 'Trigger Environment Variable autocomplete menu', category: 'Editor' },
-    { key: 'Type {{', desc: 'Auto-open environment variable suggestions popup', category: 'Editor' },
-    { key: 'Tab', desc: 'Navigate to next field or accept autocomplete item', category: 'Editor' },
-    { key: 'Esc', desc: 'Dismiss active popovers or close open modals', category: 'General' },
+  const shortcutGroups = [
+    {
+      category: '⚡ Request Execution & Creator',
+      items: [
+        { desc: 'Send current API request immediately', keys: [['Ctrl', 'Enter'], ['Cmd', 'Enter']], category: 'Execution' },
+        { desc: 'Quick New Request creator & auto-paste modal', keys: [['Ctrl', 'N'], ['Cmd', 'N']], category: 'Creator' },
+        { desc: 'Direct cURL importer & parser modal', keys: [['Ctrl', 'Shift', 'C'], ['Alt', 'C']], category: 'Import' },
+        { desc: 'Cycle HTTP method (GET, POST, PUT, DELETE, etc.)', keys: [['Alt', 'M']], category: 'Editor' },
+      ],
+    },
+    {
+      category: '✍️ Variable Autocomplete & Editor',
+      items: [
+        { desc: 'Trigger Environment Variable autocomplete popup', keys: [['Ctrl', 'Space']], category: 'Autocomplete' },
+        { desc: 'Auto-open environment variable suggestions', keys: [['{{']], category: 'Editor' },
+        { desc: 'Accept autocomplete item or move to next field', keys: [['Tab'], ['Enter']], category: 'Autocomplete' },
+        { desc: 'Navigate autocomplete dropdown choices', keys: [['↑'], ['↓']], category: 'Navigation' },
+      ],
+    },
+    {
+      category: '🧭 Workspace Navigation & Control',
+      items: [
+        { desc: 'Open Settings & Reference Center documentation', keys: [['Ctrl', 'K'], ['Cmd', 'K']], category: 'Help' },
+        { desc: 'Open Workspace Settings & Control Center', keys: [['Ctrl', ','], ['Cmd', ',']], category: 'Settings' },
+        { desc: 'Open Environment & Scope Manager', keys: [['Ctrl', 'E'], ['Cmd', 'E']], category: 'Scopes' },
+        { desc: 'Dismiss active popovers or close open modals', keys: [['Esc']], category: 'General' },
+      ],
+    },
   ];
 
-  const filteredShortcuts = allShortcuts.filter(
-    (s) =>
-      s.desc.toLowerCase().includes(shortcutSearch.toLowerCase()) ||
-      s.key.toLowerCase().includes(shortcutSearch.toLowerCase()) ||
-      s.category.toLowerCase().includes(shortcutSearch.toLowerCase())
-  );
+  const filteredShortcutGroups = shortcutGroups
+    .map((group) => {
+      const items = group.items.filter((item) => {
+        const q = shortcutSearch.toLowerCase();
+        const keyString = item.keys.flat(2).join(' ').toLowerCase();
+        return (
+          item.desc.toLowerCase().includes(q) ||
+          item.category.toLowerCase().includes(q) ||
+          keyString.includes(q)
+        );
+      });
+      return { ...group, items };
+    })
+    .filter((g) => g.items.length > 0);
 
-  const navItems: { id: SettingsTabId; label: string; icon: React.FC<{ className?: string }>; badge?: string }[] = [
-    { id: 'appearance', label: 'Appearance & Themes', icon: Palette },
+  const navGroups: {
+    section: string;
+    items: { id: SettingsTabId; label: string; icon: React.FC<{ className?: string }>; badge?: string }[];
+  }[] = [
     {
-      id: 'cloud',
-      label: 'Cloud Sync & GitHub',
-      icon: Cloud,
-      badge: isGitHubConfigured ? (githubUser?.login ? `@${githubUser.login}` : 'Connected') : undefined,
+      section: 'WORKSPACE & CONFIG',
+      items: [
+        { id: 'appearance', label: 'Appearance & Themes', icon: Palette },
+        {
+          id: 'cloud',
+          label: 'Cloud Sync & GitHub',
+          icon: Cloud,
+          badge: isGitHubConfigured ? (effectiveGithubUser?.login ? `@${effectiveGithubUser.login}` : 'Connected') : undefined,
+        },
+        { id: 'import-export', label: 'Import & Export', icon: Upload },
+        { id: 'environments', label: 'Variable Scopes & Vars', icon: Layers },
+      ],
     },
-    { id: 'import-export', label: 'Import & Export', icon: Upload },
-    { id: 'environments', label: 'Variable Scopes', icon: Layers },
-    { id: 'shortcuts', label: 'Shortcuts & Syntax', icon: Keyboard },
-    { id: 'about', label: 'About & Attribution', icon: Info },
+    {
+      section: 'HELP & REFERENCE',
+      items: [
+        { id: 'shortcuts', label: 'Keyboard Shortcuts', icon: Keyboard },
+        { id: 'auth', label: 'Inherited Auth Guide', icon: ShieldCheck },
+        { id: 'syntax', label: 'HTTP Script Syntax', icon: FileText },
+        { id: 'scripting', label: 'Scripting Engine (pm.*)', icon: Code2 },
+      ],
+    },
+    {
+      section: 'SYSTEM',
+      items: [
+        { id: 'about', label: 'About & Version', icon: Info },
+      ],
+    },
   ];
 
   return (
@@ -153,13 +206,13 @@ export function SettingsModal({
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h2 className="text-base font-bold tracking-tight">Workspace Settings</h2>
+                <h2 className="text-base font-bold tracking-tight">Settings & Reference Center</h2>
                 <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   RestStudio v1.3.0
                 </span>
               </div>
               <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                Configure themes, free cloud sync, variable scopes, and keyboard shortcuts
+                Workspace configuration, themes, cloud sync, variable scopes, and complete API documentation
               </p>
             </div>
           </div>
@@ -173,62 +226,67 @@ export function SettingsModal({
                   ? 'text-slate-400 hover:text-slate-100 hover:bg-slate-800'
                   : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
               }`}
-              title="Close Settings (Esc)"
+              title="Close Settings & Reference (Esc)"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Main Body: Sidebar Tabs + Content Area */}
+        {/* Main Body: Grouped Sidebar Tabs + Content Area */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Sidebar Navigation */}
           <div
-            className={`w-48 sm:w-56 shrink-0 border-r flex flex-col p-2 space-y-1 overflow-y-auto scrollbar-none ${
+            className={`w-52 sm:w-60 shrink-0 border-r flex flex-col p-2 space-y-3 overflow-y-auto scrollbar-none ${
               isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50/50'
             }`}
           >
-            <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              Preferences
-            </div>
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all text-left cursor-pointer group ${
-                    isActive
-                      ? isDarkMode
-                        ? 'bg-emerald-500/15 text-emerald-300 font-semibold border border-emerald-500/30'
-                        : 'bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200 shadow-sm'
-                      : isDarkMode
-                      ? 'text-slate-300 hover:bg-slate-800/60 hover:text-slate-100'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2.5 min-w-0">
-                    <Icon
-                      className={`w-4 h-4 shrink-0 transition-colors ${
+            {navGroups.map((group, groupIdx) => (
+              <div key={groupIdx} className="space-y-1">
+                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                  <span>{group.section}</span>
+                </div>
+
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setActiveTab(item.id)}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all text-left cursor-pointer group ${
                         isActive
-                          ? 'text-emerald-400'
+                          ? isDarkMode
+                            ? 'bg-emerald-500/15 text-emerald-300 font-semibold border border-emerald-500/30'
+                            : 'bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200 shadow-sm'
                           : isDarkMode
-                          ? 'text-slate-400 group-hover:text-slate-200'
-                          : 'text-slate-500 group-hover:text-slate-800'
+                          ? 'text-slate-300 hover:bg-slate-800/60 hover:text-slate-100'
+                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       }`}
-                    />
-                    <span className="truncate">{item.label}</span>
-                  </div>
-                  {item.badge && (
-                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+                    >
+                      <div className="flex items-center space-x-2.5 min-w-0">
+                        <Icon
+                          className={`w-4 h-4 shrink-0 transition-colors ${
+                            isActive
+                              ? 'text-emerald-400'
+                              : isDarkMode
+                              ? 'text-slate-400 group-hover:text-slate-200'
+                              : 'text-slate-500 group-hover:text-slate-800'
+                          }`}
+                        />
+                        <span className="truncate">{item.label}</span>
+                      </div>
+                      {item.badge && (
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
 
             <div className="pt-4 mt-auto">
               <div
@@ -468,11 +526,11 @@ export function SettingsModal({
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center space-x-3">
-                      {isGitHubConfigured && githubUser?.avatar_url ? (
+                      {isGitHubConfigured && effectiveGithubUser?.avatar_url ? (
                         <img
-                          src={githubUser.avatar_url}
-                          alt={githubUser.login}
-                          className="w-10 h-10 rounded-full border-2 border-emerald-400 object-cover shrink-0"
+                          src={effectiveGithubUser.avatar_url}
+                          alt={effectiveGithubUser.login}
+                          className="w-10 h-10 rounded-full border-2 border-emerald-400 object-cover shrink-0 shadow-md"
                         />
                       ) : (
                         <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
@@ -483,17 +541,17 @@ export function SettingsModal({
                         <div className="flex items-center space-x-2 flex-wrap">
                           <div className="text-xs font-bold">
                             {isGitHubConfigured
-                              ? githubUser?.name || githubUser?.login || 'GitHub Cloud Sync Connected'
+                              ? effectiveGithubUser?.name || effectiveGithubUser?.login || 'GitHub Cloud Sync Connected'
                               : 'Cloud Sync Not Configured'}
                           </div>
-                          {isGitHubConfigured && githubUser?.login && (
+                          {isGitHubConfigured && effectiveGithubUser?.login && (
                             <a
-                              href={githubUser.html_url || `https://github.com/${githubUser.login}`}
+                              href={effectiveGithubUser.html_url || `https://github.com/${effectiveGithubUser.login}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-[11px] font-mono text-emerald-400 hover:underline flex items-center space-x-0.5"
                             >
-                              <span>@{githubUser.login}</span>
+                              <span>@{effectiveGithubUser.login}</span>
                               <ExternalLink className="w-2.5 h-2.5" />
                             </a>
                           )}
@@ -734,36 +792,65 @@ export function SettingsModal({
                 </div>
 
                 {/* Shortcuts List */}
-                <div className="space-y-1.5 max-h-72 overflow-y-auto scrollbar-none">
-                  {filteredShortcuts.map((s, idx) => (
-                    <div
-                      key={idx}
-                      className={`px-3 py-2 rounded-xl border flex items-center justify-between text-xs ${
-                        isDarkMode ? 'bg-slate-950/40 border-slate-800/80' : 'bg-slate-50/80 border-slate-200'
-                      }`}
-                    >
-                      <span className={`text-[11px] font-medium ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                        {s.desc}
-                      </span>
-                      <kbd
-                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border shrink-0 ${
-                          isDarkMode
-                            ? 'bg-slate-800 text-emerald-400 border-slate-700 shadow-inner'
-                            : 'bg-white text-emerald-700 border-slate-300 shadow-sm'
-                        }`}
-                      >
-                        {s.key}
-                      </kbd>
+                <div className="space-y-4 max-h-80 overflow-y-auto scrollbar-none pr-1">
+                  {filteredShortcutGroups.length === 0 ? (
+                    <div className="text-center py-8 text-xs text-slate-500">
+                      No shortcuts matched "{shortcutSearch}"
                     </div>
-                  ))}
+                  ) : (
+                    filteredShortcutGroups.map((group, groupIdx) => (
+                      <div key={groupIdx} className="space-y-2">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          {group.category}
+                        </div>
+                        <div className="space-y-2">
+                          {group.items.map((item, itemIdx) => (
+                            <div
+                              key={itemIdx}
+                              className={`p-3 rounded-xl border flex items-center justify-between text-xs gap-3 ${
+                                isDarkMode ? 'bg-slate-950/40 border-slate-800/80' : 'bg-slate-50/80 border-slate-200'
+                              }`}
+                            >
+                              <span className={`text-xs font-medium ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                                {item.desc}
+                              </span>
+
+                              <div className="flex items-center space-x-1.5 shrink-0 justify-end">
+                                {item.keys.map((combo, comboIdx) => (
+                                  <React.Fragment key={comboIdx}>
+                                    {comboIdx > 0 && <span className="text-slate-500 text-[10px] font-medium">or</span>}
+                                    <div className="inline-flex items-center space-x-1">
+                                      {combo.map((k, kIdx) => (
+                                        <React.Fragment key={kIdx}>
+                                          {kIdx > 0 && <span className="text-slate-600 text-[10px] font-bold">+</span>}
+                                          <kbd
+                                            className={`px-2 py-0.5 font-mono text-[11px] font-bold rounded shadow-sm inline-flex items-center justify-center min-w-[20px] ${
+                                              isDarkMode
+                                                ? 'bg-slate-800 border-b-2 border-slate-700 text-emerald-300'
+                                                : 'bg-white border-b-2 border-slate-300 text-emerald-700'
+                                            }`}
+                                          >
+                                            {k}
+                                          </kbd>
+                                        </React.Fragment>
+                                      ))}
+                                    </div>
+                                  </React.Fragment>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
 
                 {onOpenQuickHelp && (
                   <button
                     type="button"
                     onClick={() => {
-                      onClose();
-                      onOpenQuickHelp();
+                      setActiveTab('syntax');
                     }}
                     className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center space-x-1.5 ${
                       isDarkMode
@@ -772,9 +859,119 @@ export function SettingsModal({
                     }`}
                   >
                     <FileCode className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Open Full Script Syntax & Scripting Guide</span>
+                    <span>View Script Syntax & Scripting Engine Guide</span>
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* 6. INHERITED AUTH GUIDE */}
+            {activeTab === 'auth' && (
+              <div className="space-y-6 max-w-2xl">
+                <div>
+                  <h3 className="text-sm font-bold tracking-tight flex items-center space-x-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>Project & File Level Auth Inheritance</span>
+                  </h3>
+                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Avoid repeating authentication credentials across dozens of requests by using Auth Inheritance.
+                  </p>
+                </div>
+
+                <div
+                  className={`p-4 rounded-xl border space-y-3 ${
+                    isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-400">
+                    <Zap className="w-4 h-4" />
+                    <span>How to use Inherited Auth:</span>
+                  </div>
+                  <ol className={`list-decimal list-inside text-xs space-y-2 leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                    <li>In any request, navigate to the <strong className={isDarkMode ? 'text-slate-100' : 'text-slate-900'}>Auth</strong> tab.</li>
+                    <li>Select the <strong className="text-emerald-500">Inherit Auth</strong> option.</li>
+                    <li>The request automatically inherits the Bearer Token, Basic Auth, or API Key configured at the parent Project or Organization level.</li>
+                    <li>Dynamic placeholders like <code className="text-emerald-500 font-mono">{`{{authToken}}`}</code> inside Project Auth are dynamically evaluated at runtime.</li>
+                  </ol>
+                </div>
+              </div>
+            )}
+
+            {/* 7. HTTP SCRIPT SYNTAX */}
+            {activeTab === 'syntax' && (
+              <div className="space-y-6 max-w-2xl">
+                <div>
+                  <h3 className="text-sm font-bold tracking-tight flex items-center space-x-2">
+                    <FileText className="w-4 h-4 text-emerald-400" />
+                    <span>HTTP Script Format Syntax</span>
+                  </h3>
+                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                    RestStudio supports standard executable HTTP request script syntax (.http / .rest).
+                  </p>
+                </div>
+
+                <div
+                  className={`p-4 rounded-xl border font-mono text-xs leading-relaxed overflow-x-auto space-y-2 ${
+                    isDarkMode ? 'bg-slate-950/80 border-slate-800 text-slate-200' : 'bg-slate-900 border-slate-800 text-slate-100'
+                  }`}
+                >
+                  <div className="text-slate-500"># Variable Definition at top of file</div>
+                  <div className="text-amber-400">@baseUrl = https://api.example.com</div>
+                  <div className="text-amber-400">@token = secret_12345</div>
+                  <br />
+                  <div className="text-slate-500">### 1. Get User Details</div>
+                  <div className="text-emerald-400">GET {`{{baseUrl}}`}/v1/users/me</div>
+                  <div>Authorization: Bearer {`{{token}}`}</div>
+                  <div>Accept: application/json</div>
+                  <br />
+                  <div className="text-slate-500">### 2. Create New Item</div>
+                  <div className="text-teal-400">POST {`{{baseUrl}}`}/v1/items</div>
+                  <div>Content-Type: application/json</div>
+                  <br />
+                  <div>{`{`}</div>
+                  <div className="pl-4">{`"name": "Sample Item",`}</div>
+                  <div className="pl-4">{`"status": "active"`}</div>
+                  <div>{`}`}</div>
+                </div>
+              </div>
+            )}
+
+            {/* 8. SCRIPTING ENGINE (pm.*) */}
+            {activeTab === 'scripting' && (
+              <div className="space-y-6 max-w-2xl">
+                <div>
+                  <h3 className="text-sm font-bold tracking-tight flex items-center space-x-2">
+                    <Code2 className="w-4 h-4 text-emerald-400" />
+                    <span>Pre-request & Test Scripting API</span>
+                  </h3>
+                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Write JavaScript scripts before sending requests or assertion tests after receiving responses.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-xs">
+                  <div
+                    className={`p-3 rounded-xl border space-y-2 ${
+                      isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-900 border-slate-800 text-slate-100'
+                    }`}
+                  >
+                    <div className="text-emerald-400 font-bold font-sans">Pre-Request Script Methods</div>
+                    <pre className="text-slate-300 font-mono text-xs whitespace-pre-wrap">
+                      {highlightJs(`pm.environment.set('token', 'newVal');\npm.environment.get('baseUrl');\npm.request.setHeader('X-Trace', Date.now());`)}
+                    </pre>
+                  </div>
+
+                  <div
+                    className={`p-3 rounded-xl border space-y-2 ${
+                      isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-900 border-slate-800 text-slate-100'
+                    }`}
+                  >
+                    <div className="text-emerald-400 font-bold font-sans">Post-Request Test Assertions</div>
+                    <pre className="text-slate-300 font-mono text-xs whitespace-pre-wrap">
+                      {highlightJs(`pm.test('Status is 200', () => {\n  pm.expect(pm.response.status).to.equal(200);\n});`)}
+                    </pre>
+                  </div>
+                </div>
               </div>
             )}
 

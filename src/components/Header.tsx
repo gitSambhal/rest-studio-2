@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Organization, Project } from '../types';
 import { THEMES, UIThemeId } from '../utils/themeManager';
 import { InlineThemeSelector } from './InlineThemeSelector';
-import { getSavedGitHubUser } from '../services/githubSyncService';
+import { getSavedGitHubUser, GitHubUser } from '../services/githubSyncService';
 import {
   Zap,
   Building2,
@@ -61,6 +61,7 @@ interface HeaderProps {
   onOpenQuickCurl?: () => void;
   onOpenGitHubSync?: () => void;
   isGitHubSynced?: boolean;
+  githubUser?: GitHubUser | null;
   historyCount: number;
 
   isDarkMode: boolean;
@@ -93,6 +94,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenQuickCurl,
   onOpenGitHubSync,
   isGitHubSynced = false,
+  githubUser: propGithubUser,
   historyCount,
   isDarkMode,
   onToggleDarkMode,
@@ -132,7 +134,7 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const activeThemeObj = THEMES.find((t) => t.id === currentTheme) || THEMES[0];
-  const githubUser = typeof window !== 'undefined' ? getSavedGitHubUser() : null;
+  const githubUser = propGithubUser || (typeof window !== 'undefined' ? getSavedGitHubUser() : null);
 
   return (
     <header

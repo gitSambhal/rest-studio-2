@@ -27,13 +27,19 @@ import { RestFileEditor } from './components/RestFileEditor';
 import { CollectionRunner } from './components/CollectionRunner';
 import { HistoryViewer } from './components/HistoryViewer';
 import { ImportExportModal } from './components/ImportExportModal';
-import { QuickHelpModal } from './components/QuickHelpModal';
-import { SettingsModal } from './components/SettingsModal';
+import { SettingsModal, SettingsTabId } from './components/SettingsModal';
 import { PromptModal } from './components/PromptModal';
 import { QuickNewRequestModal } from './components/QuickNewRequestModal';
 import { QuickCurlModal } from './components/QuickCurlModal';
 import { GitHubSyncModal } from './components/GitHubSyncModal';
-import { getSavedGitHubToken, SyncPayload } from './services/githubSyncService';
+import {
+  getSavedGitHubToken,
+  getSavedGitHubUser,
+  verifyGitHubToken,
+  saveGitHubSession,
+  GitHubUser,
+  SyncPayload,
+} from './services/githubSyncService';
 import { TabBar } from './components/TabBar';
 import { OnboardingScreen } from './components/OnboardingScreen';
 import { ToastContainer, ToastMessage } from './components/ToastContainer';
@@ -203,15 +209,31 @@ export default function App() {
     }
   }, [splitRatio]);
 
-  // Modals
+  // Modals & GitHub Sync User State
+  const [githubUser, setGithubUser] = useState<GitHubUser | null>(() => getSavedGitHubUser());
   const [isEnvManagerOpen, setIsEnvManagerOpen] = useState<boolean>(false);
   const [isImportExportOpen, setIsImportExportOpen] = useState<boolean>(false);
-  const [isQuickHelpOpen, setIsQuickHelpOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTabId>('appearance');
   const [isQuickNewRequestOpen, setIsQuickNewRequestOpen] = useState<boolean>(false);
   const [isQuickCurlOpen, setIsQuickCurlOpen] = useState<boolean>(false);
   const [isGitHubSyncOpen, setIsGitHubSyncOpen] = useState<boolean>(false);
   const [initialPasteText, setInitialPasteText] = useState<string>('');
+
+  // Auto-verify GitHub Token on mount to keep user profile picture & name in sync
+  useEffect(() => {
+    const token = getSavedGitHubToken();
+    if (token) {
+      verifyGitHubToken(token)
+        .then((userData) => {
+          setGithubUser(userData);
+          saveGitHubSession(token, userData);
+        })
+        .catch((err) => {
+          console.warn('GitHub token validation warning:', err);
+        });
+    }
+  }, []);
 
   const handleApplySyncedData = (payload: SyncPayload) => {
     if (payload.organizations && Array.isArray(payload.organizations) && payload.organizations.length > 0) {
@@ -324,9 +346,11 @@ export default function App() {
         setIsQuickNewRequestOpen(true);
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setIsQuickHelpOpen(true);
+        setSettingsTab('shortcuts');
+        setIsSettingsOpen(true);
       } else if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault();
+        setSettingsTab('appearance');
         setIsSettingsOpen(true);
       } else if (
         ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'c') ||
@@ -1774,7 +1798,10 @@ export default function App() {
           onCreateNewRequest={handleCreateNewTabWithDummy}
           onOpenImportModal={() => setIsImportExportOpen(true)}
           onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
-          onOpenQuickHelp={() => setIsQuickHelpOpen(true)}
+          onOpenQuickHelp={() => {
+            setSettingsTab('shortcuts');
+            setIsSettingsOpen(true);
+          }}
           onLaunchWorkspace={handleLaunchWorkspace}
           isDarkMode={isDarkMode}
           onToggleDarkMode={handleToggleDarkMode}
@@ -1816,12 +1843,19 @@ export default function App() {
             activeTab={activeTabMode}
             onChangeTab={setActiveTabMode}
             onOpenImportExport={() => setIsImportExportOpen(true)}
-            onOpenQuickHelp={() => setIsQuickHelpOpen(true)}
-            onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenQuickHelp={() => {
+              setSettingsTab('shortcuts');
+              setIsSettingsOpen(true);
+            }}
+            onOpenSettings={() => {
+              setSettingsTab('appearance');
+              setIsSettingsOpen(true);
+            }}
             onOpenQuickNewRequest={() => setIsQuickNewRequestOpen(true)}
             onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
             onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
             isGitHubSynced={!!getSavedGitHubToken()}
+            githubUser={githubUser}
             historyCount={history.length}
             isDarkMode={isDarkMode}
             onToggleDarkMode={handleToggleDarkMode}
@@ -2110,11 +2144,6 @@ export default function App() {
         />
       )}
 
-      {/* Quick Help Modal */}
-      {isQuickHelpOpen && (
-        <QuickHelpModal onClose={() => setIsQuickHelpOpen(false)} />
-      )}
-
       {/* Quick New Request Modal */}
       <QuickNewRequestModal
         isOpen={isQuickNewRequestOpen}
@@ -2140,7 +2169,7 @@ export default function App() {
         onImportCurl={handleImportQuickCurl}
       />
 
-      {/* Settings Modal */}
+      {/* Settings & Reference Center Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -2158,8 +2187,10 @@ export default function App() {
         onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
         onOpenImportExport={() => setIsImportExportOpen(true)}
         onOpenEnvManager={() => setIsEnvManagerOpen(true)}
-        onOpenQuickHelp={() => setIsQuickHelpOpen(true)}
+        onOpenQuickHelp={() => setSettingsTab('shortcuts')}
+        initialTab={settingsTab}
         showToast={showToast}
+        githubUser={githubUser}
       />
 
       {/* Free GitHub Cloud & Data Sync Modal */}
@@ -2174,6 +2205,7 @@ export default function App() {
         onApplySyncedData={handleApplySyncedData}
         showToast={(msg, type) => showToast(type, msg)}
         isDarkMode={isDarkMode}
+        onUserChange={(u) => setGithubUser(u)}
       />
 
       {/* Global App Prompt Modal */}
