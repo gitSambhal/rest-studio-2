@@ -20,6 +20,7 @@ import { BatchWorkspaceModal } from './BatchWorkspaceModal';
 import { PromptModal } from './PromptModal';
 import { CommandPaletteModal } from './CommandPaletteModal';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
+import { ApiDocumentationModal } from './ApiDocumentationModal';
 import { GitHubUser, SyncPayload } from '../services/githubSyncService';
 import { UIThemeId } from '../utils/themeManager';
 import { parseRestFileContent } from '../utils/restParser';
@@ -133,6 +134,11 @@ export interface AppModalsProps {
   // Keyboard Shortcuts Modal
   isKeyboardShortcutsOpen: boolean;
   setIsKeyboardShortcutsOpen: (open: boolean) => void;
+
+  // Interactive API Documentation Generator
+  isApiDocsOpen: boolean;
+  setIsApiDocsOpen: (open: boolean) => void;
+  activeRequestId?: string | null;
 }
 
 export const AppModals: React.FC<AppModalsProps> = ({
@@ -206,6 +212,9 @@ export const AppModals: React.FC<AppModalsProps> = ({
   setActiveTabMode,
   isKeyboardShortcutsOpen,
   setIsKeyboardShortcutsOpen,
+  isApiDocsOpen,
+  setIsApiDocsOpen,
+  activeRequestId,
 }) => {
   return (
     <AnimatePresence>
@@ -452,6 +461,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
           onOpenHistory={() => setActiveTabMode('history')}
           onOpenRunner={() => setActiveTabMode('runner')}
           onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
+          onOpenApiDocs={() => setIsApiDocsOpen(true)}
         />
       )}
 
@@ -460,6 +470,19 @@ export const AppModals: React.FC<AppModalsProps> = ({
         <KeyboardShortcutsModal
           isOpen={isKeyboardShortcutsOpen}
           onClose={() => setIsKeyboardShortcutsOpen(false)}
+        />
+      )}
+
+      {/* Interactive API Documentation Generator Modal */}
+      {isApiDocsOpen && activeProject && (
+        <ApiDocumentationModal
+          isOpen={isApiDocsOpen}
+          onClose={() => setIsApiDocsOpen(false)}
+          project={activeProject}
+          activeFileId={activeFileId}
+          activeRequestId={activeRequestId}
+          onSelectRequest={handleOpenRequestInTab}
+          isDarkMode={isDarkMode}
         />
       )}
     </AnimatePresence>

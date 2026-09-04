@@ -233,6 +233,7 @@ export default function App() {
   const [isBatchWorkspaceModalOpen, setIsBatchWorkspaceModalOpen] = useState<boolean>(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState<boolean>(false);
+  const [isApiDocsOpen, setIsApiDocsOpen] = useState<boolean>(false);
   const [isQuickNewRequestOpen, setIsQuickNewRequestOpen] = useState<boolean>(false);
   const [initialPasteText, setInitialPasteText] = useState<string>('');
   const [isQuickCurlOpen, setIsQuickCurlOpen] = useState<boolean>(false);
@@ -1015,6 +1016,7 @@ export default function App() {
         onOpenBatchWorkspaceModal={() => setIsBatchWorkspaceModalOpen(true)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         onOpenShortcuts={() => setIsKeyboardShortcutsOpen(true)}
+        onOpenApiDocs={() => setIsApiDocsOpen(true)}
         isGitHubSynced={Boolean(githubUser)}
         githubUser={githubUser}
         historyCount={history.length}
@@ -1083,6 +1085,7 @@ export default function App() {
             onOpenQuickNewRequest={() => setIsQuickNewRequestOpen(true)}
             onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
             onOpenBatchWorkspaceModal={() => setIsBatchWorkspaceModalOpen(true)}
+            onOpenApiDocs={() => setIsApiDocsOpen(true)}
           />
 
           {/* Central Workspace Area */}
@@ -1344,6 +1347,9 @@ export default function App() {
         setActiveTabMode={setActiveTabMode}
         isKeyboardShortcutsOpen={isKeyboardShortcutsOpen}
         setIsKeyboardShortcutsOpen={setIsKeyboardShortcutsOpen}
+        isApiDocsOpen={isApiDocsOpen}
+        setIsApiDocsOpen={setIsApiDocsOpen}
+        activeRequestId={activeRequestId}
       />
 
       {/* Global Toast Notifications */}

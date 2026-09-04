@@ -357,40 +357,6 @@ export function SettingsModal({
                   </p>
                 </div>
 
-                {/* Dark / Light Toggle Banner */}
-                <div
-                  className={`p-3.5 rounded-2xl border flex items-center justify-between ${
-                    isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
-                  }`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <div
-                      className={`p-2 rounded-xl border ${
-                        isDarkMode
-                          ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
-                          : 'bg-indigo-50 border-indigo-200 text-indigo-600'
-                      }`}
-                    >
-                      {isDarkMode ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold">Color Mode: {isDarkMode ? 'Dark' : 'Light'}</div>
-                      <p className={`text-[11px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                        Toggle between dark night mode and high-contrast daylight theme
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={onToggleDarkMode}
-                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-sm flex items-center space-x-1.5"
-                  >
-                    {isDarkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-                    <span>Switch to {isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>
-                  </button>
-                </div>
-
                 {/* Theme Palette Grid */}
                 <div className="space-y-3">
                   <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center space-x-1.5">
@@ -419,9 +385,14 @@ export function SettingsModal({
                               : 'bg-slate-50 border-slate-200 hover:border-slate-300 hover:bg-slate-100'
                           }`}
                         >
-                          {/* Header row: Icon, Name, Category badge, Checkmark */}
+                          {/* Header row: Checkmark, Icon, Name, Category badge */}
                           <div className="flex items-start justify-between space-x-2">
                             <div className="flex items-center space-x-2.5 min-w-0">
+                              {isSelected && (
+                                <div className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
+                                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                </div>
+                              )}
                               <div
                                 className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center border shadow-inner"
                                 style={{
@@ -445,15 +416,6 @@ export function SettingsModal({
                                   >
                                     {theme.name}
                                   </span>
-                                  <span
-                                    className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${
-                                      theme.category === 'dark'
-                                        ? 'bg-slate-900 text-slate-400 border-slate-800'
-                                        : 'bg-amber-50 text-amber-700 border-amber-200'
-                                    }`}
-                                  >
-                                    {theme.category}
-                                  </span>
                                 </div>
                                 <p className={`text-[11px] leading-tight mt-0.5 truncate max-w-[200px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                                   {theme.description}
@@ -461,11 +423,15 @@ export function SettingsModal({
                               </div>
                             </div>
 
-                            {isSelected && (
-                              <div className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
-                                <Check className="w-3.5 h-3.5 stroke-[3]" />
-                              </div>
-                            )}
+                            <span
+                              className={`text-[9px] font-mono px-1.5 py-0.2 rounded border shrink-0 ${
+                                theme.category === 'dark'
+                                  ? 'bg-slate-900 text-slate-400 border-slate-800'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200'
+                              }`}
+                            >
+                              {theme.category}
+                            </span>
                           </div>
 
                           {/* Mini Workspace Preview Box in Theme Colors */}

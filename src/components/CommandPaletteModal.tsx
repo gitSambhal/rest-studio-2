@@ -8,6 +8,7 @@ import {
   Send,
   Download,
   Settings,
+  Palette,
   Moon,
   Sun,
   Cookie,
@@ -22,6 +23,7 @@ import {
   X,
   Layers,
   ArrowRight,
+  BookOpen,
 } from 'lucide-react';
 
 export interface CommandItem {
@@ -51,6 +53,7 @@ interface CommandPaletteModalProps {
   onOpenHistory?: () => void;
   onOpenRunner?: () => void;
   onOpenGitHubSync?: () => void;
+  onOpenApiDocs?: () => void;
 }
 
 export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
@@ -70,6 +73,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
   onOpenHistory,
   onOpenRunner,
   onOpenGitHubSync,
+  onOpenApiDocs,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -156,12 +160,12 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     },
     {
       id: 'action-theme',
-      title: `Toggle Theme (Switch to ${isDarkMode ? 'Light' : 'Dark'} Mode)`,
+      title: 'Open Appearance & Theme Selector',
       category: 'Settings',
-      icon: isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-400" />,
+      icon: <Palette className="w-4 h-4 text-purple-400" />,
       action: () => {
         onClose();
-        onToggleDarkMode();
+        if (onOpenSettings) onOpenSettings();
       },
     },
     ...(onOpenRunner ? [{
@@ -192,6 +196,16 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       action: () => {
         onClose();
         onOpenGitHubSync();
+      },
+    }] : []),
+    ...(onOpenApiDocs ? [{
+      id: 'tool-api-docs',
+      title: 'Interactive API Documentation Generator',
+      category: 'Tools' as const,
+      icon: <BookOpen className="w-4 h-4 text-emerald-400" />,
+      action: () => {
+        onClose();
+        onOpenApiDocs();
       },
     }] : []),
     {

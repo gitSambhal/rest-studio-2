@@ -1,3 +1,7 @@
+/**
+ * RestStudio - Offline-First REST API Client & Workspace
+ * Created by Suhail Akhtar (https://suhail.top)
+ */
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';

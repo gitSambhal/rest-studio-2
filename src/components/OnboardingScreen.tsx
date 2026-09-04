@@ -1,3 +1,7 @@
+/**
+ * RestStudio - Offline-First REST API Client & Workspace
+ * Created by Suhail Akhtar (https://suhail.top)
+ */
 import React from 'react';
 import { InlineThemeSelector } from './InlineThemeSelector';
 import { UIThemeId } from '../utils/themeManager';
@@ -106,20 +110,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           >
             <Command className="w-3 h-3 text-emerald-400" />
             <span>K Search</span>
-          </button>
-
-          {/* Theme Toggle Button */}
-          <button
-            type="button"
-            onClick={onToggleDarkMode}
-            className={`p-2 rounded-xl border transition-colors cursor-pointer ${
-              isDarkMode
-                ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
-                : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-            title="Toggle Light / Dark Mode"
-          >
-            {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
           </button>
 
           {/* Launch Workspace CTA Button */}
@@ -507,9 +497,99 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             <div className="w-9 h-9 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400">
               <ShieldCheck className="w-4 h-4" />
             </div>
-            <h3 className="text-sm font-bold">100% Offline & Native OS Speed</h3>
+            <h3 className="text-sm font-bold">100% Offline &amp; Native OS Speed</h3>
             <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-              Local storage auto-persisted, native macOS Cocoa clipboard support, zero cloud tracking, and ultra-lightweight memory usage.
+              Local storage auto-persisted, native OS clipboard support, zero cloud tracking, and ultra-lightweight memory footprint.
+            </p>
+          </div>
+
+          {/* Feature 7: Collection Runner */}
+          <div
+            className={`p-5 rounded-2xl border space-y-3 ${
+              isDarkMode ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200 shadow-sm'
+            }`}
+          >
+            <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+              <Play className="w-4 h-4" />
+            </div>
+            <h3 className="text-sm font-bold">Automated Collection Runner</h3>
+            <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+              Batch execute entire project folders or files sequentially with custom delay timers, assertion reports, and full execution history logs.
+            </p>
+          </div>
+
+          {/* Feature 8: Cookie Jar & LNA Proxy */}
+          <div
+            className={`p-5 rounded-2xl border space-y-3 ${
+              isDarkMode ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200 shadow-sm'
+            }`}
+          >
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+              <Cpu className="w-4 h-4" />
+            </div>
+            <h3 className="text-sm font-bold">Automatic Cookie Jar &amp; LNA Proxy</h3>
+            <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+              Auto-capture session cookies from <span className="font-mono text-emerald-400">Set-Cookie</span> headers and execute requests to local microservices via Local Network Access.
+            </p>
+          </div>
+
+          {/* Feature 9: GitHub Gist Sync */}
+          <div
+            className={`p-5 rounded-2xl border space-y-3 ${
+              isDarkMode ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200 shadow-sm'
+            }`}
+          >
+            <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+              <Globe className="w-4 h-4" />
+            </div>
+            <h3 className="text-sm font-bold">GitHub Gist Cloud Sync</h3>
+            <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+              Backup and synchronize your REST collections, environment configs, and workspaces directly with public or secret GitHub Gists.
+            </p>
+          </div>
+
+          {/* Feature 10: .rest / .http Parser & Runner */}
+          <div
+            className={`p-5 rounded-2xl border space-y-3 ${
+              isDarkMode ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200 shadow-sm'
+            }`}
+          >
+            <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+              <FileCode2 className="w-4 h-4" />
+            </div>
+            <h3 className="text-sm font-bold">Interactive .rest &amp; .http File Runner</h3>
+            <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+              Parse, edit, and execute standard RFC-compliant <span className="font-mono text-amber-400">.rest</span> files with syntax highlighting and multi-request block execution.
+            </p>
+          </div>
+
+          {/* Feature 11: Dynamic Split-View Workspace */}
+          <div
+            className={`p-5 rounded-2xl border space-y-3 ${
+              isDarkMode ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200 shadow-sm'
+            }`}
+          >
+            <div className="w-9 h-9 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+              <Layers className="w-4 h-4" />
+            </div>
+            <h3 className="text-sm font-bold">Flexible Split-View Layout</h3>
+            <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+              Toggle seamlessly between Top/Bottom and Left/Right workspace orientations with smooth resize handles and state persistence.
+            </p>
+          </div>
+
+          {/* Feature 12: Command Palette & JSON Schema */}
+          <div
+            className={`p-5 rounded-2xl border space-y-3 ${
+              isDarkMode ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200 shadow-sm'
+            }`}
+          >
+            <div className="w-9 h-9 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+              <Command className="w-4 h-4" />
+            </div>
+            <h3 className="text-sm font-bold">Cmd+K Palette &amp; JSON Schema Tree</h3>
+            <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+              Trigger instant actions via the command palette and infer full JSON Schema trees with path copying and filter capabilities.
             </p>
           </div>
         </div>
@@ -583,14 +663,13 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         </div>
 
         <div className="flex items-center space-x-4">
-          <span className="flex items-center space-x-1">
-            <Globe className="w-3.5 h-3.5 text-slate-400" />
-            <span>Local Storage Auto-Saved</span>
+          <span>
+            Created by <a href="https://suhail.top" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline font-semibold">Suhail Akhtar</a>
           </span>
           <span>&bull;</span>
           <span className="flex items-center space-x-1">
-            <Code2 className="w-3.5 h-3.5 text-slate-400" />
-            <span>REST Client Engine</span>
+            <Globe className="w-3.5 h-3.5 text-slate-400" />
+            <span>Local Storage Auto-Saved</span>
           </span>
         </div>
 

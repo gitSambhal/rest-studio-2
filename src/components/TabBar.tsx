@@ -85,15 +85,23 @@ export const TabBar: React.FC<TabBarProps> = ({
 
   const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const tabsContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // Automatically scroll the active tab to the center of the tab bar view
+  // Automatically scroll the active tab within the tab bar container (without shifting main window/page layout)
   useEffect(() => {
-    if (activeTabId && tabRefs.current[activeTabId]) {
-      tabRefs.current[activeTabId]?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-        inline: 'center',
-      });
+    if (activeTabId && tabRefs.current[activeTabId] && tabsContainerRef.current) {
+      const activeEl = tabRefs.current[activeTabId];
+      const container = tabsContainerRef.current;
+      if (activeEl && container) {
+        const elLeft = activeEl.offsetLeft;
+        const elWidth = activeEl.offsetWidth;
+        const containerWidth = container.offsetWidth;
+        const targetScroll = elLeft - containerWidth / 2 + elWidth / 2;
+        container.scrollTo({
+          left: Math.max(0, targetScroll),
+          behavior: 'smooth',
+        });
+      }
     }
   }, [activeTabId]);
 
@@ -162,7 +170,7 @@ export const TabBar: React.FC<TabBarProps> = ({
         : 'bg-slate-100 border-slate-200'
     }`}>
       {/* Left: Open Tabs List */}
-      <div className="flex items-center space-x-1 overflow-x-auto no-scrollbar py-1">
+      <div ref={tabsContainerRef} className="flex items-center space-x-1 overflow-x-auto no-scrollbar py-1">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const isExecutingThisTab = Boolean(
@@ -245,60 +253,7 @@ export const TabBar: React.FC<TabBarProps> = ({
 
       {/* Right Controls: Mode Switchers, Run button, Split Layout Toggle */}
       <div className={`flex items-center space-x-2 pl-2 border-l shrink-0 ${isDarkMode ? 'border-slate-800' : 'border-slate-300'}`}>
-        {onChangeTabMode && (
-          <div className={`flex items-center rounded-lg p-0.5 border ${isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-200/80 border-slate-300'}`}>
-            <button
-              type="button"
-              onClick={() => onChangeTabMode('editor')}
-              className={`px-2 py-0.5 text-[11px] font-medium rounded-md transition-colors ${
-                activeTabMode === 'editor'
-                  ? isDarkMode ? 'bg-emerald-500/20 text-emerald-300 shadow-xs' : 'bg-white text-emerald-700 shadow-xs'
-                  : isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900'
-              }`}
-              title="Request Builder UI"
-            >
-              Builder
-            </button>
-            {activeFile && (
-              <button
-                type="button"
-                onClick={() => onChangeTabMode('code')}
-                className={`px-2 py-0.5 text-[11px] font-medium rounded-md transition-colors ${
-                  activeTabMode === 'code'
-                    ? isDarkMode ? 'bg-sky-500/20 text-sky-300 shadow-xs' : 'bg-white text-sky-700 shadow-xs'
-                    : isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900'
-                }`}
-                title="Raw .REST File Editor"
-              >
-                .REST
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => onChangeTabMode('runner')}
-              className={`px-2 py-0.5 text-[11px] font-medium rounded-md transition-colors ${
-                activeTabMode === 'runner'
-                  ? isDarkMode ? 'bg-purple-500/20 text-purple-300 shadow-xs' : 'bg-white text-purple-700 shadow-xs'
-                  : isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900'
-              }`}
-              title="Collection Runner"
-            >
-              Runner
-            </button>
-            <button
-              type="button"
-              onClick={() => onChangeTabMode('history')}
-              className={`px-2 py-0.5 text-[11px] font-medium rounded-md transition-colors ${
-                activeTabMode === 'history'
-                  ? isDarkMode ? 'bg-amber-500/20 text-amber-300 shadow-xs' : 'bg-white text-amber-700 shadow-xs'
-                  : isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900'
-              }`}
-              title="Request History"
-            >
-              History
-            </button>
-          </div>
-        )}
+
 
         {onRunRequest && activeTabMode === 'editor' && (
           <button

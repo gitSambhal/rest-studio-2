@@ -176,6 +176,7 @@ export interface RestFile {
   name: string;
   rawContent: string;
   requests: RestRequest[];
+  description?: string;
   fileVariables?: Record<string, string>;
   folderId?: string | null;
   auth?: RequestAuth;

@@ -20,6 +20,7 @@ import {
   FolderInput,
   Terminal,
   Layers,
+  BookOpen,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -55,6 +56,7 @@ interface SidebarProps {
   onOpenQuickNewRequest?: () => void;
   onOpenQuickCurl?: () => void;
   onOpenBatchWorkspaceModal?: () => void;
+  onOpenApiDocs?: () => void;
 }
 
 interface RenderRestFileProps {
@@ -400,6 +402,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenQuickNewRequest,
   onOpenQuickCurl,
   onOpenBatchWorkspaceModal,
+  onOpenApiDocs,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
@@ -571,6 +574,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="p-1 text-slate-400 hover:text-purple-400 hover:bg-slate-800 rounded transition-colors cursor-pointer"
               >
                 <Layers className="w-4 h-4" />
+              </button>
+            )}
+
+            {onOpenApiDocs && (
+              <button
+                type="button"
+                onClick={onOpenApiDocs}
+                title="Interactive API Documentation Generator"
+                className="p-1 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded transition-colors cursor-pointer"
+              >
+                <BookOpen className="w-4 h-4 text-emerald-400" />
               </button>
             )}
           </div>
@@ -921,7 +935,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Zap className="w-3.5 h-3.5 text-amber-400" />
           <span>RestStudio</span>
         </div>
-        <span>{(project?.files || []).reduce((acc, f) => acc + (f.requests?.length || 0), 0)} requests</span>
+        <div>
+          Created by <a href="https://suhail.top" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline font-semibold">Suhail Akhtar</a>
+        </div>
       </div>
 
       <PromptModal
