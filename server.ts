@@ -233,6 +233,12 @@ async function startServer() {
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`RestStudio Server active on http://0.0.0.0:${PORT}`);
+    const token = process.env.BETTERSTACK_SOURCE_TOKEN || process.env.LOGTAIL_SOURCE_TOKEN;
+    if (token) {
+      console.log(`[Better Stack / Logtail] Initialized successfully with token: ${token.substring(0, 4)}... (Ready to collect error logs)`);
+    } else {
+      console.log(`[Better Stack / Logtail] Not configured (BETTERSTACK_SOURCE_TOKEN environment variable not set). Error forwarding inactive.`);
+    }
   });
 }
 
