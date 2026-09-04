@@ -185,7 +185,7 @@ export function useWorkspaceState(showToast: (type: 'success' | 'error' | 'info'
                   const existingVars = env.variables || [];
                   const updatedVars = [...existingVars];
                   for (const nv of newVars) {
-                    const idx = updatedVars.findIndex((v) => v.key.trim().toLowerCase() === nv.key.trim().toLowerCase());
+                    const idx = updatedVars.findIndex((v) => (v.key || '').trim().toLowerCase() === (nv.key || '').trim().toLowerCase());
                     if (idx >= 0) {
                       updatedVars[idx] = { ...updatedVars[idx], value: nv.value, enabled: nv.enabled ?? true };
                     } else {
@@ -207,7 +207,7 @@ export function useWorkspaceState(showToast: (type: 'success' | 'error' | 'info'
       setGlobalVariables((prev) => {
         const updated = [...prev];
         for (const nv of newVars) {
-          const idx = updated.findIndex((v) => v.key.trim().toLowerCase() === nv.key.trim().toLowerCase());
+          const idx = updated.findIndex((v) => (v.key || '').trim().toLowerCase() === (nv.key || '').trim().toLowerCase());
           if (idx >= 0) {
             updated[idx] = { ...updated[idx], value: nv.value, enabled: nv.enabled ?? true };
           } else {

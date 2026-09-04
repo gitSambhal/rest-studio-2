@@ -180,7 +180,7 @@ export function mergeSyncPayloads(local: SyncPayload, remote: SyncPayload): Sync
 
   for (const localOrg of local.organizations || []) {
     const existingOrgIdx = mergedOrgs.findIndex(
-      (o) => o.id === localOrg.id || o.name.trim().toLowerCase() === localOrg.name.trim().toLowerCase()
+      (o) => o.id === localOrg.id || (o.name || '').trim().toLowerCase() === (localOrg.name || '').trim().toLowerCase()
     );
 
     if (existingOrgIdx === -1) {
@@ -191,7 +191,7 @@ export function mergeSyncPayloads(local: SyncPayload, remote: SyncPayload): Sync
 
       for (const localProj of localOrg.projects || []) {
         const existingProjIdx = mergedProjects.findIndex(
-          (p) => p.id === localProj.id || p.name.trim().toLowerCase() === localProj.name.trim().toLowerCase()
+          (p) => p.id === localProj.id || (p.name || '').trim().toLowerCase() === (localProj.name || '').trim().toLowerCase()
         );
 
         if (existingProjIdx === -1) {
@@ -203,7 +203,7 @@ export function mergeSyncPayloads(local: SyncPayload, remote: SyncPayload): Sync
           const mergedEnvs: Environment[] = [...(remoteProj.environments || [])];
           for (const localEnv of localProj.environments || []) {
             const envIdx = mergedEnvs.findIndex(
-              (e) => e.id === localEnv.id || e.name.trim().toLowerCase() === localEnv.name.trim().toLowerCase()
+              (e) => e.id === localEnv.id || (e.name || '').trim().toLowerCase() === (localEnv.name || '').trim().toLowerCase()
             );
             if (envIdx === -1) {
               mergedEnvs.push(localEnv);
@@ -223,7 +223,7 @@ export function mergeSyncPayloads(local: SyncPayload, remote: SyncPayload): Sync
           const mergedFolders: any[] = [...(remoteProj.folders || [])];
           for (const localFolder of localProj.folders || []) {
             const folderIdx = mergedFolders.findIndex(
-              (f) => f.id === localFolder.id || f.name.trim().toLowerCase() === localFolder.name.trim().toLowerCase()
+              (f) => f.id === localFolder.id || (f.name || '').trim().toLowerCase() === (localFolder.name || '').trim().toLowerCase()
             );
             if (folderIdx === -1) {
               mergedFolders.push(localFolder);
@@ -240,7 +240,7 @@ export function mergeSyncPayloads(local: SyncPayload, remote: SyncPayload): Sync
           const mergedFiles: any[] = [...(remoteProj.files || [])];
           for (const localFile of localProj.files || []) {
             const fileIdx = mergedFiles.findIndex(
-              (f) => f.id === localFile.id || f.name.trim().toLowerCase() === localFile.name.trim().toLowerCase()
+              (f) => f.id === localFile.id || (f.name || '').trim().toLowerCase() === (localFile.name || '').trim().toLowerCase()
             );
             if (fileIdx === -1) {
               mergedFiles.push(localFile);
@@ -251,7 +251,7 @@ export function mergeSyncPayloads(local: SyncPayload, remote: SyncPayload): Sync
                 const reqIdx = mergedReqs.findIndex(
                   (r) =>
                     r.id === localReq.id ||
-                    (r.name.trim().toLowerCase() === localReq.name.trim().toLowerCase() &&
+                    ((r.name || '').trim().toLowerCase() === (localReq.name || '').trim().toLowerCase() &&
                       r.method === localReq.method)
                 );
                 if (reqIdx === -1) {

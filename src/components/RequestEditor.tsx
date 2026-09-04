@@ -180,7 +180,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
 
       // 1. Auto-remove params that are no longer in the URL
       updatedParams = updatedParams.filter((p) => {
-        const k = p.key.trim();
+        const k = (p.key || '').trim();
         if (!foundKeys.has(k)) {
           changed = true;
           return false;
@@ -188,7 +188,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
         return true;
       });
 
-      const existingKeys = new Set(updatedParams.map((p) => p.key.trim()));
+      const existingKeys = new Set(updatedParams.map((p) => (p.key || '').trim()));
 
       // 2. Auto-add new keys found in the URL
       foundKeys.forEach((key) => {
