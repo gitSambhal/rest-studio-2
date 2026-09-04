@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'motion/react';
 import { RestRequest, HTTPMethod, Organization, Project } from '../types';
 import {
   Search,
@@ -289,8 +290,18 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh] bg-slate-950/70 backdrop-blur-sm p-4 animate-in fade-in duration-100">
-      <div
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.12 }}
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh] bg-slate-950/70 backdrop-blur-sm p-4"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: -16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: -10 }}
+        transition={{ type: 'spring', damping: 30, stiffness: 420 }}
         className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[75vh]"
         onKeyDown={handleKeyDown}
       >
@@ -378,7 +389,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
           </div>
           <span className="text-emerald-400/80">Command Palette</span>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

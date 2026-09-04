@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { HTTPMethod, Project, RestFile, RestRequest } from '../types';
 import { X, Plus, Code2, Globe, FileCode, Sparkles, CornerDownLeft, Eye, Zap, CheckCircle2 } from 'lucide-react';
 import { resolveEnvVariables, ScopeContext } from '../utils/envUtils';
@@ -133,14 +134,22 @@ export const QuickNewRequestModal: React.FC<QuickNewRequestModalProps> = ({
   };
 
   return (
-    <div
-      className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150 ${
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 ${
         isDarkMode ? 'bg-slate-950/80 backdrop-blur-sm' : 'bg-slate-900/40 backdrop-blur-sm'
       }`}
       onClick={onClose}
     >
-      <div
-        className={`border rounded-2xl w-full max-w-xl max-h-[85vh] sm:max-h-[90vh] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-150 ${
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 380 }}
+        className={`border rounded-2xl w-full max-w-xl max-h-[85vh] sm:max-h-[90vh] shadow-2xl flex flex-col overflow-hidden ${
           isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -486,7 +495,7 @@ export const QuickNewRequestModal: React.FC<QuickNewRequestModalProps> = ({
             </div>
           </div>
         </form>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   GitBranch,
   Cloud,
@@ -613,8 +614,18 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 380 }}
         className={`w-full max-w-2xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${
           isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
         }`}
@@ -1231,58 +1242,70 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
         </div>
 
         {/* In-App Confirmation Modal (Replaces browser window.confirm for iframe reliability) */}
-        {confirmDialog && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-in fade-in duration-150">
-            <div
-              className={`w-full max-w-md rounded-2xl border shadow-2xl p-5 space-y-4 ${
-                isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-100 shadow-black/80' : 'bg-white border-slate-200 text-slate-900 shadow-slate-900/20'
-              }`}
+        <AnimatePresence>
+          {confirmDialog && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm"
             >
-              <div className="flex items-start space-x-3">
-                <div
-                  className={`p-2.5 rounded-xl shrink-0 ${
-                    confirmDialog.danger
-                      ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                      : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                  }`}
-                >
-                  <AlertCircle className="w-5 h-5" />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                transition={{ type: 'spring', damping: 28, stiffness: 380 }}
+                className={`w-full max-w-md rounded-2xl border shadow-2xl p-5 space-y-4 ${
+                  isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-100 shadow-black/80' : 'bg-white border-slate-200 text-slate-900 shadow-slate-900/20'
+                }`}
+              >
+                <div className="flex items-start space-x-3">
+                  <div
+                    className={`p-2.5 rounded-xl shrink-0 ${
+                      confirmDialog.danger
+                        ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                        : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                    }`}
+                  >
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-bold">{confirmDialog.title}</h4>
+                    <p className={`text-xs leading-relaxed whitespace-pre-line ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                      {confirmDialog.message}
+                    </p>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <h4 className="text-sm font-bold">{confirmDialog.title}</h4>
-                  <p className={`text-xs leading-relaxed whitespace-pre-line ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                    {confirmDialog.message}
-                  </p>
-                </div>
-              </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setConfirmDialog(null)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                    isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                  }`}
-                >
-                  {confirmDialog.cancelLabel || 'Cancel'}
-                </button>
-                <button
-                  type="button"
-                  onClick={confirmDialog.onConfirm}
-                  className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm ${
-                    confirmDialog.danger
-                      ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/40'
-                      : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-900/40'
-                  }`}
-                >
-                  {confirmDialog.confirmLabel}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+                <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDialog(null)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                      isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {confirmDialog.cancelLabel || 'Cancel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmDialog.onConfirm}
+                    className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm ${
+                      confirmDialog.danger
+                        ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/40'
+                        : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-900/40'
+                    }`}
+                  >
+                    {confirmDialog.confirmLabel}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </motion.div>
   );
 };
 

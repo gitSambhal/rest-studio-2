@@ -24,6 +24,7 @@ export interface MainWorkspaceProps {
   scopeCtx: ScopeContext;
   isCurrentRequestStandalone: boolean;
   splitOrientation: 'left-right' | 'top-bottom';
+  onToggleSplitOrientation?: () => void;
   splitRatio: number;
   setSplitRatio: React.Dispatch<React.SetStateAction<number>>;
   executingRequests: Record<string, AbortController>;
@@ -52,6 +53,7 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
   scopeCtx,
   isCurrentRequestStandalone,
   splitOrientation,
+  onToggleSplitOrientation,
   splitRatio,
   setSplitRatio,
   executingRequests,
@@ -142,6 +144,8 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
                   onStopRequest={onStopRequest}
                   isLoading={Boolean(executingRequests[activeRequest.id])}
                   lastResponse={lastResponse}
+                  splitOrientation={splitOrientation}
+                  onToggleSplitOrientation={onToggleSplitOrientation}
                 />
               </div>
 

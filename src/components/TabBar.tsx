@@ -332,12 +332,12 @@ export const TabBar: React.FC<TabBarProps> = ({
             {splitOrientation === 'top-bottom' ? (
               <>
                 <Rows3 className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Top / Bottom</span>
+                <span>Response: Bottom</span>
               </>
             ) : (
               <>
                 <Columns3 className="w-3.5 h-3.5 text-sky-500" />
-                <span>Left / Right</span>
+                <span>Response: Right</span>
               </>
             )}
           </button>

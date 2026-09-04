@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import {
   X,
   Sliders,
@@ -188,16 +189,24 @@ export function SettingsModal({
   ];
 
   return (
-    <div
-      className={`fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150 ${
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 ${
         isDarkMode ? 'bg-slate-950/80 backdrop-blur-sm' : 'bg-slate-900/40 backdrop-blur-sm'
       }`}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div
-        className={`w-full max-w-4xl h-[88vh] max-h-[780px] rounded-2xl shadow-2xl overflow-hidden flex flex-col border animate-in zoom-in-95 duration-150 ${
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 380 }}
+        className={`w-full max-w-4xl h-[88vh] max-h-[780px] rounded-2xl shadow-2xl overflow-hidden flex flex-col border ${
           isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
         }`}
       >
@@ -1113,7 +1122,7 @@ export function SettingsModal({
             Done
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

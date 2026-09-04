@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'motion/react';
 import { X, Check, Trash2 } from 'lucide-react';
 
 interface PromptModalProps {
@@ -70,17 +71,27 @@ export const PromptModal: React.FC<PromptModalProps> = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
     >
-      <div className={`w-full max-w-md border rounded-xl shadow-2xl p-5 flex flex-col space-y-4 ${
-        isDarkMode
-          ? 'bg-slate-900 border-slate-700/80 text-slate-100'
-          : 'bg-white border-slate-200 text-slate-900'
-      }`}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 380 }}
+        className={`w-full max-w-md border rounded-xl shadow-2xl p-5 flex flex-col space-y-4 ${
+          isDarkMode
+            ? 'bg-slate-900 border-slate-700/80 text-slate-100'
+            : 'bg-white border-slate-200 text-slate-900'
+        }`}
+      >
         <div className="flex items-center justify-between">
           <h3 className={`font-bold text-base ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>
             {title}
@@ -146,7 +157,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

@@ -1,4 +1,5 @@
 import React from 'react';
+import { AnimatePresence } from 'motion/react';
 import {
   Organization,
   Project,
@@ -207,7 +208,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
   setIsKeyboardShortcutsOpen,
 }) => {
   return (
-    <>
+    <AnimatePresence>
       {/* Environment Hierarchy Manager Modal */}
       {isEnvManagerOpen && (
         <EnvironmentManager
@@ -461,6 +462,6 @@ export const AppModals: React.FC<AppModalsProps> = ({
           onClose={() => setIsKeyboardShortcutsOpen(false)}
         />
       )}
-    </>
+    </AnimatePresence>
   );
 };

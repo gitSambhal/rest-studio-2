@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { Environment, EnvVariable, Organization, Project } from '../types';
 import { PromptModal } from './PromptModal';
 import {
@@ -330,13 +331,23 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
   }, [onClose, handleSaveAndClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[88vh] overflow-hidden">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 380 }}
+        className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[88vh] overflow-hidden"
+      >
         {/* Modal Header */}
         <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
           <div className="flex items-center space-x-2">
@@ -600,7 +611,7 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
             </button>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       <PromptModal
         isOpen={promptState.isOpen}
@@ -616,7 +627,7 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
         }}
         onCancel={() => setPromptState((prev) => ({ ...prev, isOpen: false }))}
       />
-    </div>
+    </motion.div>
   );
 };
 

@@ -33,6 +33,8 @@ import {
   Key,
   Square,
   FolderInput,
+  Rows3,
+  Columns3,
 } from 'lucide-react';
 
 import { isLocalTargetUrl, isNeutralinoActive, isLnaPromptApplicable, getLocalNetworkPermissionState, getLnaPermissionLabel, LocalNetworkPermissionState } from '../utils/httpExecutor';
@@ -51,6 +53,8 @@ interface RequestEditorProps {
   onStopRequest?: (requestId: string) => void;
   isLoading: boolean;
   lastResponse?: ExecutionResponse | null;
+  splitOrientation?: 'left-right' | 'top-bottom';
+  onToggleSplitOrientation?: () => void;
 }
 
 export const RequestEditor: React.FC<RequestEditorProps> = ({
@@ -67,6 +71,8 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   onStopRequest,
   isLoading,
   lastResponse,
+  splitOrientation,
+  onToggleSplitOrientation,
 }) => {
   const [activeTab, setActiveTab] = useState<
     'params' | 'headers' | 'auth' | 'body' | 'pre-script' | 'post-script' | 'tests' | 'env' | 'code'

@@ -42,12 +42,13 @@ export default function App() {
   // Toast notifications
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const showToast = useCallback(
-    (type: 'success' | 'error' | 'info' | 'warning', title: string, message?: string) => {
+    (type: 'success' | 'error' | 'info' | 'warning', title: string, message?: string, duration?: number) => {
       const newToast: ToastMessage = {
         id: 'toast_' + Math.random().toString(36).substring(2, 9),
         type,
         title,
         message,
+        duration,
       };
       setToasts((prev) => [newToast, ...prev.slice(0, 4)]);
     },
@@ -164,6 +165,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('reststudio_split_ratio', String(splitRatio));
   }, [splitRatio]);
+
+  const handleToggleSplitOrientation = useCallback(() => {
+    setSplitOrientation((prev) => (prev === 'top-bottom' ? 'left-right' : 'top-bottom'));
+  }, []);
 
   // Sidebar collapsed state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -1101,6 +1106,8 @@ export default function App() {
                 if (activeRequest) handleExecuteRequest(activeRequest);
               }}
               isRequestRunning={Boolean(activeRequest && executingRequests[activeRequest.id])}
+              splitOrientation={splitOrientation}
+              onToggleSplitOrientation={handleToggleSplitOrientation}
             />
 
             {/* Split Editor / Response / Tools View */}
@@ -1113,6 +1120,7 @@ export default function App() {
               scopeCtx={scopeCtx}
               isCurrentRequestStandalone={isCurrentRequestStandalone}
               splitOrientation={splitOrientation}
+              onToggleSplitOrientation={handleToggleSplitOrientation}
               splitRatio={splitRatio}
               setSplitRatio={setSplitRatio}
               executingRequests={executingRequests}
