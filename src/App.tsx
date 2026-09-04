@@ -35,6 +35,7 @@ import {
   getSavedAutoSync,
   getSavedGitHubUser,
   pullFromGitHubGist,
+  pushToGitHubGist,
   GitHubUser,
 } from './services/githubSyncService';
 import { SettingsTabId } from './components/SettingsModal';
@@ -229,7 +230,7 @@ export default function App() {
   const [isEnvManagerOpen, setIsEnvManagerOpen] = useState<boolean>(false);
   const [isImportExportOpen, setIsImportExportOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
-  const [settingsTab, setSettingsTab] = useState<SettingsTabId>('appearance');
+  const [settingsTab, setSettingsTab] = useState<SettingsTabId>('preferences');
   const [isGitHubSyncOpen, setIsGitHubSyncOpen] = useState<boolean>(false);
   const [isBatchWorkspaceModalOpen, setIsBatchWorkspaceModalOpen] = useState<boolean>(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
@@ -269,14 +270,14 @@ export default function App() {
         setIsEnvManagerOpen(true);
       } else if (isCmdOrCtrl && e.key.toLowerCase() === 'j') {
         e.preventDefault();
-        setSettingsTab('auth');
+        setSettingsTab('preferences');
         setIsSettingsOpen(true);
       } else if (isCmdOrCtrl && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         setIsSidebarCollapsed((prev) => !prev);
       } else if (isCmdOrCtrl && e.key === ',') {
         e.preventDefault();
-        setSettingsTab('appearance');
+        setSettingsTab('preferences');
         setIsSettingsOpen(true);
       } else if (isCmdOrCtrl && e.key.toLowerCase() === 'i') {
         e.preventDefault();
@@ -315,6 +316,33 @@ export default function App() {
       }
     }
   }, []);
+
+  // Auto-sync push when workspace data changes
+  useEffect(() => {
+    if (getSavedAutoSync()) {
+      const token = getSavedGitHubToken();
+      const gistId = getSavedGistId();
+      if (token && gistId) {
+        const timer = setTimeout(async () => {
+          try {
+            await pushToGitHubGist(token, gistId, {
+              version: '1.0.0',
+              updatedAt: new Date().toISOString(),
+              organizations,
+              activeOrgId,
+              activeProjectId,
+              environments: activeProject?.environments || [],
+              history,
+              globalVariables,
+            });
+          } catch (err) {
+            console.error('Background auto-push failed:', err);
+          }
+        }, 2500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [organizations, activeOrgId, activeProjectId, history, globalVariables, activeProject?.environments]);
 
   // Sidebar CRUD Operations
   const handleCreateFile = (fileName: string, folderId?: string) => {
@@ -1029,7 +1057,7 @@ export default function App() {
           onChangeTab={setActiveTabMode}
           onOpenImportExport={() => setIsImportExportOpen(true)}
           onOpenSettings={() => {
-            setSettingsTab('appearance');
+            setSettingsTab('preferences');
             setIsSettingsOpen(true);
           }}
           onOpenQuickNewRequest={() => setIsQuickNewRequestOpen(true)}

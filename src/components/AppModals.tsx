@@ -450,7 +450,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
           onNewRequest={() => setIsQuickNewRequestOpen(true)}
           onOpenCurlImport={() => setIsQuickCurlOpen(true)}
           onOpenCookieJar={() => {
-            setSettingsTab('auth');
+            setSettingsTab('preferences');
             setIsSettingsOpen(true);
           }}
           onOpenEnvManager={() => setIsEnvManagerOpen(true)}
@@ -458,7 +458,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
           isDarkMode={isDarkMode}
           onOpenShortcuts={() => setIsKeyboardShortcutsOpen(true)}
           onOpenSettings={() => {
-            setSettingsTab('appearance');
+            setSettingsTab('preferences');
             setIsSettingsOpen(true);
           }}
           onOpenHistory={() => setActiveTabMode('history')}

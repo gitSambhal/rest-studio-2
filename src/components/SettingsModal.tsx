@@ -7,41 +7,20 @@ import {
   Sun,
   Palette,
   Check,
-  Cloud,
-  GitBranch,
-  Upload,
-  Download,
-  Layers,
   Keyboard,
-  FileCode,
   Info,
   ExternalLink,
-  CheckCircle2,
-  Search,
-  Code2,
-  Sparkles,
-  Split,
   ShieldCheck,
-  FileText,
-  Zap,
-  HelpCircle,
-  BookOpen,
+  Search,
 } from 'lucide-react';
 import { THEMES, UIThemeId } from '../utils/themeManager';
 import { getThemeIcon } from './InlineThemeSelector';
 import { Project, Organization } from '../types';
-import { getSavedGitHubUser, getSavedGitHubToken, getSavedGistId, GitHubUser } from '../services/githubSyncService';
-import { highlightJs, highlightRestSyntax } from '../utils/syntaxHighlighter';
+import { getSavedGitHubToken, getSavedGistId, GitHubUser } from '../services/githubSyncService';
 
 export type SettingsTabId =
-  | 'appearance'
-  | 'cloud'
-  | 'import-export'
-  | 'environments'
+  | 'preferences'
   | 'shortcuts'
-  | 'auth'
-  | 'syntax'
-  | 'scripting'
   | 'about';
 
 interface SettingsModalProps {
@@ -81,7 +60,7 @@ export function SettingsModal({
   onOpenImportExport,
   onOpenEnvManager,
   onOpenQuickHelp,
-  initialTab = 'appearance',
+  initialTab = 'preferences',
   showToast,
   githubUser: propGithubUser,
 }: SettingsModalProps) {
@@ -103,9 +82,6 @@ export function SettingsModal({
   if (!isOpen) return null;
 
   const currentThemeObj = THEMES.find((t) => t.id === currentTheme) || THEMES[0];
-  const isGitHubConfigured = typeof window !== 'undefined' && !!getSavedGitHubToken();
-  const gistId = typeof window !== 'undefined' ? getSavedGistId() : null;
-  const effectiveGithubUser = propGithubUser || (typeof window !== 'undefined' ? getSavedGitHubUser() : null);
   const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
   const shortcutGroups = [
@@ -130,8 +106,8 @@ export function SettingsModal({
     {
       category: '🧭 Workspace Navigation & Control',
       items: [
-        { desc: 'Open Settings & Reference Center documentation', keys: [['Ctrl', 'K'], ['Cmd', 'K']], category: 'Help' },
-        { desc: 'Open Workspace Settings & Control Center', keys: [['Ctrl', ','], ['Cmd', ',']], category: 'Settings' },
+        { desc: 'Open Command Palette & quick actions', keys: [['Ctrl', 'K'], ['Cmd', 'K']], category: 'Help' },
+        { desc: 'Open Workspace Settings & Preferences', keys: [['Ctrl', ','], ['Cmd', ',']], category: 'Settings' },
         { desc: 'Open Environment & Scope Manager', keys: [['Ctrl', 'E'], ['Cmd', 'E']], category: 'Scopes' },
         { desc: 'Dismiss active popovers or close open modals', keys: [['Esc']], category: 'General' },
       ],
@@ -158,26 +134,10 @@ export function SettingsModal({
     items: { id: SettingsTabId; label: string; icon: React.FC<{ className?: string }>; badge?: string }[];
   }[] = [
     {
-      section: 'WORKSPACE & CONFIG',
+      section: 'PREFERENCES',
       items: [
-        { id: 'appearance', label: 'Appearance & Themes', icon: Palette },
-        {
-          id: 'cloud',
-          label: 'Cloud Sync & GitHub',
-          icon: Cloud,
-          badge: isGitHubConfigured ? (effectiveGithubUser?.login ? `@${effectiveGithubUser.login}` : 'Connected') : undefined,
-        },
-        { id: 'import-export', label: 'Import & Export', icon: Upload },
-        { id: 'environments', label: 'Variable Scopes & Vars', icon: Layers },
-      ],
-    },
-    {
-      section: 'HELP & REFERENCE',
-      items: [
-        { id: 'shortcuts', label: 'Keyboard Shortcuts', icon: Keyboard },
-        { id: 'auth', label: 'Inherited Auth Guide', icon: ShieldCheck },
-        { id: 'syntax', label: 'HTTP Script Syntax', icon: FileText },
-        { id: 'scripting', label: 'Scripting Engine (pm.*)', icon: Code2 },
+        { id: 'preferences', label: 'General & Appearance', icon: Sliders },
+        { id: 'shortcuts', label: 'Keyboard Shortcuts', icon: Keyboard, badge: 'Cheatsheet' },
       ],
     },
     {
@@ -228,13 +188,13 @@ export function SettingsModal({
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h2 className="text-base font-bold tracking-tight">Settings & Reference Center</h2>
+                <h2 className="text-base font-bold tracking-tight">Workspace Settings & Preferences</h2>
                 <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   RestStudio v1.3.0
                 </span>
               </div>
               <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                Workspace configuration, themes, cloud sync, variable scopes, and complete API documentation
+                Configure appearance, theme presets, layout split, keyboard shortcuts, and app version
               </p>
             </div>
           </div>
@@ -248,7 +208,7 @@ export function SettingsModal({
                   ? 'text-slate-400 hover:text-slate-100 hover:bg-slate-800'
                   : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
               }`}
-              title="Close Settings & Reference (Esc)"
+              title="Close Settings (Esc)"
             >
               <X className="w-5 h-5" />
             </button>
@@ -347,673 +307,173 @@ export function SettingsModal({
 
           {/* Tab Content Canvas */}
           <div className="flex-1 min-w-0 p-5 overflow-y-auto scrollbar-none">
-            {/* 1. APPEARANCE & THEMES */}
-            {activeTab === 'appearance' && (
+            {/* 1. GENERAL & APPEARANCE */}
+            {activeTab === 'preferences' && (
               <div className="space-y-6 max-w-2xl">
                 <div>
-                  <h3 className="text-sm font-bold tracking-tight">Theme & Workspace Styling</h3>
+                  <h3 className="text-sm font-bold tracking-tight flex items-center space-x-2">
+                    <Palette className="w-4 h-4 text-emerald-400" />
+                    <span>Appearance & Theme Preferences</span>
+                  </h3>
                   <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Choose from {THEMES.length} handcrafted syntax & interface color palettes
+                    Customize dark/light mode and accent color themes across your workspace
                   </p>
                 </div>
 
-                {/* Theme Palette Grid */}
-                <div className="space-y-3">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center space-x-1.5">
-                    <Palette className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Theme Presets</span>
-                  </label>
+                <div className="space-y-4">
+                  {/* Dark / Light Mode Toggle */}
+                  <div
+                    className={`p-4 rounded-xl border flex items-center justify-between ${
+                      isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  >
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-semibold">Dark Mode / Light Mode</div>
+                      <div className={`text-[11px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                        Switch between high-contrast dark canvas and clean light mode
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={onToggleDarkMode}
+                      className={`flex items-center space-x-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-emerald-400 hover:bg-slate-700'
+                          : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-100 shadow-sm'
+                      }`}
+                    >
+                      {isDarkMode ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5 text-amber-500" />}
+                      <span>{isDarkMode ? 'Dark Active' : 'Light Active'}</span>
+                    </button>
+                  </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {THEMES.map((theme) => {
-                      const isSelected = currentTheme === theme.id;
-                      return (
-                        <button
-                          key={theme.id}
-                          type="button"
-                          onClick={() => {
-                            if (onSelectTheme) {
-                              onSelectTheme(theme.id);
-                              showToast('info', 'Theme Applied', `Switched theme to ${theme.name}`);
-                            }
-                          }}
-                          className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between space-y-3 group ${
-                            isSelected
-                              ? 'border-emerald-500 bg-emerald-500/10 shadow-md ring-1 ring-emerald-500/30'
-                              : isDarkMode
-                              ? 'bg-slate-950/40 border-slate-800 hover:border-slate-700 hover:bg-slate-950/70'
-                              : 'bg-slate-50 border-slate-200 hover:border-slate-300 hover:bg-slate-100'
-                          }`}
-                        >
-                          {/* Header row: Checkmark, Icon, Name, Category badge */}
-                          <div className="flex items-start justify-between space-x-2">
-                            <div className="flex items-center space-x-2.5 min-w-0">
-                              {isSelected && (
-                                <div className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
-                                  <Check className="w-3.5 h-3.5 stroke-[3]" />
-                                </div>
-                              )}
-                              <div
-                                className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center border shadow-inner"
-                                style={{
-                                  backgroundColor: theme.previewColors.surface,
-                                  borderColor: theme.previewColors.border,
-                                  color: theme.previewColors.primary,
-                                }}
-                              >
-                                {getThemeIcon(theme.iconType, 'w-4 h-4')}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center space-x-2">
-                                  <span
-                                    className={`text-xs font-bold truncate ${
-                                      isSelected
-                                        ? 'text-emerald-400'
-                                        : isDarkMode
-                                        ? 'text-slate-200 group-hover:text-slate-100'
-                                        : 'text-slate-800 group-hover:text-slate-900'
-                                    }`}
-                                  >
-                                    {theme.name}
-                                  </span>
-                                </div>
-                                <p className={`text-[11px] leading-tight mt-0.5 truncate max-w-[200px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                                  {theme.description}
-                                </p>
-                              </div>
-                            </div>
-
-                            <span
-                              className={`text-[9px] font-mono px-1.5 py-0.2 rounded border shrink-0 ${
-                                theme.category === 'dark'
-                                  ? 'bg-slate-900 text-slate-400 border-slate-800'
-                                  : 'bg-amber-50 text-amber-700 border-amber-200'
-                              }`}
-                            >
-                              {theme.category}
-                            </span>
-                          </div>
-
-                          {/* Mini Workspace Preview Box in Theme Colors */}
-                          <div
-                            className="p-2 rounded-lg border text-[10px] space-y-1.5 font-mono shadow-inner select-none pointer-events-none"
-                            style={{
-                              backgroundColor: theme.previewColors.bg,
-                              borderColor: theme.previewColors.border,
-                              color: theme.previewColors.text,
-                            }}
+                  {/* Theme Presets */}
+                  <div
+                    className={`p-4 rounded-xl border space-y-3 ${
+                      isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  >
+                    <div className="text-xs font-semibold">Theme Accent & Color Palette</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {THEMES.map((theme) => {
+                        const isSelected = currentTheme === theme.id;
+                        return (
+                          <button
+                            key={theme.id}
+                            type="button"
+                            onClick={() => onSelectTheme && onSelectTheme(theme.id)}
+                            className={`flex items-center space-x-2 p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer text-left ${
+                              isSelected
+                                ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-400 ring-1 ring-emerald-500/30 font-bold'
+                                : isDarkMode
+                                ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
+                                : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-700'
+                            }`}
                           >
-                            <div
-                              className="flex items-center justify-between px-1.5 py-0.5 rounded border"
+                            <span
+                              className="p-1 rounded-lg shrink-0 flex items-center justify-center border border-slate-700/50"
                               style={{
                                 backgroundColor: theme.previewColors.surface,
-                                borderColor: theme.previewColors.border,
+                                color: theme.previewColors.primary,
                               }}
                             >
-                              <div className="flex items-center space-x-1.5">
-                                <span
-                                  className="text-[9px] font-bold px-1 rounded"
-                                  style={{
-                                    backgroundColor: theme.previewColors.primary,
-                                    color: theme.category === 'dark' && theme.id !== 'monokai' && theme.id !== 'dracula' ? '#000000' : '#ffffff',
-                                  }}
-                                >
-                                  GET
-                                </span>
-                                <span className="text-[10px] truncate opacity-90">/api/v1/users</span>
-                              </div>
-                              <span
-                                className="w-1.5 h-1.5 rounded-full"
-                                style={{ backgroundColor: theme.previewColors.accent }}
-                              />
+                              {getThemeIcon(theme.iconType, 'w-3.5 h-3.5')}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-xs font-semibold">{theme.name}</div>
+                              <div className="text-[9px] text-slate-400 capitalize">{theme.id} style</div>
                             </div>
-
-                            <div className="flex items-center justify-between pt-0.5 px-0.5">
-                              <span className="text-[9px] opacity-60">Status: 200 OK</span>
-                              <div className="flex items-center space-x-1">
-                                <span
-                                  className="w-2 h-2 rounded-full border border-black/20"
-                                  style={{ backgroundColor: theme.previewColors.surface }}
-                                  title="Surface"
-                                />
-                                <span
-                                  className="w-2 h-2 rounded-full border border-black/20"
-                                  style={{ backgroundColor: theme.previewColors.border }}
-                                  title="Border"
-                                />
-                                <span
-                                  className="w-2 h-2 rounded-full border border-black/20"
-                                  style={{ backgroundColor: theme.previewColors.primary }}
-                                  title="Primary"
-                                />
-                                <span
-                                  className="w-2 h-2 rounded-full border border-black/20"
-                                  style={{ backgroundColor: theme.previewColors.accent }}
-                                  title="Accent"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
+                            {isSelected && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 ml-auto" />}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
+              </div>
+            )}
 
-                {/* Editor Split Orientation */}
-                {onToggleSplitOrientation && (
-                  <div
-                    className={`p-3.5 rounded-2xl border flex items-center justify-between ${
-                      isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div
-                        className={`p-2 rounded-xl border ${
-                          isDarkMode
-                            ? 'bg-purple-500/10 border-purple-500/20 text-purple-400'
-                            : 'bg-purple-50 border-purple-200 text-purple-600'
-                        }`}
-                      >
-                        <Split className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold">Request / Response Split Layout</div>
-                        <p className={`text-[11px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                          Current mode: <b className="font-mono text-emerald-400">{splitOrientation === 'top-bottom' ? 'Horizontal (Stacked)' : 'Vertical (Side-by-Side)'}</b>
-                        </p>
-                      </div>
-                    </div>
+            {/* 2. KEYBOARD SHORTCUTS */}
+            {activeTab === 'shortcuts' && (
+              <div className="space-y-5 max-w-2xl">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold tracking-tight flex items-center space-x-2">
+                      <Keyboard className="w-4 h-4 text-emerald-400" />
+                      <span>Keyboard Shortcuts Reference</span>
+                    </h3>
+                    <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                      High-speed hotkeys to navigate, create requests, and execute APIs instantly
+                    </p>
+                  </div>
 
-                    <button
-                      type="button"
-                      onClick={onToggleSplitOrientation}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                  <div className="relative w-full sm:w-52">
+                    <Search className={`absolute left-2.5 top-2.5 w-3.5 h-3.5 ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`} />
+                    <input
+                      type="text"
+                      value={shortcutSearch}
+                      onChange={(e) => setShortcutSearch(e.target.value)}
+                      placeholder="Search shortcuts..."
+                      className={`w-full pl-8 pr-3 py-1.5 rounded-xl text-xs border outline-none transition-all ${
                         isDarkMode
-                          ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
-                          : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-800 shadow-sm'
+                          ? 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600 focus:border-emerald-500/50'
+                          : 'bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-emerald-500'
                       }`}
-                    >
-                      Switch to {splitOrientation === 'top-bottom' ? 'Side-by-Side' : 'Stacked'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 2. CLOUD SYNC & GITHUB */}
-            {activeTab === 'cloud' && (
-              <div className="space-y-6 max-w-2xl">
-                <div>
-                  <h3 className="text-sm font-bold tracking-tight">Free GitHub Gist Cloud Sync</h3>
-                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Zero-cost, secure, personal cloud storage & commit snapshot history powered by GitHub Gists
-                  </p>
-                </div>
-
-                <div
-                  className={`p-4 rounded-2xl border space-y-3.5 ${
-                    isGitHubConfigured
-                      ? isDarkMode
-                        ? 'bg-emerald-500/10 border-emerald-500/30'
-                        : 'bg-emerald-50/80 border-emerald-200'
-                      : isDarkMode
-                      ? 'bg-slate-950/60 border-slate-800'
-                      : 'bg-slate-50 border-slate-200'
-                  }`}
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center space-x-3">
-                      {isGitHubConfigured && effectiveGithubUser?.avatar_url ? (
-                        <img
-                          src={effectiveGithubUser.avatar_url}
-                          alt={effectiveGithubUser.login}
-                          className="w-10 h-10 rounded-full border-2 border-emerald-400 object-cover shrink-0 shadow-md"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                          <GitBranch className={`w-5 h-5 ${isGitHubConfigured ? 'text-emerald-400' : 'text-slate-400'}`} />
-                        </div>
-                      )}
-                      <div>
-                        <div className="flex items-center space-x-2 flex-wrap">
-                          <div className="text-xs font-bold">
-                            {isGitHubConfigured
-                              ? effectiveGithubUser?.name || effectiveGithubUser?.login || 'GitHub Cloud Sync Connected'
-                              : 'Cloud Sync Not Configured'}
-                          </div>
-                          {isGitHubConfigured && effectiveGithubUser?.login && (
-                            <a
-                              href={effectiveGithubUser.html_url || `https://github.com/${effectiveGithubUser.login}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[11px] font-mono text-emerald-400 hover:underline flex items-center space-x-0.5"
-                            >
-                              <span>@{effectiveGithubUser.login}</span>
-                              <ExternalLink className="w-2.5 h-2.5" />
-                            </a>
-                          )}
-                        </div>
-                        <p className={`text-[11px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                          {isGitHubConfigured
-                            ? `Connected Account • Gist ID: ${gistId ? gistId.slice(0, 10) + '...' : 'Active'}`
-                            : 'Connect with a personal access token (gist scope only)'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onClose();
-                        if (onOpenGitHubSync) onOpenGitHubSync();
-                      }}
-                      className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-sm flex items-center justify-center space-x-1.5 shrink-0"
-                    >
-                      <Cloud className="w-3.5 h-3.5" />
-                      <span>{isGitHubConfigured ? 'Manage Cloud Sync' : 'Connect GitHub Gist'}</span>
-                    </button>
+                    />
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Why Use GitHub Gist Sync?</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div
-                      className={`p-3 rounded-xl border space-y-1 ${
-                        isDarkMode ? 'bg-slate-950/40 border-slate-800' : 'bg-white border-slate-200'
-                      }`}
-                    >
-                      <div className="text-xs font-bold text-emerald-400 flex items-center space-x-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>100% Free & Private</span>
-                      </div>
-                      <p className={`text-[11px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                        Uses secret GitHub Gists owned exclusively by your account. No paid database required.
-                      </p>
-                    </div>
-
-                    <div
-                      className={`p-3 rounded-xl border space-y-1 ${
-                        isDarkMode ? 'bg-slate-950/40 border-slate-800' : 'bg-white border-slate-200'
-                      }`}
-                    >
-                      <div className="text-xs font-bold text-emerald-400 flex items-center space-x-1.5">
-                        <GitBranch className="w-3.5 h-3.5" />
-                        <span>Git Commit History</span>
-                      </div>
-                      <p className={`text-[11px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                        Every sync creates a Git revision. Restore historical snapshots with one click.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 3. IMPORT & EXPORT */}
-            {activeTab === 'import-export' && (
-              <div className="space-y-6 max-w-2xl">
-                <div>
-                  <h3 className="text-sm font-bold tracking-tight">Import & Export Workspace</h3>
-                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Migrate effortlessly between Postman collections, Insomnia v4, OpenAPI, cURL, and HTTP scripts
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div
-                    className={`p-4 rounded-2xl border flex flex-col justify-between space-y-3 ${
-                      isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
-                    }`}
-                  >
-                    <div className="space-y-1.5">
-                      <div className="flex items-center space-x-2 text-xs font-bold text-emerald-400">
-                        <Upload className="w-4 h-4" />
-                        <span>Import Suite</span>
-                      </div>
-                      <p className={`text-[11px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                        Import Postman Collections v2.1, Insomnia v4 exports, OpenAPI/Swagger JSON/YAML, raw cURL, or HTTP scripts.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onClose();
-                        if (onOpenImportExport) onOpenImportExport();
-                      }}
-                      className="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-1.5 shadow-sm"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>Open Import Dialog</span>
-                    </button>
-                  </div>
-
-                  <div
-                    className={`p-4 rounded-2xl border flex flex-col justify-between space-y-3 ${
-                      isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
-                    }`}
-                  >
-                    <div className="space-y-1.5">
-                      <div className="flex items-center space-x-2 text-xs font-bold text-emerald-400">
-                        <Download className="w-4 h-4" />
-                        <span>Export Project</span>
-                      </div>
-                      <p className={`text-[11px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                        Export active project ({activeProject?.name || 'Workspace'}) to Postman v2.1, Insomnia v4, OpenAPI v3, or HTTP scripts.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onClose();
-                        if (onOpenImportExport) onOpenImportExport();
-                      }}
-                      className={`w-full py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
-                        isDarkMode
-                          ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
-                          : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-800 shadow-sm'
-                      }`}
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Export Collections</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 4. ENVIRONMENTS & VARIABLE SCOPES */}
-            {activeTab === 'environments' && (
-              <div className="space-y-6 max-w-2xl">
-                <div>
-                  <h3 className="text-sm font-bold tracking-tight">Supported Variables & Scope Hierarchy</h3>
-                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    RestStudio resolves dynamic variables through a clean 4-tier cascading scope hierarchy
-                  </p>
-                </div>
-
-                {/* What are Supported Variables box */}
-                <div className={`p-4 rounded-xl border space-y-2 text-xs ${isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-                  <div className="font-bold text-emerald-400 flex items-center space-x-1.5">
-                    <span>What Are Supported Variables?</span>
-                  </div>
-                  <p className={`text-[11px] leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                    Supported variables are dynamic placeholders enclosed in double curly braces (e.g. <code className="text-emerald-400 font-mono">{`{{baseUrl}}`}</code>, <code className="text-emerald-400 font-mono">{`{{authToken}}`}</code>, <code className="text-emerald-400 font-mono">{`{{tenantId}}`}</code>). You can place them anywhere inside:
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 text-[11px] font-mono pt-1">
-                    <div className="p-2 bg-slate-900/60 rounded border border-slate-800/60 text-slate-300">1. Request URLs & Paths</div>
-                    <div className="p-2 bg-slate-900/60 rounded border border-slate-800/60 text-slate-300">2. Request Headers & Auth Tokens</div>
-                    <div className="p-2 bg-slate-900/60 rounded border border-slate-800/60 text-slate-300">3. Query Key-Value Parameters</div>
-                    <div className="p-2 bg-slate-900/60 rounded border border-slate-800/60 text-slate-300">4. Request Bodies (JSON/Form)</div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="text-xs font-bold">5-Tier Resolution Hierarchy (Highest Priority First):</div>
-                  {[
-                    { level: '1. Local Variables (Local Var)', desc: '@baseUrl = https://api.example.com defined in file header or local script memory', tag: 'Highest Priority' },
-                    { level: '2. Project Environment (Env)', desc: 'Active environment variables (Development, Staging, Production) in the current project', tag: 'High Priority' },
-                    { level: '3. Organization Defaults (Org)', desc: 'Org-wide shared base variables across all projects in the active organization', tag: 'Medium Priority' },
-                    { level: '4. Global Workspace (Global)', desc: 'Universal fallback variables accessible everywhere across all organizations and projects', tag: 'Base Level' },
-                    { level: '5. Built-in Dynamic System Vars', desc: '{{$timestamp}}, {{$guid}}, {{$randomInt}}, {{$randomEmail}}, etc. evaluated at runtime', tag: 'Auto Evaluated' },
-                  ].map((item, idx) => (
+                <div className="space-y-4">
+                  {filteredShortcutGroups.map((group, idx) => (
                     <div
                       key={idx}
-                      className={`p-3 rounded-xl border flex items-center justify-between ${
-                        isDarkMode ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-50 border-slate-200'
+                      className={`p-4 rounded-xl border space-y-2.5 ${
+                        isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
                       }`}
                     >
-                      <div>
-                        <div className="text-xs font-bold">{item.level}</div>
-                        <p className={`text-[11px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{item.desc}</p>
+                      <div className="text-xs font-bold text-emerald-400 flex items-center space-x-1.5">
+                        <span>{group.category}</span>
                       </div>
-                      <span
-                        className={`text-[9px] font-mono px-2 py-0.5 rounded border shrink-0 ${
-                          idx === 0
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                            : isDarkMode
-                            ? 'bg-slate-900 text-slate-400 border-slate-800'
-                            : 'bg-slate-100 text-slate-600 border-slate-200'
-                        }`}
-                      >
-                        {item.tag}
-                      </span>
+                      <div className="space-y-2">
+                        {group.items.map((item, itemIdx) => (
+                          <div
+                            key={itemIdx}
+                            className={`flex items-center justify-between text-xs py-1.5 border-b last:border-0 ${
+                              isDarkMode ? 'border-slate-800/60 text-slate-300' : 'border-slate-200/60 text-slate-700'
+                            }`}
+                          >
+                            <span className="pr-2">{item.desc}</span>
+                            <div className="flex items-center space-x-1 shrink-0 font-mono">
+                              {item.keys.map((keyCombo, kIdx) => (
+                                <React.Fragment key={kIdx}>
+                                  {kIdx > 0 && <span className="text-[10px] text-slate-500">or</span>}
+                                  <div className="flex items-center space-x-0.5">
+                                    {keyCombo.map((k, subIdx) => (
+                                      <kbd
+                                        key={subIdx}
+                                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold border shadow-xs ${
+                                          isDarkMode
+                                            ? 'bg-slate-900 border-slate-700 text-slate-200'
+                                            : 'bg-white border-slate-300 text-slate-800'
+                                        }`}
+                                      >
+                                        {k}
+                                      </kbd>
+                                    ))}
+                                  </div>
+                                </React.Fragment>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
-
-                {onOpenEnvManager && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      onOpenEnvManager();
-                    }}
-                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center space-x-2 shadow-sm"
-                  >
-                    <Layers className="w-4 h-4" />
-                    <span>Open Variable Hierarchy Manager</span>
-                  </button>
-                )}
               </div>
             )}
 
-            {/* 5. SHORTCUTS & SYNTAX */}
-            {activeTab === 'shortcuts' && (
-              <div className="space-y-6 max-w-2xl">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold tracking-tight">Keyboard Shortcuts</h3>
-                    <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                      Speed up your API workflow with lightning-fast key combinations
-                    </p>
-                  </div>
-                </div>
-
-                {/* Search */}
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={shortcutSearch}
-                    onChange={(e) => setShortcutSearch(e.target.value)}
-                    placeholder="Search shortcuts..."
-                    className={`w-full pl-8 pr-3 py-1.5 rounded-xl border text-xs outline-none transition-all ${
-                      isDarkMode
-                        ? 'bg-slate-950/60 border-slate-800 text-slate-100 focus:border-emerald-500'
-                        : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-emerald-500'
-                    }`}
-                  />
-                </div>
-
-                {/* Shortcuts List */}
-                <div className="space-y-4 max-h-80 overflow-y-auto scrollbar-none pr-1">
-                  {filteredShortcutGroups.length === 0 ? (
-                    <div className="text-center py-8 text-xs text-slate-500">
-                      No shortcuts matched "{shortcutSearch}"
-                    </div>
-                  ) : (
-                    filteredShortcutGroups.map((group, groupIdx) => (
-                      <div key={groupIdx} className="space-y-2">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                          {group.category}
-                        </div>
-                        <div className="space-y-2">
-                          {group.items.map((item, itemIdx) => (
-                            <div
-                              key={itemIdx}
-                              className={`p-3 rounded-xl border flex items-center justify-between text-xs gap-3 ${
-                                isDarkMode ? 'bg-slate-950/40 border-slate-800/80' : 'bg-slate-50/80 border-slate-200'
-                              }`}
-                            >
-                              <span className={`text-xs font-medium ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                                {item.desc}
-                              </span>
-
-                              <div className="flex items-center space-x-1.5 shrink-0 justify-end">
-                                {item.keys.map((combo, comboIdx) => (
-                                  <React.Fragment key={comboIdx}>
-                                    {comboIdx > 0 && <span className="text-slate-500 text-[10px] font-medium">or</span>}
-                                    <div className="inline-flex items-center space-x-1">
-                                      {combo.map((k, kIdx) => (
-                                        <React.Fragment key={kIdx}>
-                                          {kIdx > 0 && <span className="text-slate-600 text-[10px] font-bold">+</span>}
-                                          <kbd
-                                            className={`px-2 py-0.5 font-mono text-[11px] font-bold rounded shadow-sm inline-flex items-center justify-center min-w-[20px] ${
-                                              isDarkMode
-                                                ? 'bg-slate-800 border-b-2 border-slate-700 text-emerald-300'
-                                                : 'bg-white border-b-2 border-slate-300 text-emerald-700'
-                                            }`}
-                                          >
-                                            {k}
-                                          </kbd>
-                                        </React.Fragment>
-                                      ))}
-                                    </div>
-                                  </React.Fragment>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {onOpenQuickHelp && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTab('syntax');
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center space-x-1.5 ${
-                      isDarkMode
-                        ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
-                        : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-800 shadow-sm'
-                    }`}
-                  >
-                    <FileCode className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>View Script Syntax & Scripting Engine Guide</span>
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* 6. INHERITED AUTH GUIDE */}
-            {activeTab === 'auth' && (
-              <div className="space-y-6 max-w-2xl">
-                <div>
-                  <h3 className="text-sm font-bold tracking-tight flex items-center space-x-2">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <span>Project & File Level Auth Inheritance</span>
-                  </h3>
-                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Avoid repeating authentication credentials across dozens of requests by using Auth Inheritance.
-                  </p>
-                </div>
-
-                <div
-                  className={`p-4 rounded-xl border space-y-3 ${
-                    isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-400">
-                    <Zap className="w-4 h-4" />
-                    <span>How to use Inherited Auth:</span>
-                  </div>
-                  <ol className={`list-decimal list-inside text-xs space-y-2 leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                    <li>In any request, navigate to the <strong className={isDarkMode ? 'text-slate-100' : 'text-slate-900'}>Auth</strong> tab.</li>
-                    <li>Select the <strong className="text-emerald-500">Inherit Auth</strong> option.</li>
-                    <li>The request automatically inherits the Bearer Token, Basic Auth, or API Key configured at the parent Project or Organization level.</li>
-                    <li>Dynamic placeholders like <code className="text-emerald-500 font-mono">{`{{authToken}}`}</code> inside Project Auth are dynamically evaluated at runtime.</li>
-                  </ol>
-                </div>
-              </div>
-            )}
-
-            {/* 7. HTTP SCRIPT SYNTAX */}
-            {activeTab === 'syntax' && (
-              <div className="space-y-6 max-w-2xl">
-                <div>
-                  <h3 className="text-sm font-bold tracking-tight flex items-center space-x-2">
-                    <FileText className="w-4 h-4 text-emerald-400" />
-                    <span>HTTP Script Format Syntax</span>
-                  </h3>
-                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    RestStudio supports standard executable HTTP request script syntax (.http / .rest).
-                  </p>
-                </div>
-
-                <div
-                  className={`p-4 rounded-xl border font-mono text-xs leading-relaxed overflow-x-auto space-y-2 ${
-                    isDarkMode ? 'bg-slate-950/80 border-slate-800 text-slate-200' : 'bg-slate-900 border-slate-800 text-slate-100'
-                  }`}
-                >
-                  <div className="text-slate-500"># Variable Definition at top of file</div>
-                  <div className="text-amber-400">@baseUrl = https://api.example.com</div>
-                  <div className="text-amber-400">@token = secret_12345</div>
-                  <br />
-                  <div className="text-slate-500">### 1. Get User Details</div>
-                  <div className="text-emerald-400">GET {`{{baseUrl}}`}/v1/users/me</div>
-                  <div>Authorization: Bearer {`{{token}}`}</div>
-                  <div>Accept: application/json</div>
-                  <br />
-                  <div className="text-slate-500">### 2. Create New Item</div>
-                  <div className="text-teal-400">POST {`{{baseUrl}}`}/v1/items</div>
-                  <div>Content-Type: application/json</div>
-                  <br />
-                  <div>{`{`}</div>
-                  <div className="pl-4">{`"name": "Sample Item",`}</div>
-                  <div className="pl-4">{`"status": "active"`}</div>
-                  <div>{`}`}</div>
-                </div>
-              </div>
-            )}
-
-            {/* 8. SCRIPTING ENGINE (pm.*) */}
-            {activeTab === 'scripting' && (
-              <div className="space-y-6 max-w-2xl">
-                <div>
-                  <h3 className="text-sm font-bold tracking-tight flex items-center space-x-2">
-                    <Code2 className="w-4 h-4 text-emerald-400" />
-                    <span>Pre-request & Test Scripting API</span>
-                  </h3>
-                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Write JavaScript scripts before sending requests or assertion tests after receiving responses.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-xs">
-                  <div
-                    className={`p-3 rounded-xl border space-y-2 ${
-                      isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-900 border-slate-800 text-slate-100'
-                    }`}
-                  >
-                    <div className="text-emerald-400 font-bold font-sans">Pre-Request Script Methods</div>
-                    <pre className="text-slate-300 font-mono text-xs whitespace-pre-wrap">
-                      {highlightJs(`pm.environment.set('token', 'newVal');\npm.environment.get('baseUrl');\npm.request.setHeader('X-Trace', Date.now());`)}
-                    </pre>
-                  </div>
-
-                  <div
-                    className={`p-3 rounded-xl border space-y-2 ${
-                      isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-900 border-slate-800 text-slate-100'
-                    }`}
-                  >
-                    <div className="text-emerald-400 font-bold font-sans">Post-Request Test Assertions</div>
-                    <pre className="text-slate-300 font-mono text-xs whitespace-pre-wrap">
-                      {highlightJs(`pm.test('Status is 200', () => {\n  pm.expect(pm.response.status).to.equal(200);\n});`)}
-                    </pre>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 7. ABOUT & ATTRIBUTION */}
+            {/* 3. ABOUT & VERSION */}
             {activeTab === 'about' && (
               <div className="space-y-6 max-w-2xl">
                 <div>

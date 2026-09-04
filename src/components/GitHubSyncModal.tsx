@@ -413,93 +413,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     }
   };
 
-  const handlePushToCloud = async () => {
-    const activeToken = token || getSavedGitHubToken();
-    let activeGistId = gistId || getSavedGistId();
 
-    if (!activeToken) {
-      showToast('Please connect your GitHub account first', 'warning');
-      return;
-    }
-
-    setIsLoading(true);
-    setStatusMessage('Checking cloud workspace status...');
-
-    try {
-      if (!activeGistId) {
-        setStatusMessage('Locating your private workspace Gist on GitHub...');
-        activeGistId = await findOrCreateWorkspaceGist(activeToken);
-        setGistId(activeGistId);
-        if (user) saveGitHubSession(activeToken, user, activeGistId);
-      }
-
-      // Safety check: peek remote to avoid accidental destructive wipeout
-      try {
-        const remote = await peekRemoteWorkspace(activeToken, activeGistId);
-        if (remote && remote.organizations && remote.organizations.length > 0) {
-          const remoteStats = countWorkspaceEntities(remote);
-          const localStats = countWorkspaceEntities(organizations);
-
-          if (remoteStats.requestCount > localStats.requestCount) {
-            setIsLoading(false);
-            setStatusMessage(null);
-
-            setConfirmDialog({
-              title: 'Cloud Overwrite Notice',
-              message: `The remote GitHub Gist currently contains ${remoteStats.requestCount} endpoints (${remoteStats.projectCount} projects), while this local device only has ${localStats.requestCount} endpoints.\n\nPushing will overwrite the cloud Gist with this device's data.\n\nTo preserve data from both sides, cancel and choose Smart Merge instead.`,
-              confirmLabel: 'Overwrite Cloud',
-              danger: true,
-              onConfirm: async () => {
-                setConfirmDialog(null);
-                await executePushToCloud(activeToken, activeGistId!);
-              },
-            });
-            return;
-          }
-        }
-      } catch (e) {
-        // Peek error continue
-      }
-
-      await executePushToCloud(activeToken, activeGistId);
-    } catch (err: any) {
-      showToast(err.message || 'Push sync failed', 'error');
-      setIsLoading(false);
-      setStatusMessage(null);
-    }
-  };
-
-  const handlePullFromCloud = async () => {
-    const activeToken = token || getSavedGitHubToken();
-    let activeGistId = gistId || getSavedGistId();
-
-    if (!activeToken) {
-      showToast('Please connect your GitHub account first', 'warning');
-      return;
-    }
-
-    setIsLoading(true);
-    setStatusMessage('Pulling workspace snapshot from GitHub Gist...');
-
-    try {
-      if (!activeGistId) {
-        activeGistId = await findOrCreateWorkspaceGist(activeToken);
-        setGistId(activeGistId);
-        if (user) saveGitHubSession(activeToken, user, activeGistId);
-      }
-
-      const payload = await pullFromGitHubGist(activeToken, activeGistId);
-      onApplySyncedData(payload);
-      setLastSyncTime(new Date().toLocaleTimeString());
-      showToast('Workspace & request history restored from GitHub Cloud!', 'success');
-      await fetchRevisions(activeToken, activeGistId);
-    } catch (err: any) {
-      showToast(err.message || 'Pull sync failed', 'error');
-    } finally {
-      setIsLoading(false);
-      setStatusMessage(null);
-    }
-  };
 
   const executeRestoreRevision = async (commitSha: string) => {
     const activeToken = token || getSavedGitHubToken();
@@ -980,57 +894,28 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                     )}
                   </div>
 
-                  {/* Manual Sync Control Grid - 3 Options */}
-                  <div className="grid grid-cols-3 gap-3">
-                    {/* Pull from Cloud */}
-                    <button
-                      type="button"
-                      onClick={handlePullFromCloud}
-                      disabled={isLoading}
-                      className="p-3.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/60 border border-slate-800 hover:border-emerald-500/40 text-left transition-all cursor-pointer group space-y-1.5"
-                    >
-                      <div className="flex items-center justify-between">
-                        <CloudDownload className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-[9px] font-mono text-slate-400 font-semibold">CLOUD → DEVICE</span>
-                      </div>
-                      <div className="font-bold text-xs text-slate-200">Load Cloud Data</div>
-                      <p className="text-[10.5px] text-slate-400 leading-snug">
-                        Downloads saved endpoints & history from your GitHub backup to this device.
-                      </p>
-                    </button>
-
-                    {/* Smart Merge */}
+                  {/* Smart Merge Option */}
+                  <div>
                     <button
                       type="button"
                       onClick={() => handleSmartMerge()}
                       disabled={isLoading}
-                      className="p-3.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/60 border border-slate-800 hover:border-indigo-500/40 text-left transition-all cursor-pointer group space-y-1.5"
+                      className="w-full p-4 rounded-xl bg-slate-950/40 hover:bg-slate-800/60 border border-slate-800 hover:border-indigo-500/40 text-left transition-all cursor-pointer group flex items-center justify-between"
                     >
-                      <div className="flex items-center justify-between">
-                        <GitMerge className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-[9px] font-mono text-indigo-400 font-semibold">COMBINE BOTH</span>
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
+                          <GitMerge className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-xs text-slate-200">Smart Merge Cloud & Device Data</div>
+                          <p className="text-[11px] text-slate-400">
+                            Combines endpoints from your GitHub cloud backup and this device without losing anything.
+                          </p>
+                        </div>
                       </div>
-                      <div className="font-bold text-xs text-slate-200">Smart Merge</div>
-                      <p className="text-[10.5px] text-slate-400 leading-snug">
-                        Combines endpoints from cloud and device without losing anything.
-                      </p>
-                    </button>
-
-                    {/* Push to Cloud */}
-                    <button
-                      type="button"
-                      onClick={handlePushToCloud}
-                      disabled={isLoading}
-                      className="p-3.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/60 border border-slate-800 hover:border-amber-500/40 text-left transition-all cursor-pointer group space-y-1.5"
-                    >
-                      <div className="flex items-center justify-between">
-                        <CloudUpload className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-[9px] font-mono text-slate-400 font-semibold">DEVICE → CLOUD</span>
-                      </div>
-                      <div className="font-bold text-xs text-slate-200">Backup to Cloud</div>
-                      <p className="text-[10.5px] text-slate-400 leading-snug">
-                        Saves this device's current endpoints and history to your cloud backup.
-                      </p>
+                      <span className="text-[10px] font-mono text-indigo-400 font-semibold px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+                        Smart Merge
+                      </span>
                     </button>
                   </div>
 
