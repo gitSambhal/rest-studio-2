@@ -3,6 +3,7 @@ import { EnvVariable, ExecutionResponse, HTTPMethod, KeyValuePair, PostRequestSc
 import { AutocompleteInput } from './AutocompleteInput';
 import { ScriptCodeEditor } from './ScriptCodeEditor';
 import { VarBadge, RenderTextWithVars } from './VarBadge';
+import { RequestBodyEditor } from './RequestBodyEditor';
 import { smartFormatJson, validateJsonSyntax, highlightJson } from '../utils/syntaxHighlighter';
 import { resolveEnvVariables, generateCodeSnippet, ScopeContext, getVariableLookupDetails } from '../utils/envUtils';
 import {
@@ -1177,202 +1178,16 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
 
         {/* BODY TAB */}
         {activeTab === 'body' && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between bg-slate-900 p-3 rounded-xl border border-slate-800 text-xs">
-              <div className="flex items-center space-x-3">
-                <span className="font-semibold text-slate-300">Body Type:</span>
-                {(['none', 'json', 'raw', 'x-www-form-urlencoded'] as const).map((mode) => (
-                  <label key={mode} className="flex items-center space-x-1.5 cursor-pointer font-mono">
-                    <input
-                      type="radio"
-                      name="bodyMode"
-                      checked={request.body.mode === mode}
-                      onChange={() => handleBodyModeChange(mode)}
-                      className="text-emerald-500 focus:ring-0"
-                    />
-                    <span className="uppercase text-slate-200">{mode}</span>
-                  </label>
-                ))}
-              </div>
-
-              {request.body.mode === 'json' && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const res = smartFormatJson(request.body.rawText, 2);
-                      if (res.error) {
-                        alert(`JSON Formatting Error: ${res.error}`);
-                      } else {
-                        onUpdateRequest({
-                          ...request,
-                          body: { ...request.body, rawText: res.formatted },
-                        });
-                      }
-                    }}
-                    className="text-[11px] bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 hover:border-emerald-500/50 px-2.5 py-1 rounded font-mono font-semibold transition-all"
-                    title="Pretty-print JSON with 2 spaces (supports {{variables}})"
-                  >
-                    Format JSON
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const res = smartFormatJson(request.body.rawText, 0);
-                      if (res.error) {
-                        alert(`JSON Minification Error: ${res.error}`);
-                      } else {
-                        onUpdateRequest({
-                          ...request,
-                          body: { ...request.body, rawText: res.formatted },
-                        });
-                      }
-                    }}
-                    className="text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:border-slate-600 px-2.5 py-1 rounded font-mono transition-all"
-                    title="Minify JSON into single-line string"
-                  >
-                    Minify
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const sample = `{\n  "name": "Jane Doe",\n  "email": "jane.doe@example.com",\n  "role": "admin",\n  "status": "active"\n}`;
-                      onUpdateRequest({
-                        ...request,
-                        body: { ...request.body, rawText: sample },
-                      });
-                    }}
-                    className="text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-1 rounded font-mono"
-                  >
-                    Insert Sample
-                  </button>
-
-                  {/* JSON Syntax Validation Status Badge */}
-                  {request.body.rawText.trim().length > 0 && (() => {
-                    const ctxToUseForVal = scopeCtx || { projectVariables: envVariables, fileVariables };
-                    const resolvedForVal = resolveEnvVariables(request.body.rawText, ctxToUseForVal).resolved;
-                    const status = validateJsonSyntax(resolvedForVal);
-                    const hasVars = /\{\{[a-zA-Z0-9_$.-]+\}\}/.test(request.body.rawText);
-
-                    if (status.isValid) {
-                      return (
-                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center space-x-1">
-                          <span>✓</span>
-                          <span>{hasVars ? 'Valid JSON (resolved with variables)' : 'Valid JSON'}</span>
-                        </span>
-                      );
-                    }
-                    return (
-                      <span
-                        className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/30 flex items-center space-x-1 max-w-xs truncate"
-                        title={status.error}
-                      >
-                        <span>✕</span>
-                        <span className="truncate">Invalid JSON: {status.error}</span>
-                      </span>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-
-            {request.body.mode !== 'none' && (() => {
-              const bodyVarKeys = Array.from(
-                new Set(
-                  Array.from(request.body.rawText.matchAll(/\{\{([a-zA-Z0-9_$.-]+)\}\}/g)).map(
-                    (m) => m[1]
-                  )
-                )
-              );
-
-              return (
-                <div className="space-y-3">
-                  {/* Variables Inspector Toolbar for Body */}
-                  {bodyVarKeys.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 p-2.5 bg-slate-900 border border-slate-800 rounded-xl">
-                      <span className="text-[11px] font-sans font-semibold text-slate-300 shrink-0 flex items-center space-x-1">
-                        <Variable className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Hover to inspect body variables:</span>
-                      </span>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {bodyVarKeys.map((vk) => (
-                          <VarBadge
-                            key={vk}
-                            varKey={vk}
-                            scopeCtx={scopeCtx}
-                            envVariables={envVariables}
-                            fileVariables={fileVariables}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <AutocompleteInput
-                    isMultiline={true}
-                    rows={10}
-                    value={request.body.rawText}
-                    scopeCtx={scopeCtx}
-                    envVariables={envVariables}
-                    fileVariables={fileVariables}
-                    onChange={(val) =>
-                      onUpdateRequest({
-                        ...request,
-                        body: { ...request.body, rawText: val },
-                      })
-                    }
-                    placeholder="Enter request body JSON or text... (Type {{ for environment variable autocomplete)"
-                  />
-
-                  <div className="text-[11px] text-slate-500 font-mono flex items-center justify-between">
-                    <span>
-                      Autocomplete available: Type <code className="text-emerald-400">&#123;&#123;</code> anywhere in the body text
-                    </span>
-                    <span>{request.body.rawText.length} characters</span>
-                  </div>
-
-                  {/* Live Syntax Highlighted & Resolved Body Preview */}
-                  {request.body.rawText.length > 0 && (() => {
-                    const resolvedBodyText = resolveEnvVariables(
-                      request.body.rawText,
-                      scopeCtx || { projectVariables: envVariables, fileVariables }
-                    ).resolved;
-
-                    const isResolvedJson = validateJsonSyntax(resolvedBodyText).isValid;
-
-                    return (
-                      <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2">
-                        <div className="flex items-center justify-between text-[11px] font-sans font-semibold text-slate-400">
-                          <span>Live Resolved Body Preview (Syntax Highlighted):</span>
-                          <span className="text-emerald-400 font-mono text-[10px] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                            {isResolvedJson ? 'JSON Highlight Active' : 'Interpolated Text Active'}
-                          </span>
-                        </div>
-
-                        <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-lg font-mono text-xs text-slate-200 leading-relaxed whitespace-pre-wrap break-all overflow-x-auto">
-                          {isResolvedJson ? (
-                            <code>{highlightJson(resolvedBodyText)}</code>
-                          ) : (
-                            <RenderTextWithVars
-                              text={request.body.rawText}
-                              scopeCtx={scopeCtx}
-                              envVariables={envVariables}
-                              fileVariables={fileVariables}
-                              showResolvedValue={true}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              );
-            })()}
-          </div>
+          <RequestBodyEditor
+            body={request.body}
+            onUpdateBody={(updatedBody) => onUpdateRequest({ ...request, body: updatedBody })}
+            headers={request.headers}
+            onUpdateHeaders={(updatedHeaders) => onUpdateRequest({ ...request, headers: updatedHeaders })}
+            scopeCtx={scopeCtx}
+            envVariables={envVariables}
+            fileVariables={fileVariables}
+          />
         )}
-
         {/* PRE-REQUEST TAB */}
         {activeTab === 'pre-script' && (
           <div className="space-y-4">

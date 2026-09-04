@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ExecutionResponse, TestAssertion, SavedResponseItem } from '../types';
-import { highlightJson } from '../utils/syntaxHighlighter';
+import { highlightJson, renderHighlightedSegment } from '../utils/syntaxHighlighter';
 import { JsonSchemaTreeViewer } from './JsonSchemaTreeViewer';
+import { ResponseRichPreview } from './ResponseRichPreview';
+import { ResponseSearchBar } from './ResponseSearchBar';
 import {
   CheckCircle2,
   AlertCircle,
@@ -20,8 +22,10 @@ import {
   Layers,
   X,
   XCircle,
+  Search,
+  Eye,
+  Image,
 } from 'lucide-react';
-
 
 interface ResponseViewerProps {
   response: ExecutionResponse | null;
@@ -40,17 +44,154 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
   onSaveResponseSnapshot,
   onDeleteSavedResponseSnapshot,
 }) => {
-  const [activeTab, setActiveTab] = useState<'pretty' | 'raw' | 'schema' | 'headers' | 'tests' | 'logs'>('pretty');
+  const [activeTab, setActiveTab] = useState<'pretty' | 'raw' | 'preview' | 'schema' | 'headers' | 'tests' | 'logs'>('pretty');
   const [copied, setCopied] = useState(false);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(null);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [snapshotTitleInput, setSnapshotTitleInput] = useState('');
   const [showSaveToast, setShowSaveToast] = useState(false);
 
+  // Search state
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isCaseSensitive, setIsCaseSensitive] = useState(false);
+  const [isRegex, setIsRegex] = useState(false);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
 
   // Compute active response to render (either selected snapshot or live response)
   const activeSnapshot = savedResponses.find((s) => s.id === selectedSnapshotId);
   const displayResponse = activeSnapshot ? activeSnapshot.response : response;
+
+  const contentType = (displayResponse?.contentType || displayResponse?.headers?.['content-type'] || '').toLowerCase();
+  const rawBody = displayResponse?.body || '';
+
+  const hasRichPreview = useMemo(() => {
+    if (!displayResponse) return false;
+    const lowerBody = rawBody.toLowerCase().trim();
+    return (
+      contentType.startsWith('image/') ||
+      contentType.includes('svg') ||
+      contentType.includes('text/html') ||
+      contentType.includes('application/xhtml+xml') ||
+      lowerBody.startsWith('<!doctype html') ||
+      lowerBody.startsWith('<html') ||
+      lowerBody.startsWith('<svg') ||
+      contentType.includes('application/pdf') ||
+      contentType.startsWith('audio/') ||
+      contentType.startsWith('video/') ||
+      Boolean(displayResponse.base64Body && /^(image\/|audio\/|video\/|application\/pdf)/i.test(contentType))
+    );
+  }, [displayResponse, contentType, rawBody]);
+
+  const previewBadgeLabel = useMemo(() => {
+    if (!displayResponse) return 'Media';
+    const lowerBody = rawBody.toLowerCase().trim();
+    if (
+      contentType.includes('text/html') ||
+      contentType.includes('application/xhtml+xml') ||
+      lowerBody.startsWith('<!doctype html') ||
+      lowerBody.startsWith('<html')
+    ) {
+      return 'HTML';
+    }
+    if (
+      contentType.includes('image/svg') ||
+      (contentType.includes('svg') && !contentType.includes('html')) ||
+      (!lowerBody.includes('<html') && lowerBody.startsWith('<svg'))
+    ) {
+      return 'SVG';
+    }
+    if (contentType.startsWith('image/')) return 'Image';
+    if (contentType.includes('application/pdf')) return 'PDF';
+    if (contentType.startsWith('audio/')) return 'Audio';
+    if (contentType.startsWith('video/')) return 'Video';
+    return 'Media';
+  }, [displayResponse, contentType, rawBody]);
+
+  // Auto-switch to preview tab if response is pure image/svg/pdf/media (not HTML/JSON)
+  useEffect(() => {
+    if (displayResponse) {
+      const lowerBody = rawBody.toLowerCase().trim();
+      const isHtmlDoc =
+        contentType.includes('text/html') ||
+        lowerBody.startsWith('<!doctype html') ||
+        lowerBody.startsWith('<html');
+      const isPureMedia =
+        !isHtmlDoc &&
+        (contentType.startsWith('image/') ||
+          (contentType.includes('svg') && !contentType.includes('html')) ||
+          contentType.includes('application/pdf') ||
+          contentType.startsWith('audio/') ||
+          contentType.startsWith('video/'));
+      if (isPureMedia) {
+        setActiveTab('preview');
+      }
+    }
+  }, [displayResponse?.timestamp]);
+
+  // Keyboard shortcut for search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Format Pretty Body (calculated with useMemo to keep hook order invariant)
+  const { formattedBody, isJson } = useMemo(() => {
+    if (!displayResponse?.body) return { formattedBody: '', isJson: false };
+    try {
+      const jsonObj = JSON.parse(displayResponse.body);
+      return { formattedBody: JSON.stringify(jsonObj, null, 2), isJson: true };
+    } catch {
+      return { formattedBody: displayResponse.body, isJson: false };
+    }
+  }, [displayResponse?.body]);
+
+  // Search matches calculation (always called at top level)
+  const searchMatches = useMemo(() => {
+    if (!searchQuery || !displayResponse) return [];
+    const text = activeTab === 'pretty' ? formattedBody : displayResponse.body;
+    if (!text) return [];
+
+    const matches: { start: number; end: number }[] = [];
+    try {
+      let regex: RegExp;
+      if (isRegex) {
+        regex = new RegExp(searchQuery, isCaseSensitive ? 'g' : 'gi');
+      } else {
+        const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        regex = new RegExp(escaped, isCaseSensitive ? 'g' : 'gi');
+      }
+
+      let match: RegExpExecArray | null;
+      while ((match = regex.exec(text)) !== null) {
+        matches.push({ start: match.index, end: match.index + match[0].length });
+        if (matches.length >= 500) break;
+      }
+    } catch {
+      // Ignore invalid regex patterns
+    }
+    return matches;
+  }, [searchQuery, isCaseSensitive, isRegex, formattedBody, displayResponse?.body, activeTab]);
+
+  useEffect(() => {
+    setCurrentMatchIndex(0);
+  }, [searchQuery, isCaseSensitive, isRegex]);
+
+  // Auto-scroll active search match into view
+  useEffect(() => {
+    if (isSearchOpen && searchMatches.length > 0) {
+      const el = document.getElementById(`search-match-${currentMatchIndex}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [currentMatchIndex, searchMatches, isSearchOpen, activeTab]);
 
   if (isLoading) {
     return (
@@ -146,16 +287,15 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
     setTimeout(() => setShowSaveToast(false), 2500);
   };
 
-  // Format Pretty Body
-  let formattedBody = displayResponse.body;
-  let isJson = false;
-  try {
-    const jsonObj = JSON.parse(displayResponse.body);
-    formattedBody = JSON.stringify(jsonObj, null, 2);
-    isJson = true;
-  } catch (e) {
-    isJson = false;
-  }
+  const handleNextMatch = () => {
+    if (searchMatches.length === 0) return;
+    setCurrentMatchIndex((prev) => (prev + 1) % searchMatches.length);
+  };
+
+  const handlePrevMatch = () => {
+    if (searchMatches.length === 0) return;
+    setCurrentMatchIndex((prev) => (prev - 1 + searchMatches.length) % searchMatches.length);
+  };
 
   const activeAssertions = (assertions || []).filter((a) => a.enabled);
   const passedAssertions = activeAssertions.filter((a) => a.passed);
@@ -167,6 +307,26 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
         <div className="absolute top-2 right-2 z-40 bg-emerald-500 text-slate-950 px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg flex items-center space-x-1.5 animate-in fade-in slide-in-from-top-2 duration-150">
           <BookmarkCheck className="w-4 h-4" />
           <span>Response Snapshot Saved!</span>
+        </div>
+      )}
+
+      {/* Floating Response Search Bar */}
+      {isSearchOpen && (
+        <div className="absolute top-12 right-4 z-40">
+          <ResponseSearchBar
+            isOpen={isSearchOpen}
+            onClose={() => setIsSearchOpen(false)}
+            query={searchQuery}
+            onChangeQuery={setSearchQuery}
+            matchCount={searchMatches.length}
+            currentMatchIndex={currentMatchIndex}
+            onNextMatch={handleNextMatch}
+            onPrevMatch={handlePrevMatch}
+            isCaseSensitive={isCaseSensitive}
+            onToggleCaseSensitive={() => setIsCaseSensitive((v) => !v)}
+            isRegex={isRegex}
+            onToggleRegex={() => setIsRegex((v) => !v)}
+          />
         </div>
       )}
 
@@ -240,8 +400,23 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
           )}
         </div>
 
-        {/* Action Buttons: Save Snapshot, Download, Copy, Delete */}
+        {/* Action Buttons: Find, Save Snapshot, Download, Copy, Delete */}
         <div className="flex items-center space-x-1.5">
+          {/* Find in response */}
+          <button
+            type="button"
+            onClick={() => setIsSearchOpen((prev) => !prev)}
+            className={`flex items-center space-x-1 text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors cursor-pointer ${
+              isSearchOpen
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+            }`}
+            title="Find in response (Ctrl+F)"
+          >
+            <Search className="w-3.5 h-3.5 text-slate-400" />
+            <span>Find</span>
+          </button>
+
           {/* Save Response Snapshot Button */}
           {onSaveResponseSnapshot && (
             <button
@@ -320,6 +495,25 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
           <span>Raw Body</span>
         </button>
 
+        {/* Rich Preview Tab */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('preview')}
+          className={`py-2 border-b-2 flex items-center space-x-1.5 transition-colors cursor-pointer ${
+            activeTab === 'preview'
+              ? 'border-emerald-500 text-emerald-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Eye className="w-3.5 h-3.5" />
+          <span>Preview</span>
+          {hasRichPreview && (
+            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-mono uppercase">
+              {previewBadgeLabel}
+            </span>
+          )}
+        </button>
+
         <button
           type="button"
           onClick={() => setActiveTab('schema')}
@@ -390,7 +584,11 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
       </div>
 
       {/* Tab Content Body */}
-      {activeTab === 'schema' ? (
+      {activeTab === 'preview' ? (
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <ResponseRichPreview response={displayResponse} />
+        </div>
+      ) : activeTab === 'schema' ? (
         <div className="flex-1 overflow-hidden flex flex-col">
           <JsonSchemaTreeViewer responseBody={displayResponse.body} />
         </div>
@@ -399,19 +597,35 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
           {activeTab === 'pretty' && (
             <div className="space-y-3">
               <pre className="p-3 bg-slate-900/80 border border-slate-800/80 rounded-xl font-mono text-xs text-slate-200 overflow-x-auto leading-relaxed select-text">
-                <code>{isJson ? highlightJson(formattedBody) : formattedBody}</code>
+                <code>
+                  {isJson
+                    ? highlightJson(formattedBody, searchMatches, currentMatchIndex)
+                    : renderHighlightedSegment(
+                        formattedBody,
+                        0,
+                        searchMatches,
+                        currentMatchIndex,
+                        undefined,
+                        'pr'
+                      )}
+                </code>
               </pre>
             </div>
           )}
 
-
           {activeTab === 'raw' && (
-            <textarea
-              readOnly
-              value={displayResponse.body}
-              rows={15}
-              className="w-full font-mono text-xs p-3 bg-slate-900 border border-slate-800 text-slate-300 rounded-xl focus:outline-none leading-relaxed select-text"
-            />
+            <pre className="w-full font-mono text-xs p-3 bg-slate-900 border border-slate-800 text-slate-300 rounded-xl focus:outline-none leading-relaxed select-text overflow-x-auto whitespace-pre-wrap">
+              <code>
+                {renderHighlightedSegment(
+                  displayResponse.body,
+                  0,
+                  searchMatches,
+                  currentMatchIndex,
+                  undefined,
+                  'rw'
+                )}
+              </code>
+            </pre>
           )}
 
           {activeTab === 'headers' && (
@@ -481,7 +695,12 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
 
       {/* Save Snapshot Modal */}
       {isSaveModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsSaveModalOpen(false);
+          }}
+        >
           <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center space-x-2">
@@ -510,6 +729,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
                 onChange={(e) => setSnapshotTitleInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleConfirmSaveSnapshot();
+                  if (e.key === 'Escape') setIsSaveModalOpen(false);
                 }}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-100 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
                 placeholder="e.g. 200 OK Initial Success Payload"

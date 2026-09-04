@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   SchemaNode,
   SchemaType,
@@ -68,7 +68,7 @@ export const JsonSchemaTreeViewer: React.FC<JsonSchemaTreeViewerProps> = ({
   }, [responseBody]);
 
   // Default expand all first 2 levels on schema load
-  useMemo(() => {
+  useEffect(() => {
     if (!schemaRoot) return;
     const initialExpanded: Record<string, boolean> = {};
 

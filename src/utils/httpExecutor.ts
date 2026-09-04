@@ -1,11 +1,91 @@
-import { ExecutionResponse } from '../types';
+import { ExecutionResponse, FormDataItem, BinaryFilePayload } from '../types';
+import { getCookieHeaderForUrl, saveCookiesFromHeaders } from './cookieJar';
 
 export interface HttpRequestOptions {
   method: string;
   url: string;
   headers?: Record<string, string>;
   body?: any;
+  formDataItems?: FormDataItem[];
+  binaryFile?: BinaryFilePayload;
   signal?: AbortSignal;
+}
+
+/**
+ * Convert base64 or Data URL string into a native Blob.
+ */
+export function dataUrlToBlob(dataUrl: string, defaultType = 'application/octet-stream'): Blob {
+  try {
+    if (!dataUrl.startsWith('data:')) {
+      const binary = atob(dataUrl);
+      const array = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        array[i] = binary.charCodeAt(i);
+      }
+      return new Blob([array], { type: defaultType });
+    }
+    const parts = dataUrl.split(',');
+    const mime = parts[0].match(/:(.*?);/)?.[1] || defaultType;
+    const bstr = atob(parts[1] || parts[0]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+  } catch (_) {
+    return new Blob([dataUrl], { type: defaultType });
+  }
+}
+
+/**
+ * Build request body payload (supporting raw text/json, multipart FormData, and binary Blob).
+ */
+export function buildRequestBodyPayload(
+  body: any,
+  formDataItems?: FormDataItem[],
+  binaryFile?: BinaryFilePayload,
+  headers: Record<string, string> = {}
+): { bodyPayload: any; headers: Record<string, string> } {
+  const reqHeaders = { ...headers };
+
+  // 1. Binary file
+  if (binaryFile && binaryFile.fileData) {
+    const blob = dataUrlToBlob(binaryFile.fileData, binaryFile.fileType);
+    if (!Object.keys(reqHeaders).some((k) => k.toLowerCase() === 'content-type')) {
+      reqHeaders['Content-Type'] = binaryFile.fileType || 'application/octet-stream';
+    }
+    return { bodyPayload: blob, headers: reqHeaders };
+  }
+
+  // 2. Multipart form-data
+  if (formDataItems && formDataItems.length > 0) {
+    const formData = new FormData();
+    for (const item of formDataItems) {
+      if (!item.enabled || !item.key) continue;
+      if (item.type === 'file' && item.fileData) {
+        const fileBlob = dataUrlToBlob(item.fileData, item.fileType);
+        formData.append(item.key, fileBlob, item.fileName || 'file.bin');
+      } else {
+        formData.append(item.key, item.value ?? '');
+      }
+    }
+    // Delete explicit Content-Type so fetch sets multipart boundary automatically
+    Object.keys(reqHeaders).forEach((k) => {
+      if (k.toLowerCase() === 'content-type') {
+        delete reqHeaders[k];
+      }
+    });
+    return { bodyPayload: formData, headers: reqHeaders };
+  }
+
+  // 3. Text / JSON
+  if (body !== undefined && body !== null) {
+    const bodyStr = typeof body === 'object' ? JSON.stringify(body) : String(body);
+    return { bodyPayload: bodyStr, headers: reqHeaders };
+  }
+
+  return { bodyPayload: undefined, headers: reqHeaders };
 }
 
 /**
@@ -482,6 +562,37 @@ function buildLocalFetchError(
   };
 }
 
+async function readFetchResponseBody(res: Response): Promise<{ text: string; size: number; base64Body?: string; contentType: string }> {
+  const contentType = res.headers.get('content-type') || 'text/plain';
+  const isBinary = /^(image\/|audio\/|video\/|application\/pdf|application\/octet-stream|application\/zip)/i.test(contentType);
+
+  if (isBinary) {
+    try {
+      const blob = await res.blob();
+      const size = blob.size;
+      const text = `[Binary data: ${contentType}, ${size} bytes]`;
+      const base64Body = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = (reader.result as string) || '';
+          const commaIdx = result.indexOf(',');
+          resolve(commaIdx > -1 ? result.substring(commaIdx + 1) : result);
+        };
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(blob);
+      });
+      return { text, size, base64Body, contentType };
+    } catch {
+      const text = await res.text().catch(() => '');
+      return { text, size: new Blob([text]).size, contentType };
+    }
+  } else {
+    const text = await res.text();
+    const size = new Blob([text]).size;
+    return { text, size, contentType };
+  }
+}
+
 /**
  * Direct Client Browser `fetch()` — public (non-local) targets.
  */
@@ -489,7 +600,7 @@ export async function executeDirectClientFetch(
   method: string,
   targetUrl: string,
   headers: Record<string, string>,
-  body?: any,
+  bodyPayload?: any,
   signal?: AbortSignal
 ): Promise<ExecutionResponse> {
   const startTime = performance.now();
@@ -500,16 +611,15 @@ export async function executeDirectClientFetch(
     signal,
   };
 
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) && body !== undefined && body !== null) {
-    fetchOptions.body = typeof body === 'object' ? JSON.stringify(body) : String(body);
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) && bodyPayload !== undefined && bodyPayload !== null) {
+    fetchOptions.body = bodyPayload;
   }
 
   try {
     const res = await fetch(targetUrl, fetchOptions);
     const duration = Math.round(performance.now() - startTime);
 
-    const text = await res.text();
-    const size = new Blob([text]).size;
+    const { text, size, base64Body, contentType } = await readFetchResponseBody(res);
 
     const resHeaders: Record<string, string> = {};
     res.headers.forEach((val, key) => {
@@ -521,11 +631,12 @@ export async function executeDirectClientFetch(
       statusText: res.statusText || 'OK',
       headers: resHeaders,
       body: text,
+      base64Body,
       size,
       duration,
       timestamp: Date.now(),
       ok: res.ok,
-      contentType: res.headers.get('content-type') || 'text/plain',
+      contentType,
     };
   } catch (err: any) {
     const duration = Math.round(performance.now() - startTime);
@@ -575,15 +686,11 @@ export async function executeDirectLocalFetch(
   method: string,
   targetUrl: string,
   headers: Record<string, string>,
-  body?: any,
+  bodyPayload?: any,
   signal?: AbortSignal
 ): Promise<ExecutionResponse> {
   const startTime = performance.now();
 
-  // Must match the target's actual address space exactly — a mismatch is a
-  // hard network error that aborts before the LNA permission check, so the
-  // browser permission prompt would never appear (loopback targets need
-  // 'loopback', LAN targets need 'local').
   const fetchOptions: any = {
     method: method.toUpperCase(),
     headers: { ...headers },
@@ -591,16 +698,15 @@ export async function executeDirectLocalFetch(
     signal,
   };
 
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) && body !== undefined && body !== null) {
-    fetchOptions.body = typeof body === 'object' ? JSON.stringify(body) : String(body);
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) && bodyPayload !== undefined && bodyPayload !== null) {
+    fetchOptions.body = bodyPayload;
   }
 
   try {
     const res = await fetch(targetUrl, fetchOptions);
     const duration = Math.round(performance.now() - startTime);
 
-    const text = await res.text();
-    const size = new Blob([text]).size;
+    const { text, size, base64Body, contentType } = await readFetchResponseBody(res);
 
     const resHeaders: Record<string, string> = {};
     res.headers.forEach((val, key) => {
@@ -612,11 +718,12 @@ export async function executeDirectLocalFetch(
       statusText: res.statusText || 'OK',
       headers: resHeaders,
       body: text,
+      base64Body,
       size,
       duration,
       timestamp: Date.now(),
       ok: res.ok,
-      contentType: res.headers.get('content-type') || 'text/plain',
+      contentType,
     };
   } catch (err: any) {
     const duration = Math.round(performance.now() - startTime);
@@ -646,14 +753,30 @@ async function executeServerProxyFetch(
   method: string,
   targetUrl: string,
   headers: Record<string, string>,
-  body?: any,
+  bodyPayload?: any,
+  formDataItems?: FormDataItem[],
+  binaryFile?: BinaryFilePayload,
   signal?: AbortSignal
 ): Promise<ExecutionResponse | null> {
   try {
+    const proxyPayload: any = {
+      method,
+      url: targetUrl,
+      headers,
+      body: typeof bodyPayload === 'string' ? bodyPayload : undefined,
+    };
+
+    if (formDataItems && formDataItems.length > 0) {
+      proxyPayload.formDataItems = formDataItems;
+    }
+    if (binaryFile && binaryFile.fileData) {
+      proxyPayload.binaryFile = binaryFile;
+    }
+
     const proxyRes = await fetch('/api/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ method, url: targetUrl, headers, body }),
+      body: JSON.stringify(proxyPayload),
       signal,
     });
 
@@ -684,7 +807,7 @@ async function executeServerProxyFetch(
  */
 export async function executeHttpRequest(options: HttpRequestOptions): Promise<ExecutionResponse> {
   const startTime = performance.now();
-  const { method = 'GET', url, headers = {}, body, signal } = options;
+  const { method = 'GET', url, headers: initialHeaders = {}, body, formDataItems, binaryFile, signal } = options;
 
   if (!url || typeof url !== 'string' || !url.trim()) {
     return {
@@ -718,15 +841,37 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
     }
   }
 
+  // Inject matching cookies from Cookie Jar if no explicit Cookie header exists
+  const reqHeaders: Record<string, string> = { ...initialHeaders };
+  const hasCookieHeader = Object.keys(reqHeaders).some((k) => k.toLowerCase() === 'cookie');
+  if (!hasCookieHeader) {
+    const jarCookie = getCookieHeaderForUrl(targetUrl);
+    if (jarCookie) {
+      reqHeaders['Cookie'] = jarCookie;
+    }
+  }
+
+  // Build body and determine headers (multipart, binary, or text/json)
+  const { bodyPayload, headers: finalHeaders } = buildRequestBodyPayload(
+    body,
+    formDataItems,
+    binaryFile,
+    reqHeaders
+  );
+
+  let result: ExecutionResponse;
+
   // 1. Neutralino Native Desktop Container Check — desktop app executes locally with zero restrictions
   if (isNeutralinoActive()) {
     try {
       console.log('[RestStudio Neutralino] Executing via Neutralino Native Engine...');
-      const neuRes = await executeNeutralinoFetch(method, targetUrl, headers, body);
+      const neuRes = await executeNeutralinoFetch(method, targetUrl, finalHeaders, body);
       if (neuRes && neuRes.status > 0) {
+        if (neuRes.headers) saveCookiesFromHeaders(targetUrl, neuRes.headers);
         return neuRes;
       }
       if (neuRes && isLocalTargetUrl(targetUrl)) {
+        if (neuRes.headers) saveCookiesFromHeaders(targetUrl, neuRes.headers);
         return neuRes;
       }
     } catch (nErr) {
@@ -736,19 +881,24 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
 
   // 2. Web app: local target → direct browser fetch with Local Network Access permission
   if (isLocalTargetUrl(targetUrl)) {
-    return await executeDirectLocalFetch(method, targetUrl, headers, body, signal);
+    result = await executeDirectLocalFetch(method, targetUrl, finalHeaders, bodyPayload, signal);
+    if (result.headers) saveCookiesFromHeaders(targetUrl, result.headers);
+    return result;
   }
 
   // 3. Web app: public target → direct fetch first, then server proxy fallback
-  const directRes = await executeDirectClientFetch(method, targetUrl, headers, body, signal);
+  const directRes = await executeDirectClientFetch(method, targetUrl, finalHeaders, bodyPayload, signal);
   if (directRes.status > 0 || signal?.aborted) {
+    if (directRes.headers) saveCookiesFromHeaders(targetUrl, directRes.headers);
     return directRes;
   }
 
-  const proxyRes = await executeServerProxyFetch(method, targetUrl, headers, body, signal);
+  const proxyRes = await executeServerProxyFetch(method, targetUrl, finalHeaders, bodyPayload, formDataItems, binaryFile, signal);
   if (proxyRes) {
+    if (proxyRes.headers) saveCookiesFromHeaders(targetUrl, proxyRes.headers);
     return proxyRes;
   }
 
+  if (directRes.headers) saveCookiesFromHeaders(targetUrl, directRes.headers);
   return directRes;
 }

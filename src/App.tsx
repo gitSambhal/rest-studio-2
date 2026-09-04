@@ -1,1290 +1,295 @@
 /**
- * @license
- * SPDX-License-Identifier: Apache-2.0
+ * RestStudio - Offline-First REST API Client & Workspace
+ * Created by Suhail Akhtar (https://suhail.top)
+ *
+ * @author Suhail Akhtar <https://suhail.top>
+ * @license Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Organization,
   Project,
   RestFile,
   RestRequest,
-  ExecutionResponse,
-  RequestHistoryItem,
-  EnvVariable,
   HTTPMethod,
   RequestAuth,
-  WorkspaceTab,
-  RequestStatusInfo,
+  RequestHistoryItem,
 } from './types';
-import { INITIAL_ORGANIZATIONS, INITIAL_GLOBAL_VARIABLES } from './data/initialOrganizations';
+import { INITIAL_ORGANIZATIONS } from './data/initialOrganizations';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
-import { RequestEditor } from './components/RequestEditor';
-import { ResponseViewer } from './components/ResponseViewer';
-import { EnvironmentManager } from './components/EnvironmentManager';
-import { RestFileEditor } from './components/RestFileEditor';
-import { CollectionRunner } from './components/CollectionRunner';
-import { HistoryViewer } from './components/HistoryViewer';
-import { ImportExportModal } from './components/ImportExportModal';
-import { SettingsModal, SettingsTabId } from './components/SettingsModal';
-import { PromptModal } from './components/PromptModal';
-import { QuickNewRequestModal } from './components/QuickNewRequestModal';
-import { QuickCurlModal } from './components/QuickCurlModal';
-import { GitHubSyncModal } from './components/GitHubSyncModal';
-import { SaveScratchpadModal } from './components/SaveScratchpadModal';
-import { BatchWorkspaceModal } from './components/BatchWorkspaceModal';
+import { TabBar } from './components/TabBar';
+import { OnboardingScreen } from './components/OnboardingScreen';
+import { ToastContainer, ToastMessage } from './components/ToastContainer';
+import { AppModals, PromptModalState } from './components/AppModals';
+import { MainWorkspace } from './components/MainWorkspace';
+import { useWorkspaceState } from './hooks/useWorkspaceState';
+import { useTabManager } from './hooks/useTabManager';
+import { useRequestExecutor } from './hooks/useRequestExecutor';
+import { ScopeContext } from './utils/envUtils';
+import { getSavedTheme, applyTheme, UIThemeId } from './utils/themeManager';
 import {
   getSavedGitHubToken,
   getSavedGistId,
   getSavedAutoSync,
   getSavedGitHubUser,
-  verifyGitHubToken,
-  saveGitHubSession,
-  pushToGitHubGist,
   GitHubUser,
-  SyncPayload,
 } from './services/githubSyncService';
-import { TabBar } from './components/TabBar';
-import { OnboardingScreen } from './components/OnboardingScreen';
-import { ToastContainer, ToastMessage } from './components/ToastContainer';
-import { ScopeContext, resolveEnvVariables } from './utils/envUtils';
-import { parseRestFileContent, detectAndParsePaste } from './utils/restParser';
-import { evaluateAssertions } from './utils/testUtils';
-import { runPreRequestScript, runPostRequestScript } from './utils/scriptRunner';
-import { executeHttpRequest } from './utils/httpExecutor';
-import { getSavedTheme, applyTheme, THEMES, UIThemeId } from './utils/themeManager';
+import { SettingsTabId } from './components/SettingsModal';
 
 export default function App() {
-  // 1. Global Variables
-  const [globalVariables, setGlobalVariables] = useState<EnvVariable[]>(() => {
-    try {
-      const saved = localStorage.getItem('reststudio_global_vars') || localStorage.getItem('restpulse_global_vars');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_GLOBAL_VARIABLES;
-  });
-
-  // 2. Organizations & Projects
-  const [organizations, setOrganizations] = useState<Organization[]>(() => {
-    try {
-      const saved = localStorage.getItem('reststudio_organizations') || localStorage.getItem('restpulse_organizations');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error('Failed to load saved organizations:', e);
-    }
-    return INITIAL_ORGANIZATIONS;
-  });
-
-  const [activeOrgId, setActiveOrgId] = useState<string>(
-    organizations[0]?.id || 'org_acme'
-  );
-  const activeOrg = organizations?.find((o) => o.id === activeOrgId) || organizations?.[0];
-
-  const [activeProjectId, setActiveProjectId] = useState<string>(
-    activeOrg?.projects?.[0]?.id || 'proj_ecommerce'
-  );
-  const activeProject = activeOrg?.projects?.find((p) => p.id === activeProjectId) || activeOrg?.projects?.[0];
-
-  const [activeFileId, setActiveFileId] = useState<string | null>(
-    activeProject?.files?.[0]?.id || null
-  );
-  const activeFile = activeProject?.files?.find((f) => f.id === activeFileId) || activeProject?.files?.[0];
-
-  // Standalone Scratchpad / Drafts State (Zero Org / Zero Env required)
-  const [scratchpadRequests, setScratchpadRequests] = useState<RestRequest[]>(() => {
-    try {
-      const saved = localStorage.getItem('reststudio_scratchpad_requests');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [
-      {
-        id: 'req_scratch_default',
-        name: 'Draft: Quick Test',
-        method: 'GET',
-        url: 'https://httpbin.org/get',
-        headers: [
-          { id: 'h_sc_1', key: 'Accept', value: 'application/json', enabled: true },
-        ],
-        queryParams: [],
-        body: { mode: 'none', rawText: '' },
-        auth: { type: 'none', bearerToken: '' },
-      },
-    ];
-  });
-
-  const [activeRequestId, setActiveRequestId] = useState<string | null>(
-    activeFile?.requests?.[0]?.id || null
+  // Toast notifications
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const showToast = useCallback(
+    (type: 'success' | 'error' | 'info' | 'warning', title: string, message?: string) => {
+      const newToast: ToastMessage = {
+        id: 'toast_' + Math.random().toString(36).substring(2, 9),
+        type,
+        title,
+        message,
+      };
+      setToasts((prev) => [newToast, ...prev.slice(0, 4)]);
+    },
+    []
   );
 
-  const activeScratchpadRequest = scratchpadRequests.find((r) => r.id === activeRequestId);
-  const isCurrentRequestStandalone = Boolean(activeScratchpadRequest);
-  const activeRequest =
-    activeScratchpadRequest ||
-    activeFile?.requests?.find((r) => r.id === activeRequestId) ||
-    activeFile?.requests?.[0] ||
-    scratchpadRequests[0];
+  const handleDismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
 
-  // 3. Multi-Tab System
-  const [tabs, setTabs] = useState<WorkspaceTab[]>(() => {
-    try {
-      const saved = localStorage.getItem('reststudio_tabs') || localStorage.getItem('restpulse_tabs');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [
-      {
-        id: 'tab_onboarding',
-        type: 'onboarding',
-        title: 'Welcome Workspace',
-      },
-      {
-        id: 'tab_req_1',
-        type: 'request',
-        title: 'GET Products',
-        fileId: activeFile?.id,
-        requestId: activeFile?.requests?.[0]?.id,
-        method: 'GET',
-      },
-    ];
+  // 1. Workspace State (Organizations, Projects, Files, Requests, Standalone Drafts, Global Variables)
+  const {
+    globalVariables,
+    setGlobalVariables,
+    organizations,
+    setOrganizations,
+    activeOrgId,
+    setActiveOrgId,
+    activeOrg,
+    activeProjectId,
+    setActiveProjectId,
+    activeProject,
+    activeFileId,
+    setActiveFileId,
+    activeFile,
+    scratchpadRequests,
+    setScratchpadRequests,
+    activeRequestId,
+    setActiveRequestId,
+    activeRequest,
+    activeScratchpadRequest,
+    isCurrentRequestStandalone,
+    updateProjectFiles,
+    handleUpdateActiveRequest,
+    handleCreateNewScratchpad,
+    handleDeleteScratchpad,
+    handleAddNewVariables,
+    handleApplySyncedData,
+  } = useWorkspaceState(showToast);
+
+  // 2. Tab Management
+  const {
+    tabs,
+    setTabs,
+    activeTabId,
+    setActiveTabId,
+    activeTabMode,
+    setActiveTabMode,
+    activeTab,
+    handleSelectTab,
+    handleOpenRequestInTab,
+    handleOpenScratchpadRequestInTab,
+    handleCreateNewTabWithDummy,
+    handleTogglePinTab,
+    handleCloseTab,
+    handleCloseOtherTabs,
+    handleCloseTabsToRight,
+    handleCloseTabsToLeft,
+    handleCloseAllTabs,
+  } = useTabManager({
+    organizations,
+    setOrganizations,
+    activeOrg,
+    activeOrgId,
+    setActiveOrgId,
+    activeProject,
+    activeProjectId,
+    setActiveProjectId,
+    activeFile,
+    activeFileId,
+    setActiveFileId,
+    scratchpadRequests,
+    setActiveRequestId,
+    updateProjectFiles,
+    showToast,
   });
 
-  const [activeTabId, setActiveTabId] = useState<string>(tabs[0]?.id || 'tab_onboarding');
-  const activeTabObj = tabs?.find((t) => t.id === activeTabId) || tabs?.[0];
-
-  // Main Header mode tabs ('editor', 'code', 'runner', 'history')
-  const [activeTabMode, setActiveTabMode] = useState<'editor' | 'code' | 'runner' | 'history'>('editor');
-
-  // Multiple UI Themes State & Effect
+  // 3. UI Theme & Dark Mode State
   const [currentTheme, setCurrentTheme] = useState<UIThemeId>(() => getSavedTheme());
-
-  const activeThemeObj = THEMES.find((t) => t.id === currentTheme) || THEMES[0];
-  const isDarkMode = activeThemeObj.category === 'dark';
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('reststudio_dark_mode') || localStorage.getItem('restpulse_dark_mode');
+    return saved ? saved === 'true' : true;
+  });
 
   useEffect(() => {
     applyTheme(currentTheme);
   }, [currentTheme]);
+
+  const handleToggleDarkMode = () => {
+    const next = !isDarkMode;
+    setIsDarkMode(next);
+    localStorage.setItem('reststudio_dark_mode', String(next));
+    localStorage.setItem('restpulse_dark_mode', String(next));
+  };
 
   const handleSelectTheme = (themeId: UIThemeId) => {
     setCurrentTheme(themeId);
     applyTheme(themeId);
   };
 
-  const handleToggleDarkMode = () => {
-    const nextTheme: UIThemeId = isDarkMode ? 'light' : 'dark';
-    handleSelectTheme(nextTheme);
-  };
-
-  // Custom Prompt Modal state for App
-  const [appPromptState, setAppPromptState] = useState<{
-    isOpen: boolean;
-    title: string;
-    message?: string;
-    initialValue?: string;
-    placeholder?: string;
-    confirmLabel?: string;
-    hideInput?: boolean;
-    onConfirm: (value: string) => void;
-  }>({
-    isOpen: false,
-    title: '',
-    onConfirm: () => {},
-  });
-
-  // Toast notifications state
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
-  const showToast = (type: ToastMessage['type'], title: string, message?: string) => {
-    const newToast: ToastMessage = {
-      id: 'toast_' + Math.random().toString(36).substring(2, 9),
-      type,
-      title,
-      message,
-    };
-    setToasts((prev) => [...prev, newToast]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== newToast.id));
-    }, 4000);
-  };
-
-  const handleDismissToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  // 4. Split Orientation & Resizable Panes
-  const [splitOrientation, setSplitOrientation] = useState<'top-bottom' | 'left-right'>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('restpulse_split_orientation');
-      if (saved === 'top-bottom' || saved === 'left-right') return saved;
-    }
-    return 'top-bottom';
+  // 4. Split Ratio & Orientation
+  const [splitOrientation, setSplitOrientation] = useState<'left-right' | 'top-bottom'>(() => {
+    return (localStorage.getItem('reststudio_split_orientation') as any) || 'top-bottom';
   });
   const [splitRatio, setSplitRatio] = useState<number>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('restpulse_split_ratio');
-      if (saved) {
-        const num = parseFloat(saved);
-        if (!isNaN(num) && num >= 15 && num <= 85) return num;
-      }
-    }
-    return 55;
-  }); // percentage for top or left pane
-  const isDraggingSplitter = useRef<boolean>(false);
+    const saved = localStorage.getItem('reststudio_split_ratio');
+    return saved ? parseFloat(saved) : 50;
+  });
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('restpulse_split_orientation', splitOrientation);
-    }
+    localStorage.setItem('reststudio_split_orientation', splitOrientation);
   }, [splitOrientation]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('restpulse_split_ratio', splitRatio.toString());
-    }
+    localStorage.setItem('reststudio_split_ratio', String(splitRatio));
   }, [splitRatio]);
 
-  // Modals & GitHub Sync User State
-  const [githubUser, setGithubUser] = useState<GitHubUser | null>(() => getSavedGitHubUser());
+  // Sidebar collapsed state
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('reststudio_sidebar_collapsed') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('reststudio_sidebar_collapsed', String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
+
+  // 5. Active Environment & Scope Context
+  const activeEnv = activeProject?.environments?.find((e) => e.id === activeProject.activeEnvId);
+
+  const scopeCtx: ScopeContext = useMemo(
+    () => ({
+      globalVariables,
+      orgVariables: activeOrg?.variables || [],
+      projectVariables: activeEnv?.variables || [],
+      fileVariables: activeFile?.fileVariables || {},
+    }),
+    [globalVariables, activeOrg?.variables, activeEnv?.variables, activeFile?.fileVariables]
+  );
+
+  const saveScriptVariables = (newVars: Record<string, string>) => {
+    const envVars = Object.entries(newVars).map(([key, value]) => ({
+      id: 'var_script_' + Math.random().toString(36).substring(2, 9),
+      key,
+      value,
+      enabled: true,
+    }));
+    handleAddNewVariables(envVars);
+  };
+
+  // 6. Request Executor & History
+  const {
+    executingRequests,
+    requestStatuses,
+    lastResponse,
+    setLastResponse,
+    history,
+    setHistory,
+    handleExecuteRequest,
+    handleStopRequest,
+    handleClearHistory,
+    handleDeleteHistoryItem,
+  } = useRequestExecutor({
+    activeOrg,
+    activeProject,
+    activeFile,
+    scopeCtx,
+    handleUpdateActiveRequest,
+    showToast,
+    saveScriptVariables,
+  });
+
+  // 7. Modals State
   const [isEnvManagerOpen, setIsEnvManagerOpen] = useState<boolean>(false);
   const [isImportExportOpen, setIsImportExportOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>('appearance');
-  const [isQuickNewRequestOpen, setIsQuickNewRequestOpen] = useState<boolean>(false);
-  const [isQuickCurlOpen, setIsQuickCurlOpen] = useState<boolean>(false);
   const [isGitHubSyncOpen, setIsGitHubSyncOpen] = useState<boolean>(false);
   const [isBatchWorkspaceModalOpen, setIsBatchWorkspaceModalOpen] = useState<boolean>(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
+  const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState<boolean>(false);
+  const [isQuickNewRequestOpen, setIsQuickNewRequestOpen] = useState<boolean>(false);
+  const [initialPasteText, setInitialPasteText] = useState<string>('');
+  const [isQuickCurlOpen, setIsQuickCurlOpen] = useState<boolean>(false);
   const [isSaveScratchpadOpen, setIsSaveScratchpadOpen] = useState<boolean>(false);
   const [scratchpadToSave, setScratchpadToSave] = useState<RestRequest | null>(null);
-  const [initialPasteText, setInitialPasteText] = useState<string>('');
+  const [githubUser, setGithubUser] = useState<GitHubUser | null>(() => getSavedGitHubUser());
 
-  // Auto-verify GitHub Token on mount to keep user profile picture & name in sync
+  // Prompt Modal
+  const [appPromptState, setAppPromptState] = useState<PromptModalState>({
+    isOpen: false,
+    title: '',
+    message: '',
+    initialValue: '',
+    confirmLabel: 'Confirm',
+    onConfirm: () => {},
+  });
+
+  // 8. Global Keyboard Shortcuts
   useEffect(() => {
-    const token = getSavedGitHubToken();
-    if (token) {
-      verifyGitHubToken(token)
-        .then((userData) => {
-          setGithubUser(userData);
-          saveGitHubSession(token, userData);
-        })
-        .catch((err) => {
-          console.warn('GitHub token validation warning:', err);
-        });
-    }
-  }, []);
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+      const isShift = e.shiftKey;
 
-  const handleApplySyncedData = (payload: SyncPayload) => {
-    let incomingOrgs = payload.organizations;
-    if (!incomingOrgs || !Array.isArray(incomingOrgs) || incomingOrgs.length === 0) {
-      incomingOrgs = INITIAL_ORGANIZATIONS;
-    }
-    setOrganizations(incomingOrgs);
-
-    // 1. Resolve target organization
-    const targetOrg =
-      incomingOrgs.find((o) => o.id === payload.activeOrgId) || incomingOrgs[0];
-    setActiveOrgId(targetOrg.id);
-
-    // 2. Resolve target project
-    const targetProject =
-      (targetOrg.projects || []).find((p) => p.id === payload.activeProjectId) ||
-      targetOrg.projects?.[0];
-    const newProjectId = targetProject?.id || '';
-    setActiveProjectId(newProjectId);
-
-    // 3. Resolve target file & request
-    const targetFile = targetProject?.files?.[0];
-    const newFileId = targetFile?.id || null;
-    setActiveFileId(newFileId);
-
-    const targetRequest = targetFile?.requests?.[0];
-    const newRequestId = targetRequest?.id || null;
-    setActiveRequestId(newRequestId);
-
-    // 4. Rebuild tabs immediately so restored requests are open and active
-    const newTabs: WorkspaceTab[] = [
-      {
-        id: 'tab_onboarding',
-        type: 'onboarding',
-        title: 'Welcome Workspace',
-      },
-    ];
-
-    if (targetFile && targetRequest) {
-      newTabs.push({
-        id: 'tab_req_' + targetRequest.id,
-        type: 'request',
-        title: targetRequest.name || 'REST Request',
-        fileId: targetFile.id,
-        requestId: targetRequest.id,
-        method: targetRequest.method || 'GET',
-      });
-      setActiveTabId('tab_req_' + targetRequest.id);
-    } else {
-      setActiveTabId('tab_onboarding');
-    }
-
-    setTabs(newTabs);
-    setActiveTabMode('editor');
-    setLastResponse(null);
-
-    // 5. Update LocalStorage immediately
-    try {
-      localStorage.setItem('reststudio_organizations', JSON.stringify(incomingOrgs));
-      localStorage.setItem('restpulse_organizations', JSON.stringify(incomingOrgs));
-      localStorage.setItem('reststudio_tabs', JSON.stringify(newTabs));
-      localStorage.setItem('restpulse_tabs', JSON.stringify(newTabs));
-    } catch (e) {}
-
-    if (payload.history && Array.isArray(payload.history)) {
-      setHistory(payload.history);
-      try {
-        localStorage.setItem('restpulse_history', JSON.stringify(payload.history));
-      } catch (e) {}
-    }
-
-    if (payload.globalVariables && Array.isArray(payload.globalVariables)) {
-      setGlobalVariables(payload.globalVariables);
-      try {
-        localStorage.setItem('restpulse_global_vars', JSON.stringify(payload.globalVariables));
-      } catch (e) {}
-    }
-  };
-
-  // Global Paste Listener (Auto-detect cURL / Smart Paste anywhere when not typing in input/textarea)
-  useEffect(() => {
-    const handleGlobalPaste = (e: ClipboardEvent) => {
-      const activeTag = document.activeElement?.tagName?.toLowerCase();
-      const isInput = activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.getAttribute('contenteditable') === 'true';
-      if (isInput) return;
-
-      const pastedText = e.clipboardData?.getData('text');
-      if (!pastedText) return;
-
-      const trimmed = pastedText.trim();
-      const result = detectAndParsePaste(trimmed);
-
-      if (result && result.type !== 'unknown' && result.requests.length > 0) {
+      if (isCmdOrCtrl && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setInitialPasteText(trimmed);
-        setIsQuickNewRequestOpen(true);
-      }
-    };
-
-    window.addEventListener('paste', handleGlobalPaste);
-    return () => window.removeEventListener('paste', handleGlobalPaste);
-  }, []);
-
-  // Global Keyboard Shortcuts (Ctrl+N for Quick Request, Ctrl+Shift+C / Alt+C for Quick cURL)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept if focus is inside an input/textarea and user presses N
-      const activeTag = document.activeElement?.tagName?.toLowerCase();
-      const isInput = activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.getAttribute('contenteditable') === 'true';
-
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'n') {
+        setIsCommandPaletteOpen((prev) => !prev);
+      } else if (e.key === '?' && !['input', 'textarea'].includes((e.target as HTMLElement)?.tagName?.toLowerCase())) {
         e.preventDefault();
-        setIsQuickNewRequestOpen(true);
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        setIsKeyboardShortcutsOpen(true);
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === 'e') {
         e.preventDefault();
-        setSettingsTab('shortcuts');
+        setIsEnvManagerOpen(true);
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        setSettingsTab('auth');
         setIsSettingsOpen(true);
-      } else if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setIsSidebarCollapsed((prev) => !prev);
+      } else if (isCmdOrCtrl && e.key === ',') {
         e.preventDefault();
         setSettingsTab('appearance');
         setIsSettingsOpen(true);
-      } else if (
-        ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'c') ||
-        (e.altKey && e.key.toLowerCase() === 'c')
-      ) {
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === 'i') {
         e.preventDefault();
         setIsQuickCurlOpen(true);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // Execution State (per-request execution tracking and abort controllers)
-  const [executingRequests, setExecutingRequests] = useState<Record<string, AbortController>>({});
-  const [requestStatuses, setRequestStatuses] = useState<Record<string, RequestStatusInfo>>({});
-  const [lastResponse, setLastResponse] = useState<ExecutionResponse | null>(null);
-
-  const handleStopRequest = (requestId: string) => {
-    const controller = executingRequests[requestId];
-    if (controller) {
-      controller.abort();
-      setExecutingRequests((prev) => {
-        const next = { ...prev };
-        delete next[requestId];
-        return next;
-      });
-      setRequestStatuses((prev) => ({
-        ...prev,
-        [requestId]: {
-          state: 'error',
-          statusCode: 0,
-          error: 'Request Cancelled',
-          timestamp: Date.now(),
-        },
-      }));
-      showToast('info', 'Request Stopped', 'The request execution was cancelled.');
-    }
-  };
-
-  // History State
-  const [history, setHistory] = useState<RequestHistoryItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('reststudio_history') || localStorage.getItem('restpulse_history');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [];
-  });
-
-  // Background Auto-Sync effect when Auto-Sync is enabled
-  useEffect(() => {
-    const isAutoSync = getSavedAutoSync();
-    const token = getSavedGitHubToken();
-    const gistId = getSavedGistId();
-
-    if (isAutoSync && token && gistId && organizations.length > 0) {
-      const timer = setTimeout(async () => {
-        try {
-          await pushToGitHubGist(token, gistId, {
-            version: '1.0.0',
-            updatedAt: new Date().toISOString(),
-            organizations,
-            activeOrgId,
-            activeProjectId,
-            environments: activeProject?.environments || [],
-            history,
-          });
-        } catch (err) {
-          console.warn('Background auto-sync note:', err);
-        }
-      }, 3000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [organizations, activeOrgId, activeProjectId, history]);
-
-  // LocalStorage Persistence
-  useEffect(() => {
-    try {
-      localStorage.setItem('reststudio_global_vars', JSON.stringify(globalVariables));
-      localStorage.setItem('restpulse_global_vars', JSON.stringify(globalVariables));
-    } catch (e) {}
-  }, [globalVariables]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('reststudio_organizations', JSON.stringify(organizations));
-      localStorage.setItem('restpulse_organizations', JSON.stringify(organizations));
-    } catch (e) {}
-  }, [organizations]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('reststudio_tabs', JSON.stringify(tabs));
-      localStorage.setItem('restpulse_tabs', JSON.stringify(tabs));
-    } catch (e) {}
-  }, [tabs]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('reststudio_history', JSON.stringify(history));
-      localStorage.setItem('restpulse_history', JSON.stringify(history));
-    } catch (e) {}
-  }, [history]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('reststudio_scratchpad_requests', JSON.stringify(scratchpadRequests));
-    } catch (e) {}
-  }, [scratchpadRequests]);
-
-  // Keep project reference consistent when switching organization
-  useEffect(() => {
-    if (activeOrg) {
-      if (!(activeOrg.projects || []).some((p) => p.id === activeProjectId)) {
-        const firstProj = activeOrg.projects?.[0];
-        if (firstProj) {
-          setActiveProjectId(firstProj.id);
-          const firstFile = firstProj.files?.[0];
-          setActiveFileId(firstFile?.id || null);
-          setActiveRequestId(firstFile?.requests?.[0]?.id || null);
-        }
-      }
-    }
-  }, [activeOrgId]);
-
-  // Derive Scope Context for Variable Resolution (4 Scopes: Local > Env > Org > Global)
-  const activeEnv = activeProject?.environments?.find((e) => e.id === activeProject?.activeEnvId);
-
-  const scopeCtx: ScopeContext = {
-    globalVariables,
-    organizationVariables: activeOrg?.variables || [],
-    organizationName: activeOrg?.name,
-    envVariables: activeEnv?.variables || [],
-    projectVariables: activeEnv?.variables || [],
-    envName: activeEnv?.name,
-    projectName: activeProject?.name,
-    localVariables: activeFile?.fileVariables || {},
-    fileVariables: activeFile?.fileVariables || {},
-    fileName: activeFile?.name,
-  };
-
-  const handleUpdateProjectAuth = (auth: RequestAuth) => {
-    if (!activeOrg || !activeProject) return;
-    setOrganizations((prevOrgs) =>
-      prevOrgs.map((org) => {
-        if (org.id !== activeOrg.id) return org;
-        return {
-          ...org,
-          projects: (org.projects || []).map((proj) => {
-            if (proj.id !== activeProject.id) return proj;
-            return {
-              ...proj,
-              auth,
-              updatedAt: Date.now(),
-            };
-          }),
-        };
-      })
-    );
-  };
-
-  // Splitter mouse drag listener
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDraggingSplitter.current) return;
-      const container = document.getElementById('resizable-container');
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-
-      if (splitOrientation === 'top-bottom') {
-        const relativeY = e.clientY - rect.top;
-        const percentage = Math.max(20, Math.min(80, (relativeY / rect.height) * 100));
-        setSplitRatio(percentage);
-      } else {
-        const relativeX = e.clientX - rect.left;
-        const percentage = Math.max(20, Math.min(80, (relativeX / rect.width) * 100));
-        setSplitRatio(percentage);
-      }
-    };
-
-    const handleMouseUp = () => {
-      isDraggingSplitter.current = false;
-      document.body.style.cursor = 'default';
-      document.body.style.userSelect = 'auto';
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [splitOrientation]);
-
-  // Variable updater helper for pre/post scripts
-  const saveScriptVariables = (newVars?: Record<string, string>) => {
-    if (!newVars || Object.keys(newVars).length === 0) return;
-    if (!activeOrg || !activeProject) return;
-
-    const activeEnvId = activeProject.activeEnvId;
-    if (activeEnvId) {
-      setOrganizations((prevOrgs) =>
-        prevOrgs.map((org) => {
-          if (org.id !== activeOrg.id) return org;
-          return {
-            ...org,
-            projects: (org.projects || []).map((proj) => {
-              if (proj.id !== activeProject.id) return proj;
-              const envs = (proj.environments || []).map((env) => {
-                if (env.id !== activeEnvId) return env;
-                const existingVars = [...(env.variables || [])];
-                Object.entries(newVars).forEach(([key, value]) => {
-                  const existingIdx = existingVars.findIndex((v) => v.key === key);
-                  if (existingIdx >= 0) {
-                    existingVars[existingIdx] = { ...existingVars[existingIdx], value };
-                  } else {
-                    existingVars.push({
-                      id: 'var_' + Math.random().toString(36).substring(2, 9),
-                      key,
-                      value,
-                      secret: false,
-                      enabled: true,
-                    });
-                  }
-                });
-                return { ...env, variables: existingVars };
-              });
-              return { ...proj, environments: envs };
-            }),
-          };
-        })
-      );
-    }
-  };
-
-  // Execute Request Handler
-  const handleExecuteRequest = async (req: RestRequest): Promise<ExecutionResponse> => {
-    const controller = new AbortController();
-    setExecutingRequests((prev) => ({ ...prev, [req.id]: controller }));
-    setRequestStatuses((prev) => ({
-      ...prev,
-      [req.id]: {
-        state: 'loading',
-        timestamp: Date.now(),
-      },
-    }));
-
-    // 1. Resolve URL with 3-level env variables
-    const urlResolution = resolveEnvVariables(req.url, scopeCtx);
-    let targetUrl = urlResolution.resolved;
-
-    // 2. Append query parameters
-    const activeParams = (req?.queryParams || []).filter((p) => p.enabled && p.key);
-    if (activeParams.length > 0) {
-      const qParams = activeParams.map((p) => {
-        const resKey = resolveEnvVariables(p.key, scopeCtx).resolved;
-        const resVal = resolveEnvVariables(p.value, scopeCtx).resolved;
-        return `${encodeURIComponent(resKey)}=${encodeURIComponent(resVal)}`;
-      });
-      targetUrl += (targetUrl.includes('?') ? '&' : '?') + qParams.join('&');
-    }
-
-    // 3. Resolve Headers
-    const resolvedHeaders: Record<string, string> = {};
-    (req?.headers || [])
-      .filter((h) => h.enabled && h.key)
-      .forEach((h) => {
-        const resKey = resolveEnvVariables(h.key, scopeCtx).resolved;
-        const resVal = resolveEnvVariables(h.value, scopeCtx).resolved;
-        resolvedHeaders[resKey] = resVal;
-      });
-
-    // 4. Resolve Auth (Support Inherited Auth from File or Project)
-    let effectiveAuth = req.auth;
-    if (!effectiveAuth || effectiveAuth.type === 'inherit') {
-      effectiveAuth = activeFile?.auth || activeProject?.auth || { type: 'none', bearerToken: '' };
-    }
-
-    if (effectiveAuth.type === 'bearer' && effectiveAuth.bearerToken) {
-      const token = resolveEnvVariables(effectiveAuth.bearerToken, scopeCtx).resolved;
-      resolvedHeaders['Authorization'] = `Bearer ${token}`;
-    } else if (effectiveAuth.type === 'basic') {
-      const username = resolveEnvVariables(effectiveAuth.basicUsername || '', scopeCtx).resolved;
-      const password = resolveEnvVariables(effectiveAuth.basicPassword || '', scopeCtx).resolved;
-      if (username || password) {
-        const credentials = `${username}:${password}`;
-        const encoded = typeof btoa !== 'undefined' ? btoa(credentials) : '';
-        resolvedHeaders['Authorization'] = `Basic ${encoded}`;
-      }
-    } else if (effectiveAuth.type === 'apikey') {
-      const key = resolveEnvVariables(effectiveAuth.apiKeyKey || '', scopeCtx).resolved;
-      const value = resolveEnvVariables(effectiveAuth.apiKeyValue || '', scopeCtx).resolved;
-      const addTo = effectiveAuth.apiKeyAddTo || 'header';
-      if (key && value) {
-        if (addTo === 'header') {
-          resolvedHeaders[key] = value;
-        } else if (addTo === 'query') {
-          targetUrl += (targetUrl.includes('?') ? '&' : '?') + `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
-        }
-      }
-    }
-
-    // Ensure Content-Type header is set if missing or if body mode requires it
-    const existingContentTypeKey = Object.keys(resolvedHeaders).find(
-      (k) => k.toLowerCase() === 'content-type'
-    );
-    if (!existingContentTypeKey) {
-      if (req.body.mode === 'json') {
-        resolvedHeaders['Content-Type'] = 'application/json';
-      } else if (req.body.mode === 'x-www-form-urlencoded') {
-        resolvedHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
-      } else if (req.body.mode === 'raw') {
-        resolvedHeaders['Content-Type'] = 'text/plain';
-      }
-    }
-
-    // 5. Resolve Body
-    let resolvedBody: any = undefined;
-    if (req.body.mode === 'json' || req.body.mode === 'raw' || req.body.mode === 'x-www-form-urlencoded') {
-      resolvedBody = resolveEnvVariables(req.body.rawText, scopeCtx).resolved;
-    }
-
-    // 6. RUN PRE-REQUEST SCRIPT IF ENABLED
-    let scriptLogs: string[] = [];
-    if (req.preRequestScript?.enabled) {
-      const preResult = await runPreRequestScript(
-        req,
-        scopeCtx,
-        resolvedHeaders,
-        targetUrl,
-        typeof resolvedBody === 'string' ? resolvedBody : JSON.stringify(resolvedBody || '')
-      );
-
-      scriptLogs = preResult.logs || [];
-
-      if (preResult.newVariables && Object.keys(preResult.newVariables).length > 0) {
-        saveScriptVariables(preResult.newVariables);
-      }
-
-      if (!preResult.success && preResult.error) {
-        const preErrResp: ExecutionResponse = {
-          status: 400,
-          statusText: 'Pre-Request Validation Failed',
-          headers: {},
-          body: JSON.stringify({ error: preResult.error, logs: preResult.logs }, null, 2),
-          size: 0,
-          duration: 0,
-          timestamp: Date.now(),
-          ok: false,
-          error: preResult.error,
-          scriptLogs,
-        };
-        setLastResponse(preErrResp);
-        setExecutingRequests((prev) => {
-          const next = { ...prev };
-          delete next[req.id];
-          return next;
-        });
-        showToast('error', 'Pre-Request Script Error', preResult.error);
-        return preErrResp;
-      }
-
-      if (preResult.modifiedUrl) {
-        targetUrl = preResult.modifiedUrl;
-      }
-      if (preResult.modifiedHeaders) {
-        Object.assign(resolvedHeaders, preResult.modifiedHeaders);
-      }
-      if (preResult.modifiedBody) {
-        resolvedBody = preResult.modifiedBody;
-      }
-    }
-
-    try {
-      const responseData = await executeHttpRequest({
-        method: req.method,
-        url: targetUrl,
-        headers: resolvedHeaders,
-        body: resolvedBody,
-        signal: controller.signal,
-      });
-      responseData.scriptLogs = scriptLogs;
-
-      // 7. RUN POST-REQUEST SCRIPT IF ENABLED
-      if (req.postRequestScript?.enabled) {
-        const postResult = runPostRequestScript(req, responseData);
-
-        if (postResult.logs && postResult.logs.length > 0) {
-          responseData.scriptLogs = [...(responseData.scriptLogs || []), ...postResult.logs];
-        }
-
-        if (postResult.newVariables && Object.keys(postResult.newVariables).length > 0) {
-          saveScriptVariables(postResult.newVariables);
-        }
-
-        if (postResult.assertions && postResult.assertions.length > 0) {
-          responseData.testResults = postResult.assertions;
-        }
-      }
-
-      setLastResponse(responseData);
-      setRequestStatuses((prev) => ({
-        ...prev,
-        [req.id]: {
-          state: responseData.ok || (responseData.status >= 200 && responseData.status < 400) ? 'success' : 'error',
-          statusCode: responseData.status,
-          duration: responseData.duration,
-          error: responseData.error,
-          timestamp: Date.now(),
-        },
-      }));
-
-      if (req.assertions && req.assertions.length > 0) {
-        const { assertions: evaluated } = evaluateAssertions(req.assertions, responseData);
-        handleUpdateActiveRequest({
-          ...req,
-          assertions: evaluated,
-        });
-      }
-
-      const historyItem: RequestHistoryItem = {
-        id: 'hist_' + Date.now(),
-        projectId: activeProject?.id || 'standalone_scratchpad',
-        fileId: activeFile?.id,
-        requestId: req.id,
-        requestName: req.name || `${req.method} ${targetUrl}`,
-        method: req.method,
-        url: req.url,
-        resolvedUrl: targetUrl,
-        status: responseData.status,
-        duration: responseData.duration,
-        size: responseData.size,
-        timestamp: Date.now(),
-        response: responseData,
-      };
-
-      setHistory((prev) => [historyItem, ...prev.slice(0, 49)]);
-      return responseData;
-    } catch (err: any) {
-      const errResp: ExecutionResponse = {
-        status: 0,
-        statusText: 'Network Error',
-        headers: {},
-        body: JSON.stringify({ error: err.message || 'Failed to execute request' }, null, 2),
-        size: 0,
-        duration: 0,
-        timestamp: Date.now(),
-        ok: false,
-        error: err.message,
-        scriptLogs,
-      };
-      setLastResponse(errResp);
-      setRequestStatuses((prev) => ({
-        ...prev,
-        [req.id]: {
-          state: 'error',
-          statusCode: errResp.status || 0,
-          error: errResp.error,
-          timestamp: Date.now(),
-        },
-      }));
-      return errResp;
-    } finally {
-      setExecutingRequests((prev) => {
-        const next = { ...prev };
-        delete next[req.id];
-        return next;
-      });
-    }
-  };
-
-  // Keyboard shortcut listener for Ctrl/Cmd + Enter to send
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        setIsQuickNewRequestOpen(true);
+      } else if (isCmdOrCtrl && e.key === 'Enter') {
         if (activeRequest && activeTabMode === 'editor') {
           e.preventDefault();
           handleExecuteRequest(activeRequest);
         }
       }
     };
+
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [activeRequest, activeTabMode, scopeCtx]);
+  }, [activeRequest, activeTabMode, handleExecuteRequest]);
 
-  // Tab Management Helpers
-  const handleOpenRequestInTab = (fileId: string, requestId: string) => {
-    setActiveFileId(fileId);
-    setActiveRequestId(requestId);
-
-    const file = activeProject?.files?.find((f) => f.id === fileId);
-    const req = file?.requests?.find((r) => r.id === requestId);
-    const reqName = req?.name || 'REST Request';
-    const reqMethod = req?.method || 'GET';
-
-    const existingTab = tabs?.find((t) => t.requestId === requestId);
-    if (existingTab) {
-      setTabs((prevTabs) =>
-        prevTabs.map((t) =>
-          t.requestId === requestId ? { ...t, title: reqName, method: reqMethod } : t
-        )
-      );
-      setActiveTabId(existingTab.id);
-    } else {
-      const newTab: WorkspaceTab = {
-        id: 'tab_' + Math.random().toString(36).substring(2, 9),
-        type: 'request',
-        title: reqName,
-        fileId,
-        requestId,
-        method: reqMethod,
-      };
-      setTabs([...tabs, newTab]);
-      setActiveTabId(newTab.id);
-    }
-    setActiveTabMode('editor');
-  };
-
-  const handleOpenScratchpadRequestInTab = (requestId: string) => {
-    setActiveFileId(null);
-    setActiveRequestId(requestId);
-
-    const req = scratchpadRequests.find((r) => r.id === requestId);
-    const reqName = req?.name || 'Draft Request';
-    const reqMethod = req?.method || 'GET';
-
-    const existingTab = tabs?.find((t) => t.requestId === requestId);
-    if (existingTab) {
-      setTabs((prevTabs) =>
-        prevTabs.map((t) =>
-          t.requestId === requestId ? { ...t, title: reqName, method: reqMethod } : t
-        )
-      );
-      setActiveTabId(existingTab.id);
-    } else {
-      const newTab: WorkspaceTab = {
-        id: 'tab_' + Math.random().toString(36).substring(2, 9),
-        type: 'request',
-        title: reqName,
-        requestId,
-        method: reqMethod,
-      };
-      setTabs([...tabs, newTab]);
-      setActiveTabId(newTab.id);
-    }
-    setActiveTabMode('editor');
-  };
-
-  const handleCreateNewTabWithDummy = () => {
-    let currentOrgs = organizations;
-    if (!currentOrgs || currentOrgs.length === 0) {
-      currentOrgs = INITIAL_ORGANIZATIONS;
-      setOrganizations(INITIAL_ORGANIZATIONS);
-    }
-
-    let org = currentOrgs.find((o) => o.id === activeOrgId) || currentOrgs[0];
-    if (!org) {
-      currentOrgs = INITIAL_ORGANIZATIONS;
-      setOrganizations(INITIAL_ORGANIZATIONS);
-      org = INITIAL_ORGANIZATIONS[0];
-    }
-    setActiveOrgId(org.id);
-
-    let project = org.projects?.find((p) => p.id === activeProjectId) || org.projects?.[0];
-    if (!project) {
-      project = {
-        id: 'proj_' + Math.random().toString(36).substring(2, 9),
-        name: 'Default Workspace Project',
-        description: 'Auto-created workspace project',
-        files: [],
-        environments: [],
-        folders: [],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        activeEnvId: null,
-      };
-      org.projects = [...(org.projects || []), project];
-      setOrganizations([...currentOrgs]);
-    }
-    setActiveProjectId(project.id);
-
-    let targetFile = activeFile || project.files?.[0];
-
-    const dummyReq: RestRequest = {
-      id: 'req_' + Math.random().toString(36).substring(2, 9),
-      name: 'New Request',
-      method: 'GET',
-      url: '{{baseUrl}}/users',
-      headers: [
-        { id: 'h1', key: 'Accept', value: 'application/json', enabled: true },
-      ],
-      queryParams: [],
-      body: { mode: 'none', rawText: '' },
-      auth: { type: 'inherit', bearerToken: '' },
-    };
-
-    if (!targetFile) {
-      const newFile: RestFile = {
-        id: 'file_' + Math.random().toString(36).substring(2, 9),
-        name: 'requests.http',
-        rawContent: '',
-        requests: [dummyReq],
-        updatedAt: Date.now(),
-      };
-      const updatedFiles = [...(project.files || []), newFile];
-      updateProjectFiles(updatedFiles);
-      handleOpenRequestInTab(newFile.id, dummyReq.id);
-    } else {
-      const updatedFiles = (project.files || []).map((f) =>
-        f.id === targetFile!.id ? { ...f, requests: [...(f.requests || []), dummyReq] } : f
-      );
-      updateProjectFiles(updatedFiles);
-      handleOpenRequestInTab(targetFile.id, dummyReq.id);
-    }
-  };
-
-  const handleTogglePinTab = (tabId: string) => {
-    setTabs((prevTabs) => {
-      const target = prevTabs.find((t) => t.id === tabId);
-      const isCurrentlyPinned = Boolean(target?.isPinned);
-      const updated = prevTabs.map((t) =>
-        t.id === tabId ? { ...t, isPinned: !isCurrentlyPinned } : t
-      );
-      const pinned = updated.filter((t) => t.isPinned);
-      const unpinned = updated.filter((t) => !t.isPinned);
-      showToast(
-        'info',
-        isCurrentlyPinned ? 'Tab Unpinned' : 'Tab Pinned',
-        isCurrentlyPinned ? 'Tab can now be closed normally.' : 'Pinned to start of tab bar.'
-      );
-      return [...pinned, ...unpinned];
-    });
-  };
-
-  const handleCloseTab = (tabId: string) => {
-    const tabToClose = tabs.find((t) => t.id === tabId);
-    if (tabToClose?.isPinned) {
-      showToast('info', 'Pinned Tab Unpinned', 'Unpinned and closed tab.');
-    }
-    if (tabs.length <= 1) {
-      setTabs([
-        {
-          id: 'tab_onboarding',
-          type: 'onboarding',
-          title: 'Welcome Workspace',
-        },
-      ]);
-      setActiveTabId('tab_onboarding');
-      return;
-    }
-
-    const newTabs = tabs.filter((t) => t.id !== tabId);
-    setTabs(newTabs);
-    if (activeTabId === tabId) {
-      setActiveTabId(newTabs[newTabs.length - 1].id);
-    }
-  };
-
-  const handleCloseOtherTabs = (targetTabId: string) => {
-    const targetTab = tabs.find((t) => t.id === targetTabId);
-    if (targetTab) {
-      const newTabs = tabs.filter((t) => t.id === targetTabId || t.isPinned);
-      setTabs(newTabs);
-      setActiveTabId(targetTab.id);
-      showToast('info', 'Tabs Closed', 'Closed unpinned tabs.');
-    }
-  };
-
-  const handleCloseTabsToRight = (targetTabId: string) => {
-    const index = tabs.findIndex((t) => t.id === targetTabId);
-    if (index !== -1) {
-      const newTabs = tabs.filter((t, i) => i <= index || t.isPinned);
-      setTabs(newTabs);
-      if (!newTabs.some((t) => t.id === activeTabId)) {
-        setActiveTabId(targetTabId);
-      }
-      showToast('info', 'Tabs Closed', 'Closed unpinned tabs to the right.');
-    }
-  };
-
-  const handleCloseTabsToLeft = (targetTabId: string) => {
-    const index = tabs.findIndex((t) => t.id === targetTabId);
-    if (index !== -1) {
-      const newTabs = tabs.filter((t, i) => i >= index || t.isPinned);
-      setTabs(newTabs);
-      if (!newTabs.some((t) => t.id === activeTabId)) {
-        setActiveTabId(targetTabId);
-      }
-      showToast('info', 'Tabs Closed', 'Closed unpinned tabs to the left.');
-    }
-  };
-
-  const handleCloseAllTabs = () => {
-    const pinnedTabs = tabs.filter((t) => t.isPinned);
-    if (pinnedTabs.length > 0) {
-      setTabs(pinnedTabs);
-      if (!pinnedTabs.some((t) => t.id === activeTabId)) {
-        setActiveTabId(pinnedTabs[0].id);
-      }
-      showToast('info', 'Unpinned Tabs Closed', 'Closed all unpinned workspace tabs.');
-    } else {
-      const onboardingTab: WorkspaceTab = {
-        id: 'tab_onboarding',
-        type: 'onboarding',
-        title: 'Welcome Workspace',
-      };
-      setTabs([onboardingTab]);
-      setActiveTabId(onboardingTab.id);
-      showToast('info', 'All Tabs Closed', 'Closed all open workspace tabs.');
-    }
-  };
-
-  const handleLaunchWorkspace = () => {
-    // 1. Check if there is already an open request tab in `tabs`
-    const openRequestTab = tabs.find((t) => t.type === 'request');
-    if (openRequestTab) {
-      setActiveTabId(openRequestTab.id);
-      if (openRequestTab.fileId && openRequestTab.requestId) {
-        setActiveFileId(openRequestTab.fileId);
-        setActiveRequestId(openRequestTab.requestId);
-      } else if (openRequestTab.requestId) {
-        setActiveFileId(null);
-        setActiveRequestId(openRequestTab.requestId);
-      }
-      setActiveTabMode('editor');
-      return;
-    }
-
-    // 2. Check if activeProject has a file with requests
-    const targetFile = activeFile || activeProject?.files?.[0];
-    if (targetFile && targetFile.requests && targetFile.requests.length > 0) {
-      handleOpenRequestInTab(targetFile.id, targetFile.requests[0].id);
-    } else if (scratchpadRequests.length > 0) {
-      handleOpenScratchpadRequestInTab(scratchpadRequests[0].id);
-    } else {
-      // Create a dummy request/file if none exist and go to editor
-      handleCreateNewTabWithDummy();
-    }
-  };
-
-  const handleSelectSampleRequest = (sampleType: 'get_todo' | 'post_json' | 'auth' | 'github_zen') => {
-    let targetFile = activeFile || activeProject?.files?.[0];
-    let project = activeProject;
-
-    if (!project) {
-      if (!activeOrg && organizations.length > 0) {
-        setActiveOrgId(organizations[0].id);
-      }
-      project = activeOrg?.projects?.[0] || organizations?.[0]?.projects?.[0];
-      if (project) {
-        setActiveProjectId(project.id);
-      }
-    }
-
-    let req: RestRequest;
-    if (sampleType === 'get_todo') {
-      req = {
-        id: 'req_' + Math.random().toString(36).substring(2, 9),
-        name: 'GET Todo Sanity Check',
-        method: 'GET',
-        url: 'https://jsonplaceholder.typicode.com/todos/1',
-        headers: [
-          { id: 'h1', key: 'Accept', value: 'application/json', enabled: true },
-        ],
-        queryParams: [],
-        body: { mode: 'none', rawText: '' },
-        auth: { type: 'none', bearerToken: '' },
-      };
-    } else if (sampleType === 'post_json') {
-      req = {
-        id: 'req_' + Math.random().toString(36).substring(2, 9),
-        name: 'POST Create Post',
-        method: 'POST',
-        url: 'https://jsonplaceholder.typicode.com/posts',
-        headers: [
-          { id: 'h1', key: 'Content-Type', value: 'application/json', enabled: true },
-        ],
-        queryParams: [],
-        body: {
-          mode: 'json',
-          rawText: JSON.stringify(
-            {
-              title: 'RestStudio API Test',
-              body: 'Testing HTTP request payload',
-              userId: 1,
-            },
-            null,
-            2
-          ),
-        },
-        auth: { type: 'none', bearerToken: '' },
-      };
-    } else if (sampleType === 'auth') {
-      req = {
-        id: 'req_' + Math.random().toString(36).substring(2, 9),
-        name: 'GET Bearer Auth Test',
-        method: 'GET',
-        url: 'https://httpbin.org/bearer',
-        headers: [],
-        queryParams: [],
-        body: { mode: 'none', rawText: '' },
-        auth: { type: 'bearer', bearerToken: 'demo_token_xyz123' },
-      };
-    } else {
-      req = {
-        id: 'req_' + Math.random().toString(36).substring(2, 9),
-        name: 'GET GitHub Zen',
-        method: 'GET',
-        url: 'https://api.github.com/zen',
-        headers: [
-          { id: 'h1', key: 'User-Agent', value: 'RestStudio-Desktop/1.0', enabled: true },
-        ],
-        queryParams: [],
-        body: { mode: 'none', rawText: '' },
-        auth: { type: 'none', bearerToken: '' },
-      };
-    }
-
-    if (project) {
-      if (!targetFile) {
-        const newFile: RestFile = {
-          id: 'file_' + Math.random().toString(36).substring(2, 9),
-          name: 'samples.http',
-          rawContent: '',
-          requests: [req],
-          updatedAt: Date.now(),
-        };
-        const updatedFiles = [...(project.files || []), newFile];
-        updateProjectFiles(updatedFiles);
-        handleOpenRequestInTab(newFile.id, req.id);
-        return;
-      } else {
-        const updatedFiles = (project.files || []).map((f) =>
-          f.id === targetFile.id ? { ...f, requests: [...(f.requests || []), req] } : f
-        );
-        updateProjectFiles(updatedFiles);
-        handleOpenRequestInTab(targetFile.id, req.id);
-        return;
-      }
-    }
-
-    setActiveTabMode('editor');
-  };
-
-  // State Updates for Organizations / Projects / Files
-  const updateProjectFiles = (updatedFiles: RestFile[]) => {
-    if (!activeOrg || !activeProject) return;
-    setOrganizations((prevOrgs) =>
-      prevOrgs.map((org) =>
-        org.id === activeOrg.id
-          ? {
-              ...org,
-              projects: (org.projects || []).map((p) =>
-                p.id === activeProject.id ? { ...p, files: updatedFiles, updatedAt: Date.now() } : p
-              ),
-            }
-          : org
-      )
-    );
-  };
-
-  const handleUpdateActiveRequest = (updatedReq: RestRequest) => {
-    // Check if it's a scratchpad request
-    const isScratchpad = scratchpadRequests.some((r) => r.id === updatedReq.id);
-    if (isScratchpad) {
-      setScratchpadRequests((prev) =>
-        prev.map((r) => (r.id === updatedReq.id ? updatedReq : r))
-      );
-      setTabs((prevTabs) =>
-        prevTabs.map((t) =>
-          t.requestId === updatedReq.id
-            ? { ...t, title: updatedReq.name || 'REST Request', method: updatedReq.method }
-            : t
-        )
-      );
-      return;
-    }
-
-    if (!activeFile || !activeProject) return;
-    const updatedRequests = (activeFile.requests || []).map((r) => (r.id === updatedReq.id ? updatedReq : r));
-    const updatedFiles = (activeProject.files || []).map((f) =>
-      f.id === activeFile.id ? { ...f, requests: updatedRequests, updatedAt: Date.now() } : f
-    );
-    updateProjectFiles(updatedFiles);
-    setTabs((prevTabs) =>
-      prevTabs.map((t) =>
-        t.requestId === updatedReq.id
-          ? { ...t, title: updatedReq.name || 'REST Request', method: updatedReq.method }
-          : t
-      )
-    );
-  };
-
-  // FILE CRUD
+  // Sidebar CRUD Operations
   const handleCreateFile = (fileName: string, folderId?: string) => {
     if (!activeOrg || !activeProject) return;
     const newFileId = 'file_' + Math.random().toString(36).substring(2, 9);
@@ -1364,39 +369,12 @@ export default function App() {
     };
 
     const updatedFiles = [...(activeProject.files || []), dupFile];
-
-    // Preserve folder location if the file was in a folder
-    const parentFolder = (activeProject.folders || []).find((f) => f.fileIds?.includes(fileId));
-    if (parentFolder) {
-      const updatedFolders = (activeProject.folders || []).map((f) =>
-        f.id === parentFolder.id ? { ...f, fileIds: [...(f.fileIds || []), dupFileId] } : f
-      );
-      setOrganizations((prev) =>
-        prev.map((org) =>
-          org.id === activeOrg.id
-            ? {
-                ...org,
-                projects: (org.projects || []).map((p) =>
-                  p.id === activeProject.id
-                    ? { ...p, files: updatedFiles, folders: updatedFolders }
-                    : p
-                ),
-              }
-            : org
-        )
-      );
-    } else {
-      updateProjectFiles(updatedFiles);
-    }
+    updateProjectFiles(updatedFiles);
 
     if (duplicatedRequests.length > 0) {
       handleOpenRequestInTab(dupFileId, duplicatedRequests[0].id);
     }
-    showToast(
-      'success',
-      'File Duplicated Successfully',
-      `Created "${dupFile.name}" with ${duplicatedRequests.length} endpoints.`
-    );
+    showToast('success', 'File Duplicated', `Created "${dupFile.name}".`);
   };
 
   const handleDeleteFile = (fileId: string) => {
@@ -1408,22 +386,14 @@ export default function App() {
       fileIds: (f.fileIds || []).filter((id) => id !== fileId),
     }));
 
-    // Close any open tabs belonging to this file or any of its endpoints
     const fileRequestIds = new Set((targetFile?.requests || []).map((r) => r.id));
     setTabs((prevTabs) => {
       const remainingTabs = prevTabs.filter(
         (t) => t.fileId !== fileId && (!t.requestId || !fileRequestIds.has(t.requestId))
       );
-      if (remainingTabs.length === 0) {
-        return [
-          {
-            id: 'tab_onboarding',
-            type: 'onboarding',
-            title: 'Welcome Workspace',
-          },
-        ];
-      }
-      return remainingTabs;
+      return remainingTabs.length === 0
+        ? [{ id: 'tab_onboarding', type: 'onboarding', title: 'Welcome Workspace' }]
+        : remainingTabs;
     });
 
     setOrganizations((prev) =>
@@ -1443,9 +413,8 @@ export default function App() {
 
     if (activeFileId === fileId) {
       if (updatedFiles.length > 0) {
-        const nextFile = updatedFiles[0];
-        setActiveFileId(nextFile.id);
-        setActiveRequestId(nextFile.requests?.[0]?.id || null);
+        setActiveFileId(updatedFiles[0].id);
+        setActiveRequestId(updatedFiles[0].requests?.[0]?.id || null);
       } else if (scratchpadRequests.length > 0) {
         handleOpenScratchpadRequestInTab(scratchpadRequests[0].id);
       } else {
@@ -1454,7 +423,7 @@ export default function App() {
       }
     }
 
-    showToast('info', 'File Deleted', `Deleted file "${targetFile?.name || 'file'}" and closed associated tabs.`);
+    showToast('info', 'File Deleted', `Deleted file "${targetFile?.name || 'file'}".`);
   };
 
   const handleMoveFileToFolder = (fileId: string, targetFolderId: string | null) => {
@@ -1488,7 +457,6 @@ export default function App() {
     );
   };
 
-  // FOLDER CRUD
   const handleCreateFolder = (folderName: string) => {
     if (!activeProject) return;
     const newFolder = {
@@ -1496,7 +464,6 @@ export default function App() {
       name: folderName,
       fileIds: [],
     };
-
     setOrganizations((prev) =>
       prev.map((org) =>
         org.id === activeOrg?.id
@@ -1551,9 +518,7 @@ export default function App() {
     showToast('info', 'Folder Deleted', `Deleted folder "${targetFolder?.name || 'folder'}".`);
   };
 
-  // REQUEST CRUD
   const handleCreateRequest = (fileId: string, method: HTTPMethod, name: string, url?: string) => {
-    const targetFile = (activeProject.files || []).find((f) => f.id === fileId);
     const newReq: RestRequest = {
       id: 'req_' + Math.random().toString(36).substring(2, 9),
       name: name || `${method} Endpoint`,
@@ -1565,12 +530,12 @@ export default function App() {
       auth: { type: 'none', bearerToken: '' },
     };
 
-    const updatedFiles = activeProject.files.map((f) =>
+    const updatedFiles = (activeProject?.files || []).map((f) =>
       f.id === fileId ? { ...f, requests: [...(f.requests || []), newReq], updatedAt: Date.now() } : f
     );
     updateProjectFiles(updatedFiles);
     handleOpenRequestInTab(fileId, newReq.id);
-    showToast('success', 'Endpoint Created', `Added "${newReq.name}" to ${targetFile?.name || 'file'}.`);
+    showToast('success', 'Endpoint Created', `Added "${newReq.name}".`);
   };
 
   const handleCreateNewFileAndRequest = (fileName: string, method: HTTPMethod, name: string, url?: string) => {
@@ -1608,11 +573,9 @@ export default function App() {
     }
 
     if (!activeProject) return;
-
     let targetFile = (activeProject.files || []).find((f) => f.id === targetFileId) || activeFile || activeProject.files?.[0];
 
     if (!targetFile) {
-      // Create a default file if project has no files
       const newFile: RestFile = {
         id: 'file_' + Math.random().toString(36).substring(2, 9),
         name: 'curl_requests',
@@ -1667,7 +630,6 @@ export default function App() {
       name: `${targetReq.name} (Copy)`,
     };
 
-    // Insert right after targetReq for intuitive ordering
     const targetIdx = (targetFile.requests || []).findIndex((r) => r.id === requestId);
     const updatedRequests = [...(targetFile.requests || [])];
     if (targetIdx !== -1) {
@@ -1681,11 +643,7 @@ export default function App() {
     );
     updateProjectFiles(updatedFiles);
     handleOpenRequestInTab(fileId, dupReq.id);
-    showToast(
-      'success',
-      'Request Duplicated',
-      `Duplicated "${targetReq.name}" as "${dupReq.name}" in ${targetFile.name}.`
-    );
+    showToast('success', 'Request Duplicated', `Duplicated "${targetReq.name}".`);
   };
 
   const handleDeleteRequest = (fileId: string, requestId: string) => {
@@ -1700,19 +658,11 @@ export default function App() {
     );
     updateProjectFiles(updatedFiles);
 
-    // Close open tab for this request
     setTabs((prevTabs) => {
       const remaining = prevTabs.filter((t) => t.requestId !== requestId);
-      if (remaining.length === 0) {
-        return [
-          {
-            id: 'tab_onboarding',
-            type: 'onboarding',
-            title: 'Welcome Workspace',
-          },
-        ];
-      }
-      return remaining;
+      return remaining.length === 0
+        ? [{ id: 'tab_onboarding', type: 'onboarding', title: 'Welcome Workspace' }]
+        : remaining;
     });
 
     if (activeRequestId === requestId) {
@@ -1730,7 +680,7 @@ export default function App() {
       }
     }
 
-    showToast('info', 'Endpoint Deleted', `Deleted endpoint "${targetReq?.name || 'request'}" and closed its tab.`);
+    showToast('info', 'Endpoint Deleted', `Deleted endpoint "${targetReq?.name || 'request'}".`);
   };
 
   const handleMoveRequestOrder = (fileId: string, requestId: string, direction: 'up' | 'down') => {
@@ -1755,7 +705,6 @@ export default function App() {
     updateProjectFiles(updatedFiles);
   };
 
-  // STANDALONE SCRATCHPAD CRUD
   const handleCreateScratchpadRequest = (
     method: HTTPMethod = 'GET',
     name: string = 'Draft Request',
@@ -1778,7 +727,7 @@ export default function App() {
 
     setScratchpadRequests((prev) => [newReq, ...prev]);
     handleOpenScratchpadRequestInTab(newReq.id);
-    showToast('success', 'Draft Request Created', `Created draft "${newReq.name}" (no org/env required).`);
+    showToast('success', 'Draft Request Created', `Created draft "${newReq.name}".`);
   };
 
   const handleRenameScratchpadRequest = (requestId: string, newName: string) => {
@@ -1820,7 +769,6 @@ export default function App() {
     const updated = scratchpadRequests.filter((r) => r.id !== requestId);
     setScratchpadRequests(updated);
 
-    // Close tab if open
     setTabs((prevTabs) => prevTabs.filter((t) => t.requestId !== requestId));
     if (activeRequestId === requestId) {
       if (updated.length > 0) {
@@ -1844,7 +792,6 @@ export default function App() {
 
     const targetOrg = organizations.find((o) => o.id === targetOrgId) || organizations[0];
     const targetProj = (targetOrg.projects || []).find((p) => p.id === targetProjectId) || targetOrg.projects?.[0];
-
     if (!targetProj) return;
 
     const reqToInsert: RestRequest = {
@@ -1909,1182 +856,486 @@ export default function App() {
     showToast('success', 'Saved to Project', `Saved "${reqToInsert.name}" to project collection!`);
   };
 
-  // BATCH MULTI-DELETE WORKSPACE HANDLERS
-  const handleBatchDeleteOrganizations = (orgIds: string[]) => {
-    if (!orgIds || orgIds.length === 0) return;
-    const orgIdSet = new Set(orgIds);
-    const remainingOrgs = organizations.filter((o) => !orgIdSet.has(o.id));
-
-    if (remainingOrgs.length === 0) {
-      const defaultOrg: Organization = {
-        id: 'org_' + Math.random().toString(36).substring(2, 9),
-        name: 'Personal Workspace',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        variables: [],
-        projects: [
-          {
-            id: 'proj_' + Math.random().toString(36).substring(2, 9),
-            name: 'API Core Services',
-            description: 'Core project workspace',
-            createdAt: Date.now(),
-            folders: [],
-            files: [
-              {
-                id: 'file_' + Math.random().toString(36).substring(2, 9),
-                name: 'endpoints.http',
-                rawContent: '### GET Health Check\nGET https://httpbin.org/get',
-                requests: [
-                  {
-                    id: 'req_' + Math.random().toString(36).substring(2, 9),
-                    name: 'Health Check',
-                    method: 'GET',
-                    url: 'https://httpbin.org/get',
-                    headers: [],
-                    queryParams: [],
-                    body: { mode: 'none', rawText: '' },
-                    auth: { type: 'none', bearerToken: '' },
-                  },
-                ],
-                updatedAt: Date.now(),
-              },
-            ],
-            environments: [
-              {
-                id: 'env_dev',
-                name: 'Development',
-                variables: [{ id: 'var_base_url', key: 'BASE_URL', value: 'https://httpbin.org', enabled: true }],
-              },
-            ],
-            activeEnvId: 'env_dev',
-            updatedAt: Date.now(),
-          },
-        ],
-      };
-      setOrganizations([defaultOrg]);
-      setActiveOrgId(defaultOrg.id);
-      setActiveProjectId(defaultOrg.projects[0].id);
-      setActiveFileId(defaultOrg.projects[0].files[0].id);
-      setActiveRequestId(defaultOrg.projects[0].files[0].requests[0].id);
-      setTabs([
-        {
-          id: `tab_${defaultOrg.projects[0].files[0].requests[0].id}`,
-          type: 'request',
-          title: defaultOrg.projects[0].files[0].requests[0].name,
-          fileId: defaultOrg.projects[0].files[0].id,
-          requestId: defaultOrg.projects[0].files[0].requests[0].id,
-        },
-      ]);
-    } else {
-      setOrganizations(remainingOrgs);
-      if (orgIdSet.has(activeOrgId)) {
-        const nextOrg = remainingOrgs[0];
-        setActiveOrgId(nextOrg.id);
-        const nextProj = (nextOrg.projects || [])[0];
-        if (nextProj) {
-          setActiveProjectId(nextProj.id);
-          const nextFile = (nextProj.files || [])[0];
-          if (nextFile) {
-            setActiveFileId(nextFile.id);
-            setActiveRequestId(nextFile.requests?.[0]?.id || null);
-          } else {
-            setActiveFileId(null);
-            setActiveRequestId(null);
-          }
-        } else {
-          setActiveProjectId('');
-          setActiveFileId(null);
-          setActiveRequestId(null);
-        }
-      }
-    }
-    showToast('info', 'Organizations Deleted', `Deleted ${orgIds.length} organization(s).`);
-  };
-
-  const handleBatchDeleteProjects = (orgId: string, projectIds: string[]) => {
-    if (!projectIds || projectIds.length === 0) return;
-    const projIdSet = new Set(projectIds);
-
+  const handleUpdateProjectAuth = (auth: RequestAuth) => {
+    if (!activeOrg || !activeProject) return;
     setOrganizations((prevOrgs) =>
-      prevOrgs.map((org) => {
-        if (org.id !== orgId) return org;
-        let updatedProjects = (org.projects || []).filter((p) => !projIdSet.has(p.id));
-        if (updatedProjects.length === 0) {
-          updatedProjects = [
-            {
-              id: 'proj_' + Math.random().toString(36).substring(2, 9),
-              name: 'Default Project',
-              description: 'Default project workspace',
-              createdAt: Date.now(),
-              folders: [],
-              files: [],
-              environments: [
-                {
-                  id: 'env_dev',
-                  name: 'Development',
-                  variables: [],
-                },
-              ],
-              activeEnvId: 'env_dev',
-              updatedAt: Date.now(),
-            },
-          ];
-        }
-        return {
-          ...org,
-          projects: updatedProjects,
-        };
-      })
-    );
-
-    if (orgId === activeOrgId && projIdSet.has(activeProjectId)) {
-      const currentOrg = organizations.find((o) => o.id === orgId);
-      const remainingProjects = (currentOrg?.projects || []).filter((p) => !projIdSet.has(p.id));
-      if (remainingProjects.length > 0) {
-        const nextProj = remainingProjects[0];
-        setActiveProjectId(nextProj.id);
-        const nextFile = (nextProj.files || [])[0];
-        if (nextFile) {
-          setActiveFileId(nextFile.id);
-          setActiveRequestId(nextFile.requests?.[0]?.id || null);
-        } else {
-          setActiveFileId(null);
-          setActiveRequestId(null);
-        }
-      }
-    }
-
-    showToast('info', 'Projects Deleted', `Deleted ${projectIds.length} project(s).`);
-  };
-
-  const handleBatchDeleteEnvironments = (orgId: string, projectId: string, envIds: string[]) => {
-    if (!envIds || envIds.length === 0) return;
-    const envIdSet = new Set(envIds);
-
-    setOrganizations((prevOrgs) =>
-      prevOrgs.map((org) => {
-        if (org.id !== orgId) return org;
-        return {
-          ...org,
-          projects: (org.projects || []).map((p) => {
-            if (p.id !== projectId) return p;
-            const updatedEnvs = (p.environments || []).filter((e) => !envIdSet.has(e.id));
-            const newActiveEnvId =
-              p.activeEnvId && envIdSet.has(p.activeEnvId)
-                ? updatedEnvs[0]?.id || ''
-                : p.activeEnvId;
-            return {
-              ...p,
-              environments: updatedEnvs,
-              activeEnvId: newActiveEnvId,
-            };
-          }),
-        };
-      })
-    );
-    showToast('info', 'Environments Deleted', `Deleted ${envIds.length} environment(s).`);
-  };
-
-  const handleBatchDeleteGlobalVars = (varKeys: string[]) => {
-    if (!varKeys || varKeys.length === 0) return;
-    const keySet = new Set(varKeys);
-    setGlobalVariables((prev) => prev.filter((v) => !keySet.has(v.key)));
-    showToast('info', 'Global Variables Deleted', `Deleted ${varKeys.length} global variable(s).`);
-  };
-
-  const handleBatchDeleteOrgVars = (orgId: string, varKeys: string[]) => {
-    if (!varKeys || varKeys.length === 0) return;
-    const keySet = new Set(varKeys);
-    setOrganizations((prev) =>
-      prev.map((org) => {
-        if (org.id !== orgId) return org;
-        return {
-          ...org,
-          variables: (org.variables || []).filter((v) => !keySet.has(v.key)),
-        };
-      })
-    );
-    showToast('info', 'Org Variables Deleted', `Deleted ${varKeys.length} organization variable(s).`);
-  };
-
-  const handleBatchDeleteFiles = (orgId: string, projectId: string, fileIds: string[]) => {
-    if (!fileIds || fileIds.length === 0) return;
-    const fileIdSet = new Set(fileIds);
-
-    // Close all open tabs belonging to these files or their requests
-    setTabs((prevTabs) => {
-      const remaining = prevTabs.filter((t) => !t.fileId || !fileIdSet.has(t.fileId));
-      if (remaining.length === 0) {
-        return [
-          {
-            id: 'tab_onboarding',
-            type: 'onboarding',
-            title: 'Welcome Workspace',
-          },
-        ];
-      }
-      return remaining;
-    });
-
-    setOrganizations((prevOrgs) =>
-      prevOrgs.map((org) => {
-        if (org.id !== orgId) return org;
-        return {
-          ...org,
-          projects: (org.projects || []).map((p) => {
-            if (p.id !== projectId) return p;
-            const updatedFiles = (p.files || []).filter((f) => !fileIdSet.has(f.id));
-            const updatedFolders = (p.folders || []).map((folder) => ({
-              ...folder,
-              fileIds: (folder.fileIds || []).filter((id) => !fileIdSet.has(id)),
-            }));
-            return {
-              ...p,
-              files: updatedFiles,
-              folders: updatedFolders,
-            };
-          }),
-        };
-      })
-    );
-
-    if (activeFileId && fileIdSet.has(activeFileId)) {
-      setActiveFileId(null);
-      setActiveRequestId(null);
-    }
-
-    showToast('info', 'Files Deleted', `Deleted ${fileIds.length} collection file(s) and closed tabs.`);
-  };
-
-  const handleBatchDeleteRequests = (
-    orgId: string,
-    projectId: string,
-    fileId: string,
-    requestIds: string[]
-  ) => {
-    if (!requestIds || requestIds.length === 0) return;
-    const reqIdSet = new Set(requestIds);
-
-    // Close all open tabs for these requests
-    setTabs((prevTabs) => {
-      const remaining = prevTabs.filter((t) => !t.requestId || !reqIdSet.has(t.requestId));
-      if (remaining.length === 0) {
-        return [
-          {
-            id: 'tab_onboarding',
-            type: 'onboarding',
-            title: 'Welcome Workspace',
-          },
-        ];
-      }
-      return remaining;
-    });
-
-    setOrganizations((prevOrgs) =>
-      prevOrgs.map((org) => {
-        if (org.id !== orgId) return org;
-        return {
-          ...org,
-          projects: (org.projects || []).map((p) => {
-            if (p.id !== projectId) return p;
-            return {
-              ...p,
-              files: (p.files || []).map((f) => {
-                if (f.id !== fileId) return f;
-                return {
-                  ...f,
-                  requests: (f.requests || []).filter((r) => !reqIdSet.has(r.id)),
-                };
-              }),
-            };
-          }),
-        };
-      })
-    );
-
-    if (activeRequestId && reqIdSet.has(activeRequestId)) {
-      setActiveRequestId(null);
-    }
-
-    showToast('info', 'Endpoints Deleted', `Deleted ${requestIds.length} endpoint(s) and closed tabs.`);
-  };
-
-  const handleBatchDeleteScratchpadRequests = (requestIds: string[]) => {
-    if (!requestIds || requestIds.length === 0) return;
-    const reqIdSet = new Set(requestIds);
-
-    setScratchpadRequests((prev) => prev.filter((r) => !reqIdSet.has(r.id)));
-    setTabs((prevTabs) => {
-      const remaining = prevTabs.filter((t) => !t.requestId || !reqIdSet.has(t.requestId));
-      if (remaining.length === 0) {
-        return [
-          {
-            id: 'tab_onboarding',
-            type: 'onboarding',
-            title: 'Welcome Workspace',
-          },
-        ];
-      }
-      return remaining;
-    });
-
-    if (activeRequestId && reqIdSet.has(activeRequestId)) {
-      setActiveRequestId(null);
-    }
-
-    showToast('info', 'Drafts Deleted', `Deleted ${requestIds.length} draft request(s).`);
-  };
-
-  // POSTMAN IMPORT
-  const handleImportPostman = (
-    newFolders: { id: string; name: string; fileIds: string[] }[],
-    newFiles: RestFile[]
-  ) => {
-    if (!activeProject) return;
-    setOrganizations((prev) =>
-      prev.map((org) =>
-        org.id === activeOrg?.id
+      prevOrgs.map((org) =>
+        org.id === activeOrg.id
           ? {
               ...org,
               projects: (org.projects || []).map((p) =>
-                p.id === activeProject.id
-                  ? {
-                      ...p,
-                      folders: [...(p.folders || []), ...newFolders],
-                      files: [...(p.files || []), ...newFiles],
-                      updatedAt: Date.now(),
-                    }
-                  : p
+                p.id === activeProject.id ? { ...p, auth, updatedAt: Date.now() } : p
               ),
             }
           : org
       )
     );
-
-    if (newFiles.length > 0 && newFiles[0].requests && newFiles[0].requests.length > 0) {
-      handleOpenRequestInTab(newFiles[0].id, newFiles[0].requests[0].id);
-    }
+    showToast('success', 'Project Auth Updated', 'Updated project authentication settings.');
   };
 
-  // New Organization & New Project Modals
-  const handleCreateNewOrg = () => {
-    setAppPromptState({
-      isOpen: true,
-      title: 'New Organization',
-      message: 'Enter name for your new organization workspace:',
-      initialValue: 'FinTech Global Corp',
-      placeholder: 'e.g. Acme Corp',
-      confirmLabel: 'Create Organization',
-      onConfirm: (name) => {
-        if (!name) return;
-
-        const newOrg: Organization = {
-          id: 'org_' + Math.random().toString(36).substring(2, 9),
-          name,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          variables: [
-            { id: 'ov1', key: 'orgDomain', value: 'api.fintech.internal', enabled: true },
-          ],
-          projects: [
-            {
-              id: 'proj_' + Math.random().toString(36).substring(2, 9),
-              name: 'Core Payment Service',
-              description: 'Payment API Gateway',
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-              activeEnvId: 'env_dev',
-              environments: [
-                {
-                  id: 'env_dev',
-                  name: 'Development',
-                  color: '#10b981',
-                  variables: [
-                    { id: 'v1', key: 'baseUrl', value: 'https://jsonplaceholder.typicode.com', enabled: true },
-                  ],
-                },
-              ],
-              folders: [],
-              files: [
-                {
-                  id: 'file_init',
-                  name: 'payments_collection',
-                  updatedAt: Date.now(),
-                  rawContent: `### Get Payment Status\nGET {{baseUrl}}/todos/1\n`,
-                  requests: [
-                    {
-                      id: 'req_pay',
-                      name: 'Get Payment Status',
-                      method: 'GET',
-                      url: '{{baseUrl}}/todos/1',
-                      headers: [],
-                      queryParams: [],
-                      body: { mode: 'none', rawText: '' },
-                      auth: { type: 'none', bearerToken: '' },
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        };
-
-        setOrganizations([...organizations, newOrg]);
-        setActiveOrgId(newOrg.id);
-      },
-    });
-  };
-
-  const handleCreateNewProject = () => {
-    setAppPromptState({
-      isOpen: true,
-      title: 'New Project',
-      message: `Enter new project name inside ${activeOrg?.name || 'Organization'}:`,
-      initialValue: 'Microservice Suite',
-      placeholder: 'e.g. Payment Gateway',
-      confirmLabel: 'Create Project',
-      onConfirm: (name) => {
-        if (!name) return;
-
-        const newProj: Project = {
-          id: 'proj_' + Math.random().toString(36).substring(2, 9),
-          name,
-          description: 'REST Client Workspace',
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          activeEnvId: 'env_dev_' + Date.now(),
-          environments: [
-            {
-              id: 'env_dev_' + Date.now(),
-              name: 'Development',
-              color: '#10b981',
-              variables: [
-                { id: 'v1', key: 'baseUrl', value: 'https://jsonplaceholder.typicode.com', enabled: true },
-              ],
-            },
-          ],
-          folders: [],
-          files: [
-            {
-              id: 'file_default_' + Date.now(),
-              name: 'api_collection',
-              updatedAt: Date.now(),
-              rawContent: `### Get All Items\nGET {{baseUrl}}/posts\n`,
-              requests: [
-                {
-                  id: 'req_def_' + Date.now(),
-                  name: 'Get All Items',
-                  method: 'GET',
-                  url: '{{baseUrl}}/posts',
-                  headers: [],
-                  queryParams: [],
-                  body: { mode: 'none', rawText: '' },
-                  auth: { type: 'none', bearerToken: '' },
-                },
-              ],
-            },
-          ],
-        };
-
-        const updatedOrg = {
-          ...activeOrg,
-          projects: [...(activeOrg.projects || []), newProj],
-        };
-
-        setOrganizations(organizations.map((o) => (o.id === activeOrg.id ? updatedOrg : o)));
-        setActiveProjectId(newProj.id);
-        showToast('success', 'Project Created', `Created project "${name}".`);
-      },
-    });
-  };
-
-  // Organization Rename & Delete
-  const handleRenameOrg = (orgId: string, currentName?: string) => {
-    const targetOrg = organizations.find((o) => o.id === orgId);
-    const orgName = currentName || targetOrg?.name || 'Organization';
-    setAppPromptState({
-      isOpen: true,
-      title: 'Rename Organization',
-      message: 'Enter new name for organization:',
-      initialValue: orgName,
-      placeholder: 'e.g. Acme Corp',
-      confirmLabel: 'Save Name',
-      onConfirm: (newName) => {
-        if (!newName || !newName.trim()) return;
-        setOrganizations((prev) =>
-          prev.map((o) => (o.id === orgId ? { ...o, name: newName.trim(), updatedAt: Date.now() } : o))
-        );
-        showToast('success', 'Organization Renamed', 'Organization renamed successfully.');
-      },
-    });
-  };
-
-  const handleDeleteOrg = (orgId: string, currentName?: string) => {
-    if (!organizations || organizations.length <= 1) {
-      showToast('error', 'Delete Error', 'Cannot delete the only organization workspace.');
+  // Launch workspace from onboarding
+  const handleLaunchWorkspace = () => {
+    const openRequestTab = tabs.find((t) => t.type === 'request');
+    if (openRequestTab) {
+      setActiveTabId(openRequestTab.id);
+      if (openRequestTab.fileId && openRequestTab.requestId) {
+        setActiveFileId(openRequestTab.fileId);
+        setActiveRequestId(openRequestTab.requestId);
+      } else if (openRequestTab.requestId) {
+        setActiveFileId(null);
+        setActiveRequestId(openRequestTab.requestId);
+      }
+      setActiveTabMode('editor');
       return;
     }
-    const targetOrg = organizations.find((o) => o.id === orgId);
-    const orgName = currentName || targetOrg?.name || 'Organization';
-    setAppPromptState({
-      isOpen: true,
-      title: 'Delete Organization',
-      message: `Are you sure you want to delete "${orgName}"? All projects, files, and endpoints inside this organization will be removed.`,
-      hideInput: true,
-      confirmLabel: 'Delete Organization',
-      onConfirm: () => {
-        const remaining = organizations.filter((o) => o.id !== orgId);
-        setOrganizations(remaining);
-        if (activeOrgId === orgId && remaining.length > 0) {
-          const nextOrg = remaining[0];
-          setActiveOrgId(nextOrg.id);
-          const nextProj = (nextOrg.projects || [])[0];
-          if (nextProj) {
-            setActiveProjectId(nextProj.id);
-            const nextFile = (nextProj.files || [])[0];
-            if (nextFile) {
-              setActiveFileId(nextFile.id);
-              const nextReq = (nextFile.requests || [])[0];
-              if (nextReq) {
-                setActiveRequestId(nextReq.id);
-              } else {
-                setActiveRequestId(null);
-              }
-            } else {
-              setActiveFileId(null);
-              setActiveRequestId(null);
-            }
-          } else {
-            setActiveProjectId('');
-            setActiveFileId(null);
-            setActiveRequestId(null);
-          }
-        }
-        showToast('info', 'Organization Deleted', `Organization "${orgName}" deleted.`);
-      },
-    });
-  };
 
-  // Project Rename & Delete
-  const handleRenameProject = (projectId: string, currentName?: string) => {
-    const currentProjects = activeOrg?.projects || [];
-    const targetProj = currentProjects.find((p) => p.id === projectId);
-    const projName = currentName || targetProj?.name || 'Project';
-    setAppPromptState({
-      isOpen: true,
-      title: 'Rename Project',
-      message: 'Enter new name for project:',
-      initialValue: projName,
-      placeholder: 'e.g. Microservices',
-      confirmLabel: 'Save Name',
-      onConfirm: (newName) => {
-        if (!newName || !newName.trim()) return;
-        setOrganizations((prev) =>
-          prev.map((org) =>
-            org.id === activeOrg?.id
-              ? {
-                  ...org,
-                  projects: (org.projects || []).map((p) =>
-                    p.id === projectId ? { ...p, name: newName.trim(), updatedAt: Date.now() } : p
-                  ),
-                }
-              : org
-          )
-        );
-        showToast('success', 'Project Renamed', 'Project renamed successfully.');
-      },
-    });
-  };
-
-  const handleDeleteProject = (projectId: string, currentName?: string) => {
-    const currentProjects = activeOrg?.projects || [];
-    const targetProj = currentProjects.find((p) => p.id === projectId);
-    const projName = currentName || targetProj?.name || 'Project';
-
-    setAppPromptState({
-      isOpen: true,
-      title: 'Delete Project',
-      message: `Are you sure you want to delete project "${projName}"?`,
-      hideInput: true,
-      confirmLabel: 'Delete Project',
-      onConfirm: () => {
-        const remaining = currentProjects.filter((p) => p.id !== projectId);
-
-        let finalProjects = remaining;
-        if (remaining.length === 0) {
-          const defaultProj: Project = {
-            id: 'proj_' + Math.random().toString(36).substring(2, 9),
-            name: 'API Workspace',
-            description: 'Default REST Project',
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            activeEnvId: 'env_dev',
-            environments: [
-              {
-                id: 'env_dev',
-                name: 'Development',
-                color: '#10b981',
-                variables: [
-                  { id: 'v1', key: 'baseUrl', value: 'https://jsonplaceholder.typicode.com', enabled: true },
-                ],
-              },
-            ],
-            folders: [],
-            files: [
-              {
-                id: 'file_default',
-                name: 'default_collection',
-                updatedAt: Date.now(),
-                rawContent: `### Health Check\nGET {{baseUrl}}/todos/1\n`,
-                requests: [
-                  {
-                    id: 'req_hc',
-                    name: 'Health Check',
-                    method: 'GET',
-                    url: '{{baseUrl}}/todos/1',
-                    headers: [],
-                    queryParams: [],
-                    body: { mode: 'none', rawText: '' },
-                    auth: { type: 'none', bearerToken: '' },
-                  },
-                ],
-              },
-            ],
-          };
-          finalProjects = [defaultProj];
-        }
-
-        setOrganizations((prev) =>
-          prev.map((org) =>
-            org.id === activeOrg?.id
-              ? {
-                  ...org,
-                  projects: finalProjects,
-                }
-              : org
-          )
-        );
-
-        if (activeProjectId === projectId) {
-          const nextProj = finalProjects[0];
-          setActiveProjectId(nextProj.id);
-          const nextFile = (nextProj.files || [])[0];
-          if (nextFile) {
-            setActiveFileId(nextFile.id);
-            const nextReq = (nextFile.requests || [])[0];
-            if (nextReq) {
-              setActiveRequestId(nextReq.id);
-            } else {
-              setActiveRequestId(null);
-            }
-          } else {
-            setActiveFileId(null);
-            setActiveRequestId(null);
-          }
-        }
-
-        showToast('info', 'Project Deleted', `Project "${projName}" deleted.`);
-      },
-    });
+    const targetFile = activeFile || activeProject?.files?.[0];
+    if (targetFile && targetFile.requests && targetFile.requests.length > 0) {
+      handleOpenRequestInTab(targetFile.id, targetFile.requests[0].id);
+    } else if (scratchpadRequests.length > 0) {
+      handleOpenScratchpadRequestInTab(scratchpadRequests[0].id);
+    } else {
+      handleCreateNewTabWithDummy();
+    }
   };
 
   return (
-    <div
-      className={`h-screen w-screen flex flex-col font-sans overflow-hidden ${
-        isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
-      }`}
-    >
-      {activeTabObj?.type === 'onboarding' ? (
-        <OnboardingScreen
-          onCreateNewRequest={handleCreateNewTabWithDummy}
-          onOpenImportModal={() => setIsImportExportOpen(true)}
-          onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
-          onOpenQuickHelp={() => {
-            setSettingsTab('shortcuts');
-            setIsSettingsOpen(true);
-          }}
-          onLaunchWorkspace={handleLaunchWorkspace}
-          isDarkMode={isDarkMode}
-          onToggleDarkMode={handleToggleDarkMode}
-          currentTheme={currentTheme}
-          onSelectTheme={handleSelectTheme}
-          onSelectSampleRequest={handleSelectSampleRequest}
-        />
-      ) : (
-        <>
-          {/* Top Header */}
-          <Header
-            organizations={organizations}
-            activeOrg={activeOrg}
-            onSelectOrg={(org) => setActiveOrgId(org.id)}
-            onOpenNewOrgModal={handleCreateNewOrg}
-            onRenameOrg={handleRenameOrg}
-            onDeleteOrg={handleDeleteOrg}
-            projects={activeOrg?.projects || []}
-            activeProject={activeProject}
-            onSelectProject={(p) => setActiveProjectId(p.id)}
-            onOpenNewProjectModal={handleCreateNewProject}
-            onRenameProject={handleRenameProject}
-            onDeleteProject={handleDeleteProject}
-            onSelectEnvironment={(envId) => {
-              setOrganizations((prev) =>
-                prev.map((org) =>
-                  org.id === activeOrg?.id
-                    ? {
-                        ...org,
-                        projects: (org.projects || []).map((p) =>
-                          p.id === activeProject?.id ? { ...p, activeEnvId: envId } : p
-                        ),
-                      }
-                    : org
-                )
-              );
-            }}
-            onOpenEnvManager={() => setIsEnvManagerOpen(true)}
-            activeTab={activeTabMode}
-            onChangeTab={setActiveTabMode}
-            onOpenImportExport={() => setIsImportExportOpen(true)}
-            onOpenQuickHelp={() => {
-              setSettingsTab('shortcuts');
-              setIsSettingsOpen(true);
-            }}
-            onOpenSettings={() => {
-              setSettingsTab('appearance');
-              setIsSettingsOpen(true);
-            }}
-            onOpenQuickNewRequest={() => setIsQuickNewRequestOpen(true)}
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 select-none font-sans antialiased">
+      {/* Top Application Header */}
+      <Header
+        organizations={organizations}
+        activeOrg={activeOrg!}
+        onSelectOrg={(org) => {
+          setActiveOrgId(org.id);
+          if (org.projects && org.projects.length > 0) {
+            setActiveProjectId(org.projects[0].id);
+            const targetFile = org.projects[0].files?.[0];
+            if (targetFile) {
+              setActiveFileId(targetFile.id);
+              setActiveRequestId(targetFile.requests?.[0]?.id || null);
+            }
+          }
+        }}
+        onOpenNewOrgModal={() => {
+          setAppPromptState({
+            isOpen: true,
+            title: 'Create Organization',
+            placeholder: 'e.g. Acme Corp',
+            confirmLabel: 'Create',
+            onConfirm: (name) => {
+              if (name.trim()) {
+                const newOrgId = 'org_' + Math.random().toString(36).substring(2, 9);
+                const newOrg = {
+                  id: newOrgId,
+                  name: name.trim(),
+                  projects: [
+                    {
+                      id: 'proj_' + Math.random().toString(36).substring(2, 9),
+                      name: 'Default Project',
+                      files: [],
+                      environments: [],
+                      activeEnvId: null,
+                    },
+                  ],
+                };
+                setOrganizations((prev) => [...prev, newOrg as any]);
+                setActiveOrgId(newOrgId);
+                showToast('success', 'Organization Created', `Created organization "${name.trim()}".`);
+              }
+            },
+          });
+        }}
+        projects={activeOrg?.projects || []}
+        activeProject={activeProject!}
+        onSelectProject={(project) => {
+          setActiveProjectId(project.id);
+          if (project.files && project.files.length > 0) {
+            setActiveFileId(project.files[0].id);
+            setActiveRequestId(project.files[0].requests?.[0]?.id || null);
+          }
+        }}
+        onOpenNewProjectModal={() => {
+          setAppPromptState({
+            isOpen: true,
+            title: 'Create Project',
+            placeholder: 'e.g. Backend Microservices',
+            confirmLabel: 'Create',
+            onConfirm: (name) => {
+              if (name.trim() && activeOrg) {
+                const newProjId = 'proj_' + Math.random().toString(36).substring(2, 9);
+                const newProj = {
+                  id: newProjId,
+                  name: name.trim(),
+                  files: [],
+                  environments: [],
+                  activeEnvId: null,
+                };
+                setOrganizations((prev) =>
+                  prev.map((org) =>
+                    org.id === activeOrg.id ? { ...org, projects: [...(org.projects || []), newProj as any] } : org
+                  )
+                );
+                setActiveProjectId(newProjId);
+                showToast('success', 'Project Created', `Created project "${name.trim()}".`);
+              }
+            },
+          });
+        }}
+        onSelectEnvironment={(envId) => {
+          if (!activeOrg || !activeProject) return;
+          setOrganizations((prev) =>
+            prev.map((org) =>
+              org.id === activeOrg.id
+                ? {
+                    ...org,
+                    projects: (org.projects || []).map((p) =>
+                      p.id === activeProject.id ? { ...p, activeEnvId: envId } : p
+                    ),
+                  }
+                : org
+            )
+          );
+        }}
+        onOpenEnvManager={() => setIsEnvManagerOpen(true)}
+        activeTab={activeTabMode}
+        onChangeTab={setActiveTabMode}
+        onOpenImportExport={() => setIsImportExportOpen(true)}
+        onOpenSettings={() => {
+          setSettingsTab('appearance');
+          setIsSettingsOpen(true);
+        }}
+        onOpenQuickNewRequest={() => setIsQuickNewRequestOpen(true)}
+        onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
+        onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
+        onOpenBatchWorkspaceModal={() => setIsBatchWorkspaceModalOpen(true)}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        onOpenShortcuts={() => setIsKeyboardShortcutsOpen(true)}
+        isGitHubSynced={Boolean(githubUser)}
+        githubUser={githubUser}
+        historyCount={history.length}
+        isDarkMode={isDarkMode}
+        onToggleDarkMode={handleToggleDarkMode}
+        currentTheme={currentTheme}
+        onSelectTheme={handleSelectTheme}
+      />
+
+      {/* Main Workspace Frame */}
+      {activeTab?.type === 'onboarding' ? (
+        <div className="flex-1 overflow-y-auto">
+          <OnboardingScreen
+            onCreateNewRequest={() => setIsQuickNewRequestOpen(true)}
+            onOpenImportModal={() => setIsImportExportOpen(true)}
             onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
-            onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
-            onOpenBatchWorkspaceModal={() => setIsBatchWorkspaceModalOpen(true)}
-            isGitHubSynced={!!getSavedGitHubToken()}
-            githubUser={githubUser}
-            historyCount={history.length}
+            onLaunchWorkspace={handleLaunchWorkspace}
             isDarkMode={isDarkMode}
             onToggleDarkMode={handleToggleDarkMode}
             currentTheme={currentTheme}
             onSelectTheme={handleSelectTheme}
           />
-
-          {/* Multi Tab Bar */}
-          <TabBar
-            tabs={tabs}
-            activeTabId={activeTabId}
-            isDarkMode={isDarkMode}
-            executingRequestIds={Object.keys(executingRequests).reduce(
-              (acc, id) => ({ ...acc, [id]: true }),
-              {} as Record<string, boolean>
-            )}
+        </div>
+      ) : (
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Sidebar */}
+          <Sidebar
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+            activeOrg={activeOrg}
+            project={activeProject!}
+            activeFileId={activeFileId}
+            activeRequestId={activeRequestId}
+            scratchpadRequests={scratchpadRequests}
             requestStatuses={requestStatuses}
-            onSelectTab={(tabId) => {
-              setActiveTabId(tabId);
-              const tabObj = tabs.find((t) => t.id === tabId);
-              if (tabObj) {
-                if (tabObj.fileId && tabObj.requestId) {
-                  setActiveFileId(tabObj.fileId);
-                  setActiveRequestId(tabObj.requestId);
-                } else if (tabObj.requestId) {
-                  setActiveFileId(null);
-                  setActiveRequestId(tabObj.requestId);
-                }
+            onSelectFile={(fId) => {
+              setActiveFileId(fId);
+              const file = activeProject?.files?.find((f) => f.id === fId);
+              if (file && file.requests && file.requests.length > 0) {
+                handleOpenRequestInTab(file.id, file.requests[0].id);
               }
             }}
-            onCloseTab={handleCloseTab}
-            onCloseOtherTabs={handleCloseOtherTabs}
-            onCloseTabsToRight={handleCloseTabsToRight}
-            onCloseTabsToLeft={handleCloseTabsToLeft}
-            onCloseAllTabs={handleCloseAllTabs}
-            onTogglePinTab={handleTogglePinTab}
-            onNewTab={handleCreateNewTabWithDummy}
+            onSelectRequest={(fileId, reqId) => handleOpenRequestInTab(fileId, reqId)}
+            onSelectScratchpadRequest={(reqId) => handleOpenScratchpadRequestInTab(reqId)}
+            onCreateScratchpadRequest={handleCreateScratchpadRequest}
+            onRenameScratchpadRequest={handleRenameScratchpadRequest}
+            onDuplicateScratchpadRequest={handleDuplicateScratchpadRequest}
+            onDeleteScratchpadRequest={handleDeleteScratchpadRequest}
+            onSaveScratchpadToProject={(req) => {
+              setScratchpadToSave(req);
+              setIsSaveScratchpadOpen(true);
+            }}
+            onCreateFile={handleCreateFile}
+            onCreateFolder={handleCreateFolder}
+            onRenameFolder={handleRenameFolder}
+            onDeleteFolder={handleDeleteFolder}
+            onRenameFile={handleRenameFile}
+            onDuplicateFile={handleDuplicateFile}
+            onDeleteFile={handleDeleteFile}
+            onMoveFileToFolder={handleMoveFileToFolder}
+            onCreateRequest={handleCreateRequest}
+            onRenameRequest={handleRenameRequest}
+            onDuplicateRequest={handleDuplicateRequest}
+            onDeleteRequest={handleDeleteRequest}
+            onMoveRequestOrder={handleMoveRequestOrder}
             onOpenQuickNewRequest={() => setIsQuickNewRequestOpen(true)}
             onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
-            splitOrientation={splitOrientation}
-            onToggleSplitOrientation={() =>
-              setSplitOrientation(splitOrientation === 'top-bottom' ? 'left-right' : 'top-bottom')
-            }
+            onOpenBatchWorkspaceModal={() => setIsBatchWorkspaceModalOpen(true)}
           />
 
-          {/* Main Workspace Layout */}
-          <div className="flex-1 flex overflow-hidden">
-            {/* Left Sidebar */}
-            <Sidebar
-              project={activeProject}
-              activeFileId={activeFileId}
-              activeRequestId={activeRequestId}
-              requestStatuses={requestStatuses}
-              scratchpadRequests={scratchpadRequests}
-              onSelectFile={(fId) => {
-                setActiveFileId(fId);
-                const f = activeProject?.files?.find((file) => file.id === fId);
-                if (f && f.requests && f.requests.length > 0) handleOpenRequestInTab(fId, f.requests[0].id);
+          {/* Central Workspace Area */}
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+            {/* Top Workspace Tab Bar */}
+            <TabBar
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onSelectTab={handleSelectTab}
+              onCloseTab={handleCloseTab}
+              onTogglePinTab={handleTogglePinTab}
+              onCloseOtherTabs={handleCloseOtherTabs}
+              onCloseTabsToRight={handleCloseTabsToRight}
+              onCloseTabsToLeft={handleCloseTabsToLeft}
+              onCloseAllTabs={handleCloseAllTabs}
+              onNewTab={handleCreateNewTabWithDummy}
+              activeTabMode={activeTabMode}
+              onChangeTabMode={setActiveTabMode}
+              activeFile={activeFile}
+              onRunRequest={() => {
+                if (activeRequest) handleExecuteRequest(activeRequest);
               }}
-              onSelectRequest={(fId, rId) => handleOpenRequestInTab(fId, rId)}
-              onSelectScratchpadRequest={handleOpenScratchpadRequestInTab}
-              onCreateScratchpadRequest={handleCreateScratchpadRequest}
-              onRenameScratchpadRequest={handleRenameScratchpadRequest}
-              onDuplicateScratchpadRequest={handleDuplicateScratchpadRequest}
-              onDeleteScratchpadRequest={handleDeleteScratchpadRequest}
-              onSaveScratchpadToProject={(req) => {
+              isRequestRunning={Boolean(activeRequest && executingRequests[activeRequest.id])}
+            />
+
+            {/* Split Editor / Response / Tools View */}
+            <MainWorkspace
+              activeTabMode={activeTabMode}
+              activeRequest={activeRequest}
+              activeFile={activeFile}
+              activeProject={activeProject}
+              activeEnv={activeEnv}
+              scopeCtx={scopeCtx}
+              isCurrentRequestStandalone={isCurrentRequestStandalone}
+              splitOrientation={splitOrientation}
+              splitRatio={splitRatio}
+              setSplitRatio={setSplitRatio}
+              executingRequests={executingRequests}
+              lastResponse={lastResponse}
+              setLastResponse={setLastResponse}
+              history={history}
+              setHistory={setHistory}
+              isDarkMode={isDarkMode}
+              onSaveToProject={(req) => {
                 setScratchpadToSave(req);
                 setIsSaveScratchpadOpen(true);
               }}
-              onCreateFile={handleCreateFile}
-              onCreateFolder={handleCreateFolder}
-              onRenameFolder={handleRenameFolder}
-              onDeleteFolder={handleDeleteFolder}
-              onRenameFile={handleRenameFile}
-              onDuplicateFile={handleDuplicateFile}
-              onDeleteFile={handleDeleteFile}
-              onMoveFileToFolder={handleMoveFileToFolder}
-              onCreateRequest={handleCreateRequest}
-              onRenameRequest={handleRenameRequest}
-              onDuplicateRequest={handleDuplicateRequest}
-              onDeleteRequest={handleDeleteRequest}
-              onMoveRequestOrder={handleMoveRequestOrder}
-              onOpenQuickNewRequest={() => setIsQuickNewRequestOpen(true)}
-              onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
-              onOpenBatchWorkspaceModal={() => setIsBatchWorkspaceModalOpen(true)}
+              onUpdateProjectAuth={handleUpdateProjectAuth}
+              onUpdateRequest={handleUpdateActiveRequest}
+              onSendRequest={handleExecuteRequest}
+              onStopRequest={handleStopRequest}
+              updateProjectFiles={updateProjectFiles}
+              handleOpenRequestInTab={handleOpenRequestInTab}
+              setActiveTabMode={setActiveTabMode}
+              showToast={showToast}
             />
-
-            {/* Central Workspace Canvas */}
-            <main className="flex-1 flex flex-col overflow-hidden bg-transparent">
-              {/* TAB MODE 1: REQUEST BUILDER (Split Layout options: Top/Bottom or Left/Right) */}
-              {activeTabMode === 'editor' && (
-                <>
-                  {activeRequest ? (
-                    <div
-                      id="resizable-container"
-                      className={`flex-1 flex overflow-hidden relative ${
-                        splitOrientation === 'top-bottom' ? 'flex-col' : 'flex-row'
-                      }`}
-                    >
-                      {/* Section 1: Request Editor */}
-                      <div
-                        style={{
-                          [splitOrientation === 'top-bottom' ? 'height' : 'width']: `${splitRatio}%`,
-                        }}
-                        className="overflow-hidden flex flex-col min-h-[150px] min-w-[200px]"
-                      >
-                        <RequestEditor
-                          request={activeRequest}
-                          scopeCtx={scopeCtx}
-                          envVariables={activeEnv?.variables || []}
-                          fileVariables={activeFile?.fileVariables || {}}
-                          projectAuth={activeProject?.auth}
-                          isStandalone={isCurrentRequestStandalone}
-                          onSaveToProject={() => {
-                            setScratchpadToSave(activeRequest);
-                            setIsSaveScratchpadOpen(true);
-                          }}
-                          onUpdateProjectAuth={handleUpdateProjectAuth}
-                          onUpdateRequest={handleUpdateActiveRequest}
-                          onSendRequest={handleExecuteRequest}
-                          onStopRequest={handleStopRequest}
-                          isLoading={Boolean(executingRequests[activeRequest.id])}
-                          lastResponse={lastResponse}
-                        />
-                      </div>
-
-                      {/* Resizable Splitter Handle */}
-                      <div
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          isDraggingSplitter.current = true;
-                          document.body.style.cursor =
-                            splitOrientation === 'top-bottom' ? 'row-resize' : 'col-resize';
-                          document.body.style.userSelect = 'none';
-                        }}
-                        className={`bg-slate-800 hover:bg-emerald-500/80 active:bg-emerald-400 transition-colors z-20 shrink-0 ${
-                          splitOrientation === 'top-bottom'
-                            ? 'h-1.5 cursor-row-resize w-full'
-                            : 'w-1.5 cursor-col-resize h-full'
-                        }`}
-                        title="Click and drag to resize Request / Response sections"
-                      />
-
-                      {/* Section 2: Response Viewer */}
-                      <div
-                        style={{
-                          [splitOrientation === 'top-bottom' ? 'height' : 'width']: `${100 - splitRatio}%`,
-                        }}
-                        className="overflow-hidden flex flex-col min-h-[150px] min-w-[200px]"
-                      >
-                        <ResponseViewer
-                          response={lastResponse}
-                          isLoading={Boolean(executingRequests[activeRequest.id])}
-                          assertions={activeRequest.assertions}
-                          savedResponses={activeRequest.savedResponses}
-                          onSaveResponseSnapshot={(resp, name) => {
-                            const newSnapshot = {
-                              id: 'snap_' + Math.random().toString(36).substring(2, 9),
-                              name,
-                              timestamp: Date.now(),
-                              response: resp,
-                            };
-                            const updatedSaved = [...(activeRequest.savedResponses || []), newSnapshot];
-                            handleUpdateActiveRequest({ ...activeRequest, savedResponses: updatedSaved });
-                          }}
-                          onDeleteSavedResponseSnapshot={(snapId) => {
-                            const updatedSaved = (activeRequest.savedResponses || []).filter((s) => s.id !== snapId);
-                            handleUpdateActiveRequest({ ...activeRequest, savedResponses: updatedSaved });
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex-1 flex items-center justify-center text-slate-500 font-mono text-xs">
-                      Select or create a REST request from the left sidebar.
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* TAB MODE 2: RAW .REST FILE CODE EDITOR */}
-              {activeTabMode === 'code' && (
-                <>
-                  {activeFile ? (
-                    <RestFileEditor
-                      file={activeFile}
-                      isDarkMode={isDarkMode}
-                      envVariables={scopeCtx.projectVariables || []}
-                      scopeCtx={scopeCtx}
-                      onSaveFileContent={(fId, rawText, parsedRequests, parsedFileVars) => {
-                        if (!activeProject) return;
-                        const updatedFiles = (activeProject.files || []).map((f) =>
-                          f.id === fId
-                            ? {
-                                ...f,
-                                rawContent: rawText,
-                                requests: parsedRequests,
-                                fileVariables: parsedFileVars || f.fileVariables,
-                              }
-                            : f
-                        );
-                        updateProjectFiles(updatedFiles);
-                      }}
-                      onRunSingleRequest={(req) => handleExecuteRequest(req)}
-                      onOpenInBuilder={(req) => {
-                        if (activeFile) {
-                          handleOpenRequestInTab(activeFile.id, req.id);
-                        }
-                      }}
-                      showToast={showToast}
-                    />
-                  ) : (
-                    <div className="flex-1 flex items-center justify-center text-slate-500 font-mono text-xs">
-                      No REST file selected. Create or select a file in sidebar.
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* TAB MODE 3: COLLECTION RUNNER */}
-              {activeTabMode === 'runner' && (
-                <CollectionRunner
-                  project={activeProject}
-                  onExecuteRequestProxy={handleExecuteRequest}
-                  isDarkMode={isDarkMode}
-                />
-              )}
-
-              {/* TAB MODE 4: HISTORY VIEWER */}
-              {activeTabMode === 'history' && (
-                <HistoryViewer
-                  history={history}
-                  onClearHistory={() => setHistory([])}
-                  onSelectHistoryItem={(item) => {
-                    setLastResponse(item.response);
-                    setActiveTabMode('editor');
-                  }}
-                  isDarkMode={isDarkMode}
-                />
-              )}
-            </main>
           </div>
-        </>
+        </div>
       )}
 
-      {/* Environment Hierarchy Manager Modal */}
-      {isEnvManagerOpen && (
-        <EnvironmentManager
-          organization={activeOrg}
-          project={activeProject}
-          globalVariables={globalVariables}
-          onClose={() => setIsEnvManagerOpen(false)}
-          onUpdateGlobalVariables={setGlobalVariables}
-          onUpdateOrganizationVariables={(updatedOrgVars) => {
-            setOrganizations((prev) =>
-              prev.map((org) => (org.id === activeOrg?.id ? { ...org, variables: updatedOrgVars } : org))
-            );
-          }}
-          onUpdateProjectEnvironments={(updatedEnvs, activeEnvId) => {
-            setOrganizations((prev) =>
-              prev.map((org) =>
-                org.id === activeOrg?.id
-                  ? {
-                      ...org,
-                      projects: (org.projects || []).map((p) =>
-                        p.id === activeProject?.id
-                          ? { ...p, environments: updatedEnvs, activeEnvId: activeEnvId }
-                          : p
-                      ),
-                    }
-                  : org
-              )
-            );
-          }}
-        />
-      )}
-
-      {/* Import / Export Workspace Modal */}
-      {isImportExportOpen && (
-        <ImportExportModal
-          project={activeProject}
-          isDarkMode={isDarkMode}
-          onClose={() => setIsImportExportOpen(false)}
-          onImportRestFile={(fileName, content) => {
-            if (!activeProject) return;
-            const parsed = parseRestFileContent(content, fileName);
-            const newFile: RestFile = {
-              id: 'file_' + Math.random().toString(36).substring(2, 9),
-              name: fileName,
-              rawContent: content,
-              requests: parsed.requests,
-              fileVariables: parsed.fileVariables,
-              updatedAt: Date.now(),
-            };
-            updateProjectFiles([...(activeProject.files || []), newFile]);
-            if (newFile.requests.length > 0) {
-              handleOpenRequestInTab(newFile.id, newFile.requests[0].id);
-            }
-          }}
-          onImportCurl={(req) => {
-            if (activeFile && activeProject) {
-              const updatedFiles = (activeProject.files || []).map((f) =>
-                f.id === activeFile.id ? { ...f, requests: [...(f.requests || []), req] } : f
-              );
-              updateProjectFiles(updatedFiles);
-              handleOpenRequestInTab(activeFile.id, req.id);
-            }
-          }}
-          onImportPostman={handleImportPostman}
-        />
-      )}
-
-      {/* Quick New Request Modal */}
-      <QuickNewRequestModal
-        isOpen={isQuickNewRequestOpen}
-        project={activeProject}
-        activeFileId={activeFileId}
-        isDarkMode={isDarkMode}
-        initialPasteText={initialPasteText}
-        onClose={() => {
-          setIsQuickNewRequestOpen(false);
-          setInitialPasteText('');
-        }}
-        onCreateRequest={handleCreateRequest}
-        onCreateNewFileAndRequest={handleCreateNewFileAndRequest}
-        onCreateScratchpadRequest={handleCreateScratchpadRequest}
-      />
-
-      {/* Quick Request from cURL Modal */}
-      <QuickCurlModal
-        isOpen={isQuickCurlOpen}
-        project={activeProject}
-        activeFileId={activeFileId}
-        isDarkMode={isDarkMode}
-        onClose={() => setIsQuickCurlOpen(false)}
-        onImportCurl={handleImportQuickCurl}
-      />
-
-      {/* Save Scratchpad Request to Project File Modal */}
-      <SaveScratchpadModal
-        isOpen={isSaveScratchpadOpen}
-        request={scratchpadToSave}
+      {/* Global Application Modals Container */}
+      <AppModals
+        isEnvManagerOpen={isEnvManagerOpen}
+        setIsEnvManagerOpen={setIsEnvManagerOpen}
+        activeOrg={activeOrg}
+        activeProject={activeProject}
+        globalVariables={globalVariables}
+        setGlobalVariables={setGlobalVariables}
+        setOrganizations={setOrganizations}
         organizations={organizations}
         activeOrgId={activeOrgId}
         activeProjectId={activeProjectId}
+        activeFileId={activeFileId}
+        isImportExportOpen={isImportExportOpen}
+        setIsImportExportOpen={setIsImportExportOpen}
         isDarkMode={isDarkMode}
-        onClose={() => {
-          setIsSaveScratchpadOpen(false);
-          setScratchpadToSave(null);
+        updateProjectFiles={updateProjectFiles}
+        handleOpenRequestInTab={handleOpenRequestInTab}
+        handleImportPostman={(newFolders, newFiles) => {
+          if (!activeProject) return;
+          setOrganizations((prev) =>
+            prev.map((org) =>
+              org.id === activeOrg?.id
+                ? {
+                    ...org,
+                    projects: (org.projects || []).map((p) =>
+                      p.id === activeProject.id
+                        ? {
+                            ...p,
+                            folders: [...(p.folders || []), ...newFolders],
+                            files: [...(p.files || []), ...newFiles],
+                            updatedAt: Date.now(),
+                          }
+                        : p
+                    ),
+                  }
+                : org
+            )
+          );
         }}
-        onSaveToProjectFile={handleSaveScratchpadToProjectFile}
-      />
-
-      {/* Settings & Reference Center Modal */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        isDarkMode={isDarkMode}
-        onToggleDarkMode={handleToggleDarkMode}
+        isQuickNewRequestOpen={isQuickNewRequestOpen}
+        setIsQuickNewRequestOpen={setIsQuickNewRequestOpen}
+        initialPasteText={initialPasteText}
+        setInitialPasteText={setInitialPasteText}
+        handleCreateRequest={handleCreateRequest}
+        handleCreateNewFileAndRequest={handleCreateNewFileAndRequest}
+        handleCreateScratchpadRequest={handleCreateScratchpadRequest}
+        isQuickCurlOpen={isQuickCurlOpen}
+        setIsQuickCurlOpen={setIsQuickCurlOpen}
+        handleImportQuickCurl={handleImportQuickCurl}
+        handleAddNewVariables={handleAddNewVariables}
+        isSaveScratchpadOpen={isSaveScratchpadOpen}
+        setIsSaveScratchpadOpen={setIsSaveScratchpadOpen}
+        scratchpadToSave={scratchpadToSave}
+        setScratchpadToSave={setScratchpadToSave}
+        handleSaveScratchpadToProjectFile={handleSaveScratchpadToProjectFile}
+        isSettingsOpen={isSettingsOpen}
+        setIsSettingsOpen={setIsSettingsOpen}
+        handleToggleDarkMode={handleToggleDarkMode}
         currentTheme={currentTheme}
-        onSelectTheme={handleSelectTheme}
-        activeProject={activeProject}
-        organizations={organizations}
-        activeOrgId={activeOrgId}
+        handleSelectTheme={handleSelectTheme}
         splitOrientation={splitOrientation}
-        onToggleSplitOrientation={() =>
-          setSplitOrientation((prev) => (prev === 'top-bottom' ? 'left-right' : 'top-bottom'))
-        }
-        onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
-        onOpenImportExport={() => setIsImportExportOpen(true)}
-        onOpenEnvManager={() => setIsEnvManagerOpen(true)}
-        onOpenQuickHelp={() => setSettingsTab('shortcuts')}
-        initialTab={settingsTab}
+        setSplitOrientation={setSplitOrientation}
+        settingsTab={settingsTab}
+        setSettingsTab={setSettingsTab}
         showToast={showToast}
         githubUser={githubUser}
-      />
-
-      {/* Free GitHub Cloud & Data Sync Modal */}
-      <GitHubSyncModal
-        isOpen={isGitHubSyncOpen}
-        onClose={() => setIsGitHubSyncOpen(false)}
-        organizations={organizations}
-        activeOrgId={activeOrgId}
-        activeProjectId={activeProjectId}
-        environments={activeProject?.environments || []}
+        setGithubUser={setGithubUser}
+        isGitHubSyncOpen={isGitHubSyncOpen}
+        setIsGitHubSyncOpen={setIsGitHubSyncOpen}
         history={history}
-        onApplySyncedData={handleApplySyncedData}
-        showToast={(msg, type) => showToast(type, msg)}
-        isDarkMode={isDarkMode}
-        onUserChange={(u) => setGithubUser(u)}
-      />
-
-      {/* Batch Workspace & Multi-Delete Modal */}
-      <BatchWorkspaceModal
-        isOpen={isBatchWorkspaceModalOpen}
-        onClose={() => setIsBatchWorkspaceModalOpen(false)}
-        organizations={organizations}
-        activeOrgId={activeOrgId}
-        activeProjectId={activeProjectId}
-        globalVariables={globalVariables}
+        handleApplySyncedData={handleApplySyncedData}
+        isBatchWorkspaceModalOpen={isBatchWorkspaceModalOpen}
+        setIsBatchWorkspaceModalOpen={setIsBatchWorkspaceModalOpen}
         scratchpadRequests={scratchpadRequests}
-        onBatchDeleteOrganizations={handleBatchDeleteOrganizations}
-        onBatchDeleteProjects={handleBatchDeleteProjects}
-        onBatchDeleteEnvironments={handleBatchDeleteEnvironments}
-        onBatchDeleteGlobalVariables={handleBatchDeleteGlobalVars}
-        onBatchDeleteOrgVariables={handleBatchDeleteOrgVars}
-        onBatchDeleteFiles={handleBatchDeleteFiles}
-        onBatchDeleteRequests={handleBatchDeleteRequests}
-        onBatchDeleteScratchpadRequests={handleBatchDeleteScratchpadRequests}
-        isDarkMode={isDarkMode}
-      />
-
-      {/* Global App Prompt Modal */}
-      <PromptModal
-        isOpen={appPromptState.isOpen}
-        title={appPromptState.title}
-        message={appPromptState.message}
-        initialValue={appPromptState.initialValue}
-        placeholder={appPromptState.placeholder}
-        confirmLabel={appPromptState.confirmLabel}
-        hideInput={appPromptState.hideInput}
-        isDarkMode={isDarkMode}
-        onConfirm={(val) => {
-          appPromptState.onConfirm(val);
-          setAppPromptState((prev) => ({ ...prev, isOpen: false }));
+        handleBatchDeleteOrganizations={(orgIds) => {
+          const orgIdSet = new Set(orgIds);
+          const remaining = organizations.filter((o) => !orgIdSet.has(o.id));
+          if (remaining.length === 0) {
+            setOrganizations(INITIAL_ORGANIZATIONS);
+          } else {
+            setOrganizations(remaining);
+          }
+          showToast('info', 'Organizations Deleted', `Deleted ${orgIds.length} organization(s).`);
         }}
-        onCancel={() => setAppPromptState((prev) => ({ ...prev, isOpen: false }))}
+        handleBatchDeleteProjects={(orgId, projectIds) => {
+          const projIdSet = new Set(projectIds);
+          setOrganizations((prev) =>
+            prev.map((org) => {
+              if (org.id !== orgId) return org;
+              return {
+                ...org,
+                projects: (org.projects || []).filter((p) => !projIdSet.has(p.id)),
+              };
+            })
+          );
+          showToast('info', 'Projects Deleted', `Deleted ${projectIds.length} project(s).`);
+        }}
+        handleBatchDeleteEnvironments={(orgId, projectId, envIds) => {
+          const envIdSet = new Set(envIds);
+          setOrganizations((prev) =>
+            prev.map((org) => {
+              if (org.id !== orgId) return org;
+              return {
+                ...org,
+                projects: (org.projects || []).map((p) => {
+                  if (p.id !== projectId) return p;
+                  return {
+                    ...p,
+                    environments: (p.environments || []).filter((e) => !envIdSet.has(e.id)),
+                  };
+                }),
+              };
+            })
+          );
+          showToast('info', 'Environments Deleted', `Deleted ${envIds.length} environment(s).`);
+        }}
+        handleBatchDeleteGlobalVars={(keys) => {
+          const keySet = new Set(keys);
+          setGlobalVariables((prev) => prev.filter((v) => !keySet.has(v.key)));
+          showToast('info', 'Variables Deleted', `Deleted ${keys.length} variable(s).`);
+        }}
+        handleBatchDeleteOrgVars={(orgId, keys) => {
+          const keySet = new Set(keys);
+          setOrganizations((prev) =>
+            prev.map((org) => {
+              if (org.id !== orgId) return org;
+              return {
+                ...org,
+                variables: (org.variables || []).filter((v) => !keySet.has(v.key)),
+              };
+            })
+          );
+          showToast('info', 'Variables Deleted', `Deleted ${keys.length} organization variable(s).`);
+        }}
+        handleBatchDeleteFiles={(orgId, projectId, fileIds) => {
+          const fileIdSet = new Set(fileIds);
+          setOrganizations((prev) =>
+            prev.map((org) => {
+              if (org.id !== orgId) return org;
+              return {
+                ...org,
+                projects: (org.projects || []).map((p) => {
+                  if (p.id !== projectId) return p;
+                  return {
+                    ...p,
+                    files: (p.files || []).filter((f) => !fileIdSet.has(f.id)),
+                    folders: (p.folders || []).map((f) => ({
+                      ...f,
+                      fileIds: (f.fileIds || []).filter((id) => !fileIdSet.has(id)),
+                    })),
+                  };
+                }),
+              };
+            })
+          );
+          showToast('info', 'Files Deleted', `Deleted ${fileIds.length} file(s).`);
+        }}
+        handleBatchDeleteRequests={(orgId, projectId, fileId, requestIds) => {
+          const reqIdSet = new Set(requestIds);
+          setOrganizations((prev) =>
+            prev.map((org) => {
+              if (org.id !== orgId) return org;
+              return {
+                ...org,
+                projects: (org.projects || []).map((p) => {
+                  if (p.id !== projectId) return p;
+                  return {
+                    ...p,
+                    files: (p.files || []).map((f) => {
+                      if (f.id !== fileId) return f;
+                      return {
+                        ...f,
+                        requests: (f.requests || []).filter((r) => !reqIdSet.has(r.id)),
+                      };
+                    }),
+                  };
+                }),
+              };
+            })
+          );
+          showToast('info', 'Endpoints Deleted', `Deleted ${requestIds.length} endpoint(s).`);
+        }}
+        handleBatchDeleteScratchpadRequests={(requestIds) => {
+          const reqIdSet = new Set(requestIds);
+          setScratchpadRequests((prev) => prev.filter((r) => !reqIdSet.has(r.id)));
+          showToast('info', 'Drafts Deleted', `Deleted ${requestIds.length} draft(s).`);
+        }}
+        appPromptState={appPromptState}
+        setAppPromptState={setAppPromptState}
+        isCommandPaletteOpen={isCommandPaletteOpen}
+        setIsCommandPaletteOpen={setIsCommandPaletteOpen}
+        activeRequest={activeRequest}
+        handleExecuteRequest={handleExecuteRequest}
+        handleOpenScratchpadRequestInTab={handleOpenScratchpadRequestInTab}
+        setActiveTabMode={setActiveTabMode}
+        isKeyboardShortcutsOpen={isKeyboardShortcutsOpen}
+        setIsKeyboardShortcutsOpen={setIsKeyboardShortcutsOpen}
       />
 
       {/* Global Toast Notifications */}

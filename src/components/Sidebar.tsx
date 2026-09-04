@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { HTTPMethod, Project, RestFile, RestFolder, RestRequest, RequestStatusInfo } from '../types';
+import { HTTPMethod, Organization, Project, RestFile, RestFolder, RestRequest, RequestStatusInfo } from '../types';
 import { PromptModal } from './PromptModal';
 import {
   FileCode,
@@ -24,8 +24,11 @@ import {
 
 interface SidebarProps {
   project: Project;
+  activeOrg?: Organization;
   activeFileId: string | null;
   activeRequestId: string | null;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
   requestStatuses?: Record<string, RequestStatusInfo>;
   scratchpadRequests?: RestRequest[];
   onSelectFile: (fileId: string) => void;
@@ -366,8 +369,11 @@ const RenderRestFile: React.FC<RenderRestFileProps> = ({
 
 export const Sidebar: React.FC<SidebarProps> = ({
   project,
+  activeOrg,
   activeFileId,
   activeRequestId,
+  isCollapsed = false,
+  onToggleCollapse,
   requestStatuses,
   scratchpadRequests = [],
   onSelectFile,
@@ -447,6 +453,43 @@ export const Sidebar: React.FC<SidebarProps> = ({
         return 'text-slate-400 bg-slate-500/10 border-slate-500/30';
     }
   };
+
+  if (isCollapsed) {
+    return (
+      <aside className="w-12 bg-slate-900 border-r border-slate-800 flex flex-col items-center py-3 shrink-0 select-none space-y-4">
+        {onToggleCollapse && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            title="Expand Sidebar (Ctrl + B)"
+            className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        )}
+        {onOpenQuickNewRequest && (
+          <button
+            type="button"
+            onClick={onOpenQuickNewRequest}
+            title="Quick New Request (Ctrl + N)"
+            className="p-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 border border-emerald-500/20 rounded-lg transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+          </button>
+        )}
+        {onOpenBatchWorkspaceModal && (
+          <button
+            type="button"
+            onClick={onOpenBatchWorkspaceModal}
+            title="Batch Workspace Manager"
+            className="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+          >
+            <Layers className="w-4 h-4" />
+          </button>
+        )}
+      </aside>
+    );
+  }
 
   return (
     <aside className="w-72 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 select-none">

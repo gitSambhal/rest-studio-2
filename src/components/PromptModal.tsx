@@ -70,7 +70,12 @@ export const PromptModal: React.FC<PromptModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+    >
       <div className={`w-full max-w-md border rounded-xl shadow-2xl p-5 flex flex-col space-y-4 ${
         isDarkMode
           ? 'bg-slate-900 border-slate-700/80 text-slate-100'

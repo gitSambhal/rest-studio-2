@@ -1,13 +1,110 @@
 import React from 'react';
 
+export interface SearchMatchItem {
+  start: number;
+  end: number;
+}
+
 /**
- * Tokenizes and highlights JSON text with clean Tailwind syntax colors.
+ * Splits and highlights search matches within a text segment.
  */
-export function highlightJson(jsonStr: string): React.ReactNode {
+export function renderHighlightedSegment(
+  text: string,
+  offset: number,
+  searchMatches?: SearchMatchItem[],
+  currentMatchIndex: number = 0,
+  tokenClass?: string,
+  keyPrefix: string = 'hl'
+): React.ReactNode {
+  if (!searchMatches || searchMatches.length === 0 || !text) {
+    return tokenClass ? <span className={tokenClass}>{text}</span> : text;
+  }
+
+  const segEnd = offset + text.length;
+  // Find matches that overlap with [offset, segEnd)
+  const overlapping: { mIdx: number; start: number; end: number }[] = [];
+  for (let i = 0; i < searchMatches.length; i++) {
+    const m = searchMatches[i];
+    if (m.start < segEnd && m.end > offset) {
+      overlapping.push({
+        mIdx: i,
+        start: Math.max(offset, m.start),
+        end: Math.min(segEnd, m.end),
+      });
+    }
+  }
+
+  if (overlapping.length === 0) {
+    return tokenClass ? <span className={tokenClass}>{text}</span> : text;
+  }
+
+  const parts: React.ReactNode[] = [];
+  let curr = offset;
+
+  overlapping.forEach(({ mIdx, start, end }, i) => {
+    if (start > curr) {
+      const beforeText = text.substring(curr - offset, start - offset);
+      parts.push(
+        tokenClass ? (
+          <span key={`${keyPrefix}_b_${i}`} className={tokenClass}>
+            {beforeText}
+          </span>
+        ) : (
+          <span key={`${keyPrefix}_b_${i}`}>{beforeText}</span>
+        )
+      );
+    }
+
+    const matchedText = text.substring(start - offset, end - offset);
+    const isCurrent = mIdx === currentMatchIndex;
+
+    parts.push(
+      <mark
+        key={`${keyPrefix}_m_${mIdx}_${i}`}
+        id={`search-match-${mIdx}`}
+        data-match-index={mIdx}
+        className={
+          isCurrent
+            ? 'bg-amber-400 text-slate-950 font-bold px-0.5 rounded-xs ring-2 ring-amber-300 shadow-sm z-10 inline-block'
+            : 'bg-amber-400/40 text-amber-100 font-semibold px-0.5 rounded-xs border-b border-amber-400/60 inline-block'
+        }
+      >
+        {matchedText}
+      </mark>
+    );
+
+    curr = end;
+  });
+
+  if (curr < segEnd) {
+    const afterText = text.substring(curr - offset);
+    parts.push(
+      tokenClass ? (
+        <span key={`${keyPrefix}_a`} className={tokenClass}>
+          {afterText}
+        </span>
+      ) : (
+        <span key={`${keyPrefix}_a`}>{afterText}</span>
+      )
+    );
+  }
+
+  return <>{parts}</>;
+}
+
+/**
+ * Tokenizes and highlights JSON text with clean Tailwind syntax colors and optional search highlighting.
+ */
+export function highlightJson(
+  jsonStr: string,
+  searchMatches?: SearchMatchItem[],
+  currentMatchIndex: number = 0
+): React.ReactNode {
   if (!jsonStr) return null;
 
   // Tokenizer regex for JSON
-  const tokenRegex = /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[{}\[\]:,])/g;
+  const tokenRegex =
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[{}\[\]:,])/g;
 
   let lastIndex = 0;
   const nodes: React.ReactNode[] = [];
@@ -15,10 +112,21 @@ export function highlightJson(jsonStr: string): React.ReactNode {
 
   while ((match = tokenRegex.exec(jsonStr)) !== null) {
     if (match.index > lastIndex) {
-      nodes.push(jsonStr.substring(lastIndex, match.index));
+      const nonTokenText = jsonStr.substring(lastIndex, match.index);
+      nodes.push(
+        renderHighlightedSegment(
+          nonTokenText,
+          lastIndex,
+          searchMatches,
+          currentMatchIndex,
+          undefined,
+          `nt_${lastIndex}`
+        )
+      );
     }
 
     const token = match[0];
+    const tokenStart = match.index;
     const key = `tok_${lastIndex}_${match.index}`;
 
     if (/^"/.test(token)) {
@@ -27,47 +135,93 @@ export function highlightJson(jsonStr: string): React.ReactNode {
         const colonIdx = token.lastIndexOf(':');
         const keyText = token.substring(0, colonIdx);
         const colonText = token.substring(colonIdx);
+
         nodes.push(
-          <span key={key} className="text-sky-300 font-medium">
-            {keyText}
-          </span>
-        );
-        nodes.push(
-          <span key={`${key}_col`} className="text-slate-500">
-            {colonText}
-          </span>
+          <React.Fragment key={key}>
+            {renderHighlightedSegment(
+              keyText,
+              tokenStart,
+              searchMatches,
+              currentMatchIndex,
+              'text-sky-300 font-medium',
+              `${key}_k`
+            )}
+            {renderHighlightedSegment(
+              colonText,
+              tokenStart + colonIdx,
+              searchMatches,
+              currentMatchIndex,
+              'text-slate-500',
+              `${key}_c`
+            )}
+          </React.Fragment>
         );
       } else {
         // String value
         nodes.push(
-          <span key={key} className="text-emerald-300">
-            {token}
-          </span>
+          <React.Fragment key={key}>
+            {renderHighlightedSegment(
+              token,
+              tokenStart,
+              searchMatches,
+              currentMatchIndex,
+              'text-emerald-300',
+              key
+            )}
+          </React.Fragment>
         );
       }
     } else if (/^(true|false)$/.test(token)) {
       nodes.push(
-        <span key={key} className="text-purple-400 font-semibold">
-          {token}
-        </span>
+        <React.Fragment key={key}>
+          {renderHighlightedSegment(
+            token,
+            tokenStart,
+            searchMatches,
+            currentMatchIndex,
+            'text-purple-400 font-semibold',
+            key
+          )}
+        </React.Fragment>
       );
     } else if (/^null$/.test(token)) {
       nodes.push(
-        <span key={key} className="text-rose-400 font-semibold italic">
-          {token}
-        </span>
+        <React.Fragment key={key}>
+          {renderHighlightedSegment(
+            token,
+            tokenStart,
+            searchMatches,
+            currentMatchIndex,
+            'text-rose-400 font-semibold italic',
+            key
+          )}
+        </React.Fragment>
       );
     } else if (/^-?\d/.test(token)) {
       nodes.push(
-        <span key={key} className="text-amber-400 font-mono">
-          {token}
-        </span>
+        <React.Fragment key={key}>
+          {renderHighlightedSegment(
+            token,
+            tokenStart,
+            searchMatches,
+            currentMatchIndex,
+            'text-amber-400 font-mono',
+            key
+          )}
+        </React.Fragment>
       );
     } else {
       nodes.push(
-        <span key={key} className="text-slate-400">
-          {token}
-        </span>
+        <React.Fragment key={key}>
+          {renderHighlightedSegment(
+            token,
+            tokenStart,
+            searchMatches,
+            currentMatchIndex,
+            'text-slate-400',
+            key
+          )}
+        </React.Fragment>
       );
     }
 
@@ -75,7 +229,17 @@ export function highlightJson(jsonStr: string): React.ReactNode {
   }
 
   if (lastIndex < jsonStr.length) {
-    nodes.push(jsonStr.substring(lastIndex));
+    const trailingText = jsonStr.substring(lastIndex);
+    nodes.push(
+      renderHighlightedSegment(
+        trailingText,
+        lastIndex,
+        searchMatches,
+        currentMatchIndex,
+        undefined,
+        `tr_${lastIndex}`
+      )
+    );
   }
 
   return <>{nodes}</>;

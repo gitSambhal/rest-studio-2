@@ -47,12 +47,46 @@ export interface RequestAuth {
   apiKeyAddTo?: 'header' | 'query';
 }
 
-export type BodyMode = 'none' | 'json' | 'form-data' | 'x-www-form-urlencoded' | 'raw' | 'graphql';
+export type BodyMode = 'none' | 'json' | 'form-data' | 'x-www-form-urlencoded' | 'raw' | 'binary' | 'graphql';
+
+export interface FormDataItem {
+  id: string;
+  key: string;
+  type: 'text' | 'file';
+  value: string;
+  fileData?: string; // base64 / data URL
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+  enabled: boolean;
+  description?: string;
+}
+
+export interface BinaryFilePayload {
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+  fileData?: string; // base64 or data URL
+}
+
+export interface CookieItem {
+  id: string;
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  expires?: string;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: string;
+  createdAt: number;
+}
 
 export interface RequestBody {
   mode: BodyMode;
   rawText: string;
-  formDataItems?: KeyValuePair[];
+  formDataItems?: FormDataItem[];
+  binaryFile?: BinaryFilePayload;
   urlencodedItems?: KeyValuePair[];
   graphqlQuery?: string;
   graphqlVariables?: string;
@@ -182,7 +216,7 @@ export interface Organization {
 
 export interface WorkspaceTab {
   id: string;
-  type: 'request' | 'file' | 'runner' | 'history' | 'onboarding';
+  type: 'request' | 'file' | 'code' | 'runner' | 'history' | 'onboarding';
   title: string;
   orgId?: string;
   projectId?: string;
@@ -207,6 +241,7 @@ export interface ExecutionResponse {
   statusText: string;
   headers: Record<string, string>;
   body: string;
+  base64Body?: string;
   size: number;
   duration: number;
   timestamp: number;

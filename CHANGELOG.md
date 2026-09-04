@@ -2,7 +2,29 @@
 
 All notable changes to **RestStudio** are documented in this file.
 
-## [1.5.6] - 2026-09-04
+## [1.5.7] - 2026-09-04
+### Added
+- **Response Viewer In-Body Search & Match Navigation (Ctrl+F)**:
+  - Integrated a dedicated search bar (`ResponseSearchBar`) supporting substring queries, case-sensitivity toggles, regex queries, and match counter (`X of Y`).
+  - Added real-time match navigation with previous (`Shift+Enter` / Up) and next (`Enter` / Down) buttons, plus smooth auto-scrolling to active matches.
+  - Added highlighted match rendering in both Pretty and Raw response view modes.
+- **Rich Media & Content Preview Tab**:
+  - Added an interactive **Preview** tab in `ResponseViewer` that dynamically detects content type.
+  - Supports inline visual rendering for raster images (`png`, `jpeg`, `gif`, `webp`), vector SVGs with raw code inspection, HTML web previews with sanitized frames, audio players, video players, and binary / PDF document inspection.
+- **cURL Auto Environment Variable Mapping**:
+  - Added `curlEnvMapper` utility to auto-detect base URLs, API tokens, and authorization keys during cURL / request imports.
+  - Added an interactive "Auto-Extract Reusable Variables" section in `QuickCurlModal` allowing users to review and customize mapped variable names, original values, and placeholders.
+  - Directly adds extracted variables to the active environment or global variables and applies `{{variable}}` replacements across URL, headers, and request bodies.
+- **Global Command Palette (Ctrl+K / ⌘K)**:
+  - Added `CommandPaletteModal` accessible globally via `Ctrl+K` / `⌘K` or the top toolbar.
+  - Provides instant fuzzy search across all requests, actions, navigation views, environments, and settings.
+- **Keyboard Shortcuts Cheatsheet (? / Ctrl+/)**:
+  - Added `KeyboardShortcutsModal` displaying a categorized reference guide of keyboard shortcuts across navigation, request editing, and tools.
+### Fixed
+- **ResponseViewer React Rules of Hooks Compliance**:
+  - Moved all hooks (`searchMatches` useMemo, match index `useEffect`, and body parsing useMemo) before early return guards (`isLoading` and `!displayResponse`).
+  - Guaranteed invariant hook execution order and count across all render cycles and response states.
+  - Replaced side-effect `useMemo` with `useEffect` in `JsonSchemaTreeViewer` for path expansion state initialization.
 ### Added
 - **Response Schema Tab & JSON Schema Tree Inspector**:
   - Added a dedicated **Schema** tab in `ResponseViewer` that automatically analyzes and infers structure from JSON API responses.

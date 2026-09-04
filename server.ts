@@ -35,7 +35,7 @@ async function startServer() {
 
   // REST Request Proxy Endpoint - Proxies public external APIs server-side (CORS relief)
   app.post(['/api/proxy', '/proxy'], async (req, res) => {
-    const { method = 'GET', url, headers = {}, body } = req.body;
+    const { method = 'GET', url, headers = {}, body, formDataItems, binaryFile } = req.body;
 
     if (!url || typeof url !== 'string') {
       res.status(400).json({ error: 'Valid URL parameter is required' });
@@ -113,13 +113,42 @@ async function startServer() {
         });
       }
 
+      let requestData: any = body !== undefined && body !== null ? body : undefined;
+
+      if (formDataItems && Array.isArray(formDataItems) && formDataItems.length > 0) {
+        const fd = new FormData();
+        for (const item of formDataItems) {
+          if (!item.enabled || !item.key) continue;
+          if (item.type === 'file' && item.fileData) {
+            const base64Data = item.fileData.includes(',') ? item.fileData.split(',')[1] : item.fileData;
+            const buffer = Buffer.from(base64Data, 'base64');
+            const blob = new Blob([buffer], { type: item.fileType || 'application/octet-stream' });
+            fd.append(item.key, blob, item.fileName || 'file.bin');
+          } else {
+            fd.append(item.key, item.value ?? '');
+          }
+        }
+        requestData = fd;
+        // Let FormData / Axios set the multipart boundary header
+        delete cleanedHeaders['content-type'];
+        delete cleanedHeaders['Content-Type'];
+      } else if (binaryFile && binaryFile.fileData) {
+        const base64Data = binaryFile.fileData.includes(',')
+          ? binaryFile.fileData.split(',')[1]
+          : binaryFile.fileData;
+        requestData = Buffer.from(base64Data, 'base64');
+        if (!cleanedHeaders['content-type'] && !cleanedHeaders['Content-Type']) {
+          cleanedHeaders['content-type'] = binaryFile.fileType || 'application/octet-stream';
+        }
+      }
+
       const axiosResponse = await axios({
         method: method.toUpperCase(),
         url: targetUrl,
         headers: cleanedHeaders,
-        data: body !== undefined && body !== null ? body : undefined,
+        data: requestData,
         validateStatus: () => true, // Don't throw on non-2xx status codes
-        responseType: 'text',
+        responseType: 'arraybuffer',
         timeout: 25000,
         maxRedirects: 10,
       });
@@ -127,32 +156,37 @@ async function startServer() {
       const endTime = performance.now();
       const duration = Math.round(endTime - startTime);
 
-      const responseText = typeof axiosResponse.data === 'string'
-        ? axiosResponse.data
-        : JSON.stringify(axiosResponse.data);
-
-      const responseSize = Buffer.byteLength(responseText, 'utf8');
-
       // Extract response headers
       const resHeaders: Record<string, string> = {};
       if (axiosResponse.headers) {
         Object.entries(axiosResponse.headers).forEach(([k, v]) => {
           if (v !== undefined) {
-            resHeaders[k] = Array.isArray(v) ? v.join(', ') : String(v);
+            if (k.toLowerCase() === 'set-cookie' && Array.isArray(v)) {
+              resHeaders[k] = v.join('\n');
+            } else {
+              resHeaders[k] = Array.isArray(v) ? v.join(', ') : String(v);
+            }
           }
         });
       }
+
+      const buffer = Buffer.from(axiosResponse.data);
+      const contentType = resHeaders['content-type'] || 'text/plain';
+      const isBinary = /^(image\/|audio\/|video\/|application\/pdf|application\/octet-stream|application\/zip)/i.test(contentType);
+      const responseText = isBinary ? `[Binary data: ${contentType}, ${buffer.length} bytes]` : buffer.toString('utf8');
+      const base64Body = buffer.toString('base64');
 
       res.json({
         status: axiosResponse.status,
         statusText: axiosResponse.statusText || 'OK',
         headers: resHeaders,
         body: responseText,
-        size: responseSize,
+        base64Body,
+        size: buffer.length,
         duration,
         timestamp: Date.now(),
         ok: axiosResponse.status >= 200 && axiosResponse.status < 300,
-        contentType: resHeaders['content-type'] || 'text/plain',
+        contentType,
       });
     } catch (err: any) {
       const endTime = performance.now();

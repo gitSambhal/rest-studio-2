@@ -304,7 +304,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
-      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || (e.target as HTMLElement).tagName !== 'TEXTAREA')) {
+      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         if (activeTab === 'export') {
           handleExportPostman();
@@ -318,9 +318,14 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   }, [onClose, activeTab, inputText, fileName, handleProcessImport]);
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-150 ${
-      isDarkMode ? 'bg-slate-950/80 backdrop-blur-sm' : 'bg-slate-900/40 backdrop-blur-sm'
-    }`}>
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-150 ${
+        isDarkMode ? 'bg-slate-950/80 backdrop-blur-sm' : 'bg-slate-900/40 backdrop-blur-sm'
+      }`}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className={`border rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden ${
         isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
       }`}>

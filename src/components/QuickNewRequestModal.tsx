@@ -70,6 +70,19 @@ export const QuickNewRequestModal: React.FC<QuickNewRequestModalProps> = ({
     }
   }, [initialPasteText, isOpen]);
 
+  // Global Escape key listener
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const activeEnv = project?.environments?.find((e) => e.id === project?.activeEnvId);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Project, RestRequest, RestFile } from '../types';
+import { Project, RestRequest, RestFile, EnvVariable } from '../types';
 import { detectAndParsePaste, SmartPasteResult } from '../utils/restParser';
+import { detectEnvMappings, applyEnvMappings, EnvMappingSuggestion } from '../utils/curlEnvMapper';
 import {
   X,
   Terminal,
@@ -15,6 +16,8 @@ import {
   FileJson,
   Layers,
   Code2,
+  SlidersHorizontal,
+  Key,
 } from 'lucide-react';
 
 interface QuickCurlModalProps {
@@ -26,6 +29,7 @@ interface QuickCurlModalProps {
   onImportCurl: (req: RestRequest, targetFileId?: string) => void;
   onImportPostman?: (folders: { id: string; name: string; fileIds: string[] }[], files: RestFile[]) => void;
   onImportRestFile?: (fileName: string, content: string) => void;
+  onAddEnvironmentVariables?: (variables: EnvVariable[]) => void;
 }
 
 const SAMPLE_PASTES = [
@@ -117,6 +121,7 @@ export const QuickCurlModal: React.FC<QuickCurlModalProps> = ({
   onImportCurl,
   onImportPostman,
   onImportRestFile,
+  onAddEnvironmentVariables,
 }) => {
   const files = project?.files || [];
   const defaultTargetFileId = activeFileId || (files.length > 0 ? files[0].id : '');
@@ -124,13 +129,33 @@ export const QuickCurlModal: React.FC<QuickCurlModalProps> = ({
   const [inputText, setInputText] = useState('');
   const [targetFileId, setTargetFileId] = useState<string>(defaultTargetFileId);
   const [parseResult, setParseResult] = useState<SmartPasteResult | null>(null);
+  const [envMappings, setEnvMappings] = useState<EnvMappingSuggestion[]>([]);
 
   // Live Auto-Detection Effect
   useEffect(() => {
     if (!isOpen) return;
     const result = detectAndParsePaste(inputText);
     setParseResult(result);
+    if (result && result.requests.length > 0) {
+      const suggestions = detectEnvMappings(result.requests[0]);
+      setEnvMappings(suggestions);
+    } else {
+      setEnvMappings([]);
+    }
   }, [inputText, isOpen]);
+
+  // Global Escape Key Handler
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -153,7 +178,15 @@ export const QuickCurlModal: React.FC<QuickCurlModalProps> = ({
     }
 
     // Single or primary request import
-    const firstReq = parseResult.requests[0];
+    let firstReq = parseResult.requests[0];
+    if (envMappings.length > 0 && onAddEnvironmentVariables) {
+      const { request: mappedReq, createdVariables } = applyEnvMappings(firstReq, envMappings);
+      if (createdVariables.length > 0) {
+        onAddEnvironmentVariables(createdVariables);
+        firstReq = mappedReq;
+      }
+    }
+
     onImportCurl(firstReq, targetFileId || undefined);
     onClose();
   };
@@ -339,6 +372,64 @@ export const QuickCurlModal: React.FC<QuickCurlModalProps> = ({
               <span>Could not parse format. Please check your cURL, Postman JSON, REST file snippet, or OpenAPI spec syntax.</span>
             </div>
           ) : null}
+
+          {/* Auto-Environment Mapping Suggestions */}
+          {envMappings.length > 0 && (
+            <div className={`p-3 rounded-xl border space-y-2.5 ${
+              isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-100/80 border-slate-200'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-1.5 text-xs font-bold text-amber-400">
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>Auto-Extract Reusable Variables</span>
+                </div>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {envMappings.filter((m) => m.enabled).length} of {envMappings.length} selected
+                </span>
+              </div>
+              <p className={`text-[11px] leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                RestStudio detected potential environment variables from this command (host, tokens, keys). Check to automatically replace them with <code className="text-amber-400">&#123;&#123;variable&#125;&#125;</code> placeholders.
+              </p>
+
+              <div className="space-y-1.5 pt-1">
+                {envMappings.map((mapping, idx) => (
+                  <label
+                    key={mapping.id}
+                    className={`flex items-center justify-between p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
+                      mapping.enabled
+                        ? isDarkMode
+                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+                          : 'bg-amber-50 border-amber-300 text-amber-900'
+                        : isDarkMode
+                          ? 'bg-slate-900 border-slate-800 text-slate-400 opacity-60'
+                          : 'bg-white border-slate-200 text-slate-500 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5 truncate">
+                      <input
+                        type="checkbox"
+                        checked={mapping.enabled}
+                        onChange={() => {
+                          const updated = [...envMappings];
+                          updated[idx] = { ...updated[idx], enabled: !updated[idx].enabled };
+                          setEnvMappings(updated);
+                        }}
+                        className="rounded border-slate-700 text-amber-500 focus:ring-0 focus:ring-offset-0"
+                      />
+                      <div className="truncate">
+                        <span className="font-mono font-bold text-amber-400">&#123;&#123;{mapping.variableName}&#125;&#125;</span>
+                        <span className="mx-1.5 text-slate-500">←</span>
+                        <span className="font-mono text-[11px] truncate">{mapping.originalValue}</span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 shrink-0 ml-2">
+                      {mapping.category}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Target File Selector */}
           <div>
