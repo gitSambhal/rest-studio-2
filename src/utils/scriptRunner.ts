@@ -268,14 +268,91 @@ export async function runPreRequestScript(
         trace: pmLog,
       };
 
+      const createExpectMatcher = (val: any) => ({
+        to: {
+          equal: (expected: any) => {
+            if (val !== expected) throw new Error(`Expected ${JSON.stringify(val)} to equal ${JSON.stringify(expected)}`);
+          },
+          eql: (expected: any) => {
+            if (JSON.stringify(val) !== JSON.stringify(expected)) throw new Error(`Expected deep equality between ${JSON.stringify(val)} and ${JSON.stringify(expected)}`);
+          },
+          be: {
+            ok: () => {
+              if (!val) throw new Error(`Expected ${val} to be truthy`);
+            },
+            true: () => {
+              if (val !== true) throw new Error(`Expected ${val} to be true`);
+            },
+            false: () => {
+              if (val !== false) throw new Error(`Expected ${val} to be false`);
+            },
+            null: () => {
+              if (val !== null) throw new Error(`Expected ${val} to be null`);
+            },
+            undefined: () => {
+              if (val !== undefined) throw new Error(`Expected ${val} to be undefined`);
+            },
+            a: (typeStr: string) => {
+              const actualType = Array.isArray(val) ? 'array' : typeof val;
+              if (actualType !== typeStr.toLowerCase()) throw new Error(`Expected type ${typeStr}, got ${actualType}`);
+            },
+            an: (typeStr: string) => {
+              const actualType = Array.isArray(val) ? 'array' : typeof val;
+              if (actualType !== typeStr.toLowerCase()) throw new Error(`Expected type ${typeStr}, got ${actualType}`);
+            },
+            above: (num: number) => {
+              if (typeof val !== 'number' || val <= num) throw new Error(`Expected ${val} to be above ${num}`);
+            },
+            below: (num: number) => {
+              if (typeof val !== 'number' || val >= num) throw new Error(`Expected ${val} to be below ${num}`);
+            },
+            oneOf: (arr: any[]) => {
+              if (!Array.isArray(arr) || !arr.includes(val)) throw new Error(`Expected ${val} to be one of ${JSON.stringify(arr)}`);
+            },
+          },
+          have: {
+            property: (propName: string, propVal?: any) => {
+              if (val === null || typeof val !== 'object' || !(propName in val)) {
+                throw new Error(`Expected object to have property "${propName}"`);
+              }
+              if (propVal !== undefined && val[propName] !== propVal) {
+                throw new Error(`Expected property "${propName}" to equal ${propVal}, got ${val[propName]}`);
+              }
+            },
+            lengthOf: (len: number) => {
+              if (!val || val.length !== len) throw new Error(`Expected length of ${len}, got ${val?.length}`);
+            },
+          },
+          include: (substrOrItem: any) => {
+            if (typeof val === 'string' && !val.includes(substrOrItem)) throw new Error(`Expected string to include "${substrOrItem}"`);
+            if (Array.isArray(val) && !val.includes(substrOrItem)) throw new Error(`Expected array to include ${JSON.stringify(substrOrItem)}`);
+          },
+        },
+      });
+
+      const getVarFromScope = (key: string): string => {
+        if (newVariables[key] !== undefined) return newVariables[key];
+        if (scopeCtx?.localVariables?.[key] !== undefined) return scopeCtx.localVariables[key];
+        if (scopeCtx?.fileVariables?.[key] !== undefined) return scopeCtx.fileVariables[key];
+        const envVar = (scopeCtx?.envVariables || scopeCtx?.projectVariables || []).find((v) => v.key === key && v.enabled !== false);
+        if (envVar) return envVar.value;
+        const orgVar = (scopeCtx?.organizationVariables || []).find((v) => v.key === key && v.enabled !== false);
+        if (orgVar) return orgVar.value;
+        const globVar = (scopeCtx?.globalVariables || []).find((v) => v.key === key && v.enabled !== false);
+        if (globVar) return globVar.value;
+        return '';
+      };
+
       const pm = {
         environment: {
+          get: (key: string) => getVarFromScope(key),
           set: (key: string, val: string) => {
             newVariables[key] = String(val);
             pmLog(`Environment variable set: ${key} = ${val}`);
           },
         },
         variables: {
+          get: (key: string) => getVarFromScope(key),
           set: (key: string, val: string) => {
             newVariables[key] = String(val);
             pmLog(`Variable set: ${key} = ${val}`);
@@ -295,6 +372,7 @@ export async function runPreRequestScript(
             pmLog(`Body modified: ${newBodyText.substring(0, 50)}...`);
           },
         },
+        expect: createExpectMatcher,
         log: pmLog,
       };
 
@@ -496,6 +574,68 @@ export function runPostRequestScript(
         parsedJsonBody = JSON.parse(response.body);
       } catch (e) {}
 
+      const createPostExpectMatcher = (val: any) => ({
+        to: {
+          equal: (expected: any) => {
+            if (val !== expected) throw new Error(`Expected ${JSON.stringify(val)} to equal ${JSON.stringify(expected)}`);
+          },
+          eql: (expected: any) => {
+            if (JSON.stringify(val) !== JSON.stringify(expected)) throw new Error(`Expected deep equality between ${JSON.stringify(val)} and ${JSON.stringify(expected)}`);
+          },
+          be: {
+            ok: () => {
+              if (!val) throw new Error(`Expected ${val} to be truthy`);
+            },
+            true: () => {
+              if (val !== true) throw new Error(`Expected ${val} to be true`);
+            },
+            false: () => {
+              if (val !== false) throw new Error(`Expected ${val} to be false`);
+            },
+            null: () => {
+              if (val !== null) throw new Error(`Expected ${val} to be null`);
+            },
+            undefined: () => {
+              if (val !== undefined) throw new Error(`Expected ${val} to be undefined`);
+            },
+            a: (typeStr: string) => {
+              const actualType = Array.isArray(val) ? 'array' : typeof val;
+              if (actualType !== typeStr.toLowerCase()) throw new Error(`Expected type ${typeStr}, got ${actualType}`);
+            },
+            an: (typeStr: string) => {
+              const actualType = Array.isArray(val) ? 'array' : typeof val;
+              if (actualType !== typeStr.toLowerCase()) throw new Error(`Expected type ${typeStr}, got ${actualType}`);
+            },
+            above: (num: number) => {
+              if (typeof val !== 'number' || val <= num) throw new Error(`Expected ${val} to be above ${num}`);
+            },
+            below: (num: number) => {
+              if (typeof val !== 'number' || val >= num) throw new Error(`Expected ${val} to be below ${num}`);
+            },
+            oneOf: (arr: any[]) => {
+              if (!Array.isArray(arr) || !arr.includes(val)) throw new Error(`Expected ${val} to be one of ${JSON.stringify(arr)}`);
+            },
+          },
+          have: {
+            property: (propName: string, propVal?: any) => {
+              if (val === null || typeof val !== 'object' || !(propName in val)) {
+                throw new Error(`Expected object to have property "${propName}"`);
+              }
+              if (propVal !== undefined && val[propName] !== propVal) {
+                throw new Error(`Expected property "${propName}" to equal ${propVal}, got ${val[propName]}`);
+              }
+            },
+            lengthOf: (len: number) => {
+              if (!val || val.length !== len) throw new Error(`Expected length of ${len}, got ${val?.length}`);
+            },
+          },
+          include: (substrOrItem: any) => {
+            if (typeof val === 'string' && !val.includes(substrOrItem)) throw new Error(`Expected string to include "${substrOrItem}"`);
+            if (Array.isArray(val) && !val.includes(substrOrItem)) throw new Error(`Expected array to include ${JSON.stringify(substrOrItem)}`);
+          },
+        },
+      });
+
       const pm = {
         response: {
           status: response.status,
@@ -506,12 +646,14 @@ export function runPostRequestScript(
           json: () => parsedJsonBody,
         },
         environment: {
+          get: (key: string) => newVariables[key] !== undefined ? newVariables[key] : '',
           set: (key: string, val: string) => {
             newVariables[key] = String(val);
             pmLog(`Environment variable set: ${key} = ${val}`);
           },
         },
         variables: {
+          get: (key: string) => newVariables[key] !== undefined ? newVariables[key] : '',
           set: (key: string, val: string) => {
             newVariables[key] = String(val);
             pmLog(`Variable set: ${key} = ${val}`);
@@ -541,21 +683,7 @@ export function runPostRequestScript(
             pmLog(`✗ Test Failed: ${testName} (${e.message})`);
           }
         },
-        expect: (val: any) => ({
-          to: {
-            equal: (expected: any) => {
-              if (val !== expected) throw new Error(`Expected ${val} to equal ${expected}`);
-            },
-            be: {
-              ok: () => {
-                if (!val) throw new Error(`Expected ${val} to be truthy`);
-              },
-            },
-            include: (substr: string) => {
-              if (typeof val === 'string' && !val.includes(substr)) throw new Error(`Expected string to include "${substr}"`);
-            },
-          },
-        }),
+        expect: createPostExpectMatcher,
         log: pmLog,
       };
 

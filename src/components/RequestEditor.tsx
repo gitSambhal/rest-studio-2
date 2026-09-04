@@ -31,6 +31,7 @@ import {
   ShieldCheck,
   Key,
   Square,
+  FolderInput,
 } from 'lucide-react';
 
 import { isLocalTargetUrl, isNeutralinoActive, isLnaPromptApplicable, getLocalNetworkPermissionState, getLnaPermissionLabel, LocalNetworkPermissionState } from '../utils/httpExecutor';
@@ -41,6 +42,8 @@ interface RequestEditorProps {
   fileVariables: Record<string, string>;
   scopeCtx?: ScopeContext;
   projectAuth?: RequestAuth;
+  isStandalone?: boolean;
+  onSaveToProject?: () => void;
   onUpdateProjectAuth?: (auth: RequestAuth) => void;
   onUpdateRequest: (updated: RestRequest) => void;
   onSendRequest: (req: RestRequest) => void;
@@ -55,6 +58,8 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   fileVariables,
   scopeCtx,
   projectAuth,
+  isStandalone,
+  onSaveToProject,
   onUpdateProjectAuth,
   onUpdateRequest,
   onSendRequest,
@@ -273,22 +278,27 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     }
   }
 
-  // 3. Resolve Auth
-  if (request.auth.type === 'bearer' && request.auth.bearerToken) {
-    const token = resolveEnvVariables(request.auth.bearerToken, ctxToUse).resolved;
+  // 3. Resolve Auth (Support Inherited Auth from Project)
+  let effectiveAuth = request.auth;
+  if (!effectiveAuth || effectiveAuth.type === 'inherit') {
+    effectiveAuth = projectAuth || { type: 'none', bearerToken: '' };
+  }
+
+  if (effectiveAuth.type === 'bearer' && effectiveAuth.bearerToken) {
+    const token = resolveEnvVariables(effectiveAuth.bearerToken, ctxToUse).resolved;
     resolvedHeaderMap['Authorization'] = `Bearer ${token}`;
-  } else if (request.auth.type === 'basic') {
-    const username = resolveEnvVariables(request.auth.basicUsername || '', ctxToUse).resolved;
-    const password = resolveEnvVariables(request.auth.basicPassword || '', ctxToUse).resolved;
+  } else if (effectiveAuth.type === 'basic') {
+    const username = resolveEnvVariables(effectiveAuth.basicUsername || '', ctxToUse).resolved;
+    const password = resolveEnvVariables(effectiveAuth.basicPassword || '', ctxToUse).resolved;
     if (username || password) {
       const credentials = `${username}:${password}`;
       const encoded = typeof btoa !== 'undefined' ? btoa(credentials) : '';
       resolvedHeaderMap['Authorization'] = `Basic ${encoded}`;
     }
-  } else if (request.auth.type === 'apikey') {
-    const key = resolveEnvVariables(request.auth.apiKeyKey || '', ctxToUse).resolved;
-    const value = resolveEnvVariables(request.auth.apiKeyValue || '', ctxToUse).resolved;
-    const addTo = request.auth.apiKeyAddTo || 'header';
+  } else if (effectiveAuth.type === 'apikey') {
+    const key = resolveEnvVariables(effectiveAuth.apiKeyKey || '', ctxToUse).resolved;
+    const value = resolveEnvVariables(effectiveAuth.apiKeyValue || '', ctxToUse).resolved;
+    const addTo = effectiveAuth.apiKeyAddTo || 'header';
     if (key && value) {
       if (addTo === 'header') {
         resolvedHeaderMap[key] = value;
@@ -403,6 +413,18 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           </div>
 
           <div className="flex items-center space-x-2">
+            {isStandalone && onSaveToProject && (
+              <button
+                type="button"
+                onClick={onSaveToProject}
+                className="flex items-center space-x-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-semibold text-xs px-3 py-2 rounded-lg border border-amber-500/30 transition-colors cursor-pointer"
+                title="Save this standalone request into a Project Collection"
+              >
+                <FolderInput className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">Save to Project</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => setIsCurlModalOpen(true)}

@@ -5,6 +5,7 @@ import { PlayCircle, CheckCircle2, AlertCircle, Clock, Check, RefreshCw } from '
 interface CollectionRunnerProps {
   project: Project;
   onExecuteRequestProxy: (req: RestRequest) => Promise<ExecutionResponse>;
+  isDarkMode?: boolean;
 }
 
 interface RunResult {
@@ -17,6 +18,7 @@ interface RunResult {
 export const CollectionRunner: React.FC<CollectionRunnerProps> = ({
   project,
   onExecuteRequestProxy,
+  isDarkMode = true,
 }) => {
   const [selectedFileId, setSelectedFileId] = useState<string>('all');
   const [delayMs, setDelayMs] = useState<number>(200);
@@ -93,22 +95,24 @@ export const CollectionRunner: React.FC<CollectionRunnerProps> = ({
   const failed = results.filter((r) => r.status === 'failed').length;
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-950 overflow-hidden">
+    <div className={`flex-1 flex flex-col overflow-hidden ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
       {/* Top Configuration Bar */}
-      <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
+      <div className={`p-4 border-b flex items-center justify-between shrink-0 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
-            <PlayCircle className="w-5 h-5 text-emerald-400" />
-            <span className="font-bold text-slate-100 text-sm">REST Collection Runner</span>
+            <PlayCircle className="w-5 h-5 text-emerald-500" />
+            <span className={`font-bold text-sm ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>REST Collection Runner</span>
           </div>
 
-          <div className="flex items-center space-x-2 text-xs font-mono text-slate-300">
+          <div className={`flex items-center space-x-2 text-xs font-mono ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
             <span>Target File:</span>
             <select
               value={selectedFileId}
               onChange={(e) => setSelectedFileId(e.target.value)}
               disabled={isRunning}
-              className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 font-mono text-xs focus:outline-none focus:border-emerald-500"
+              className={`border rounded-lg px-3 py-1.5 font-mono text-xs focus:outline-none focus:border-emerald-500 ${
+                isDarkMode ? 'bg-slate-950 border-slate-700 text-slate-200' : 'bg-white border-slate-300 text-slate-800'
+              }`}
             >
               <option value="all">Entire Project ({(project?.files || []).reduce((a, f) => a + (f.requests?.length || 0), 0)} requests)</option>
               {(project?.files || []).map((file) => (
@@ -119,7 +123,7 @@ export const CollectionRunner: React.FC<CollectionRunnerProps> = ({
             </select>
           </div>
 
-          <div className="flex items-center space-x-2 text-xs font-mono text-slate-300">
+          <div className={`flex items-center space-x-2 text-xs font-mono ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
             <span>Delay (ms):</span>
             <input
               type="number"
@@ -128,7 +132,9 @@ export const CollectionRunner: React.FC<CollectionRunnerProps> = ({
               disabled={isRunning}
               step={100}
               min={0}
-              className="w-20 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 font-mono text-xs focus:outline-none focus:border-emerald-500"
+              className={`w-20 border rounded-lg px-2 py-1 font-mono text-xs focus:outline-none focus:border-emerald-500 ${
+                isDarkMode ? 'bg-slate-950 border-slate-700 text-slate-200' : 'bg-white border-slate-300 text-slate-800'
+              }`}
             />
           </div>
         </div>
@@ -137,7 +143,7 @@ export const CollectionRunner: React.FC<CollectionRunnerProps> = ({
           type="button"
           onClick={handleStartRunner}
           disabled={isRunning}
-          className="flex items-center justify-center space-x-2 min-w-[185px] bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs px-5 py-2 rounded-lg shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50"
+          className="flex items-center justify-center space-x-2 min-w-[185px] bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs px-5 py-2 rounded-lg shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 cursor-pointer"
         >
           {isRunning ? (
             <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
@@ -150,16 +156,16 @@ export const CollectionRunner: React.FC<CollectionRunnerProps> = ({
 
       {/* Progress & Summary Bar */}
       {total > 0 && (
-        <div className="p-3 bg-slate-900/60 border-b border-slate-800 flex items-center justify-between text-xs font-mono shrink-0">
+        <div className={`p-3 border-b flex items-center justify-between text-xs font-mono shrink-0 ${isDarkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-100 border-slate-200'}`}>
           <div className="flex items-center space-x-6">
-            <span className="text-slate-300">
+            <span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>
               Progress: <strong>{completed} / {total}</strong>
             </span>
-            <span className="text-emerald-400 font-bold">Passed: {passed}</span>
-            <span className="text-rose-400 font-bold">Failed: {failed}</span>
+            <span className="text-emerald-500 font-bold">Passed: {passed}</span>
+            <span className="text-rose-500 font-bold">Failed: {failed}</span>
           </div>
 
-          <div className="w-48 bg-slate-800 rounded-full h-2 overflow-hidden">
+          <div className={`w-48 rounded-full h-2 overflow-hidden ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`}>
             <div
               className="bg-emerald-500 h-full transition-all duration-200"
               style={{ width: `${(completed / total) * 100}%` }}
@@ -170,8 +176,8 @@ export const CollectionRunner: React.FC<CollectionRunnerProps> = ({
 
       {/* Results Log Table */}
       <div className="flex-1 overflow-y-auto p-4">
-        <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800">
-          <div className="grid grid-cols-12 bg-slate-900/80 px-4 py-2.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono">
+        <div className={`border rounded-xl overflow-hidden divide-y ${isDarkMode ? 'border-slate-800 divide-slate-800' : 'border-slate-200 divide-slate-200'}`}>
+          <div className={`grid grid-cols-12 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider font-mono ${isDarkMode ? 'bg-slate-900/80 text-slate-400' : 'bg-slate-100 text-slate-600'}`}>
             <div className="col-span-1">Status</div>
             <div className="col-span-1">Method</div>
             <div className="col-span-4">Request Name</div>
@@ -180,40 +186,40 @@ export const CollectionRunner: React.FC<CollectionRunnerProps> = ({
           </div>
 
           {results.map((item, idx) => (
-            <div key={item.request.id + '_' + idx} className="grid grid-cols-12 px-4 py-3 items-center font-mono text-xs hover:bg-slate-900/40">
+            <div key={item.request.id + '_' + idx} className={`grid grid-cols-12 px-4 py-3 items-center font-mono text-xs transition-colors ${isDarkMode ? 'hover:bg-slate-900/40' : 'hover:bg-slate-50'}`}>
               <div className="col-span-1">
-                {item.status === 'pending' && <span className="text-slate-500">Pending</span>}
+                {item.status === 'pending' && <span className="text-slate-400">Pending</span>}
                 {item.status === 'running' && (
-                  <span className="text-emerald-400 font-bold animate-pulse flex items-center space-x-1">
+                  <span className="text-emerald-500 font-bold animate-pulse flex items-center space-x-1">
                     <RefreshCw className="w-3 h-3 animate-spin" />
                     <span>Running</span>
                   </span>
                 )}
                 {item.status === 'success' && (
-                  <span className="inline-flex items-center space-x-1 text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">
+                  <span className="inline-flex items-center space-x-1 text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">
                     <CheckCircle2 className="w-3 h-3" />
                     <span>{item.response?.status}</span>
                   </span>
                 )}
                 {item.status === 'failed' && (
-                  <span className="inline-flex items-center space-x-1 text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded">
+                  <span className="inline-flex items-center space-x-1 text-rose-500 font-bold bg-rose-500/10 px-2 py-0.5 rounded">
                     <AlertCircle className="w-3 h-3" />
                     <span>{item.response?.status || 'Error'}</span>
                   </span>
                 )}
               </div>
 
-              <div className="col-span-1 font-bold text-slate-300">{item.request.method}</div>
-              <div className="col-span-4 font-bold text-slate-100 truncate">{item.request.name}</div>
-              <div className="col-span-4 text-slate-400 truncate">{item.request.url}</div>
-              <div className="col-span-2 text-right text-slate-400">
+              <div className={`col-span-1 font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{item.request.method}</div>
+              <div className={`col-span-4 font-bold truncate ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>{item.request.name}</div>
+              <div className={`col-span-4 truncate ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{item.request.url}</div>
+              <div className={`col-span-2 text-right ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                 {item.response ? `${item.response.duration} ms` : '-'}
               </div>
             </div>
           ))}
 
           {results.length === 0 && (
-            <div className="py-16 text-center text-slate-500 text-xs font-mono">
+            <div className={`py-16 text-center text-xs font-mono ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
               Select a REST file or project above and click "Run Collection" to execute test suite.
             </div>
           )}

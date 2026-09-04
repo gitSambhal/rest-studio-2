@@ -6,12 +6,14 @@ interface HistoryViewerProps {
   history: RequestHistoryItem[];
   onClearHistory: () => void;
   onSelectHistoryItem: (item: RequestHistoryItem) => void;
+  isDarkMode?: boolean;
 }
 
 export const HistoryViewer: React.FC<HistoryViewerProps> = ({
   history,
   onClearHistory,
   onSelectHistoryItem,
+  isDarkMode = true,
 }) => {
   const [filterText, setFilterText] = useState('');
 
@@ -24,13 +26,13 @@ export const HistoryViewer: React.FC<HistoryViewerProps> = ({
   );
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-950 overflow-hidden">
+    <div className={`flex-1 flex flex-col overflow-hidden ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
       {/* Header */}
-      <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
+      <div className={`p-4 border-b flex items-center justify-between shrink-0 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
         <div className="flex items-center space-x-2">
-          <History className="w-5 h-5 text-emerald-400" />
-          <span className="font-bold text-slate-100 text-sm">Request Execution History</span>
-          <span className="text-xs text-slate-400 font-mono">({history.length} items logged)</span>
+          <History className="w-5 h-5 text-emerald-500" />
+          <span className={`font-bold text-sm ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>Request Execution History</span>
+          <span className={`text-xs font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>({history.length} items logged)</span>
         </div>
 
         <div className="flex items-center space-x-3">
@@ -41,7 +43,9 @@ export const HistoryViewer: React.FC<HistoryViewerProps> = ({
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
               placeholder="Search history logs..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50"
+              className={`w-full border rounded-lg pl-8 pr-3 py-1 text-xs focus:outline-none focus:border-emerald-500/50 ${
+                isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-500' : 'bg-white border-slate-300 text-slate-800 placeholder:text-slate-400'
+              }`}
             />
           </div>
 
@@ -49,9 +53,9 @@ export const HistoryViewer: React.FC<HistoryViewerProps> = ({
             <button
               type="button"
               onClick={onClearHistory}
-              className="flex items-center space-x-1.5 text-xs bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 px-3 py-1.5 rounded-lg border border-rose-500/30 font-semibold transition-all cursor-pointer shadow-xs"
+              className="flex items-center space-x-1.5 text-xs bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 px-3 py-1.5 rounded-lg border border-rose-500/30 font-semibold transition-all cursor-pointer shadow-xs"
             >
-              <Trash2 className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+              <Trash2 className="w-3.5 h-3.5 text-rose-500 shrink-0" />
               <span>Clear History</span>
             </button>
           )}
@@ -60,8 +64,8 @@ export const HistoryViewer: React.FC<HistoryViewerProps> = ({
 
       {/* History List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
-        <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800">
-          <div className="grid grid-cols-12 bg-slate-900/80 px-4 py-2.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono">
+        <div className={`border rounded-xl overflow-hidden divide-y ${isDarkMode ? 'border-slate-800 divide-slate-800' : 'border-slate-200 divide-slate-200'}`}>
+          <div className={`grid grid-cols-12 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider font-mono ${isDarkMode ? 'bg-slate-900/80 text-slate-400' : 'bg-slate-100 text-slate-600'}`}>
             <div className="col-span-2">Time</div>
             <div className="col-span-1">Status</div>
             <div className="col-span-1">Method</div>
@@ -74,37 +78,39 @@ export const HistoryViewer: React.FC<HistoryViewerProps> = ({
             <div
               key={item.id}
               onClick={() => onSelectHistoryItem(item)}
-              className="grid grid-cols-12 px-4 py-3 items-center font-mono text-xs hover:bg-slate-900/60 cursor-pointer transition-colors group"
+              className={`grid grid-cols-12 px-4 py-3 items-center font-mono text-xs cursor-pointer transition-colors group ${
+                isDarkMode ? 'hover:bg-slate-900/60' : 'hover:bg-slate-100'
+              }`}
             >
-              <div className="col-span-2 text-slate-400 text-[11px]">
+              <div className={`col-span-2 text-[11px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                 {new Date(item.timestamp).toLocaleTimeString()}
               </div>
 
               <div className="col-span-1">
                 {item.status >= 200 && item.status < 300 ? (
-                  <span className="text-emerald-400 font-bold text-[11px] bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                  <span className="text-emerald-500 font-bold text-[11px] bg-emerald-500/10 px-1.5 py-0.5 rounded">
                     {item.status}
                   </span>
                 ) : (
-                  <span className="text-rose-400 font-bold text-[11px] bg-rose-500/10 px-1.5 py-0.5 rounded">
+                  <span className="text-rose-500 font-bold text-[11px] bg-rose-500/10 px-1.5 py-0.5 rounded">
                     {item.status}
                   </span>
                 )}
               </div>
 
-              <div className="col-span-1 font-bold text-slate-300">{item.method}</div>
-              <div className="col-span-3 font-bold text-slate-200 truncate">{item.requestName}</div>
-              <div className="col-span-3 text-slate-400 truncate">{item.resolvedUrl}</div>
+              <div className={`col-span-1 font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{item.method}</div>
+              <div className={`col-span-3 font-bold truncate ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{item.requestName}</div>
+              <div className={`col-span-3 truncate ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>{item.resolvedUrl}</div>
 
               <div className="col-span-2 text-right flex items-center justify-end space-x-2">
-                <span className="text-slate-400">{item.duration} ms</span>
-                <ArrowUpRight className="w-4 h-4 text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <span className={isDarkMode ? 'text-slate-400' : 'text-slate-500'}>{item.duration} ms</span>
+                <ArrowUpRight className="w-4 h-4 text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
             </div>
           ))}
 
           {filteredHistory.length === 0 && (
-            <div className="py-16 text-center text-slate-500 text-xs font-mono">
+            <div className={`py-16 text-center text-xs font-mono ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
               No request history recorded yet. Execute requests in the Request Builder.
             </div>
           )}

@@ -19,6 +19,7 @@ import {
   ArrowDown,
   FolderInput,
   Terminal,
+  Layers,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -26,8 +27,15 @@ interface SidebarProps {
   activeFileId: string | null;
   activeRequestId: string | null;
   requestStatuses?: Record<string, RequestStatusInfo>;
+  scratchpadRequests?: RestRequest[];
   onSelectFile: (fileId: string) => void;
   onSelectRequest: (fileId: string, requestId: string) => void;
+  onSelectScratchpadRequest?: (requestId: string) => void;
+  onCreateScratchpadRequest?: (method?: HTTPMethod, name?: string) => void;
+  onRenameScratchpadRequest?: (requestId: string, newName: string) => void;
+  onDuplicateScratchpadRequest?: (requestId: string) => void;
+  onDeleteScratchpadRequest?: (requestId: string) => void;
+  onSaveScratchpadToProject?: (request: RestRequest) => void;
   onCreateFile: (fileName: string, folderId?: string) => void;
   onCreateFolder: (folderName: string) => void;
   onRenameFolder: (folderId: string, newName: string) => void;
@@ -43,6 +51,7 @@ interface SidebarProps {
   onMoveRequestOrder: (fileId: string, requestId: string, direction: 'up' | 'down') => void;
   onOpenQuickNewRequest?: () => void;
   onOpenQuickCurl?: () => void;
+  onOpenBatchWorkspaceModal?: () => void;
 }
 
 interface RenderRestFileProps {
@@ -360,8 +369,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeFileId,
   activeRequestId,
   requestStatuses,
+  scratchpadRequests = [],
   onSelectFile,
   onSelectRequest,
+  onSelectScratchpadRequest,
+  onCreateScratchpadRequest,
+  onRenameScratchpadRequest,
+  onDuplicateScratchpadRequest,
+  onDeleteScratchpadRequest,
+  onSaveScratchpadToProject,
   onCreateFile,
   onCreateFolder,
   onRenameFolder,
@@ -377,9 +393,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onMoveRequestOrder,
   onOpenQuickNewRequest,
   onOpenQuickCurl,
+  onOpenBatchWorkspaceModal,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+  const [isScratchpadExpanded, setIsScratchpadExpanded] = useState(true);
 
   // Custom Prompt Modal State
   const [promptState, setPromptState] = useState<{
@@ -501,6 +519,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <FolderPlus className="w-4 h-4" />
             </button>
+
+            {onOpenBatchWorkspaceModal && (
+              <button
+                type="button"
+                onClick={onOpenBatchWorkspaceModal}
+                title="Batch / Multi-Delete Workspace Manager"
+                className="p-1 text-slate-400 hover:text-purple-400 hover:bg-slate-800 rounded transition-colors cursor-pointer"
+              >
+                <Layers className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -519,6 +548,175 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Tree Content */}
       <div className="flex-1 overflow-y-auto p-2 space-y-2 text-xs">
+        {/* STANDALONE SCRATCHPAD / DRAFTS SECTION (No Org / Env Required) */}
+        <div className="space-y-1 pb-1 border-b border-slate-800/80">
+          <div className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/20 text-slate-200 group transition-colors">
+            <div
+              className="flex items-center space-x-1.5 truncate cursor-pointer flex-1"
+              onClick={() => setIsScratchpadExpanded(!isScratchpadExpanded)}
+            >
+              {isScratchpadExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              )}
+              <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400/20 shrink-0" />
+              <span className="font-bold text-[11px] text-amber-300 truncate">Scratchpad / Drafts</span>
+              <span className="text-[10px] font-mono text-amber-400/80 px-1.5 py-0.2 rounded-full bg-amber-500/15 border border-amber-500/30">
+                {(scratchpadRequests || []).length}
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-1">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCreateScratchpadRequest?.('GET', 'Quick Draft Request');
+                }}
+                title="New Standalone Scratchpad Request (No Org / Env needed)"
+                className="p-1 text-amber-300 hover:text-amber-100 hover:bg-amber-500/20 rounded transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+              </button>
+            </div>
+          </div>
+
+          {/* Scratchpad Requests List */}
+          {isScratchpadExpanded && (
+            <div className="pl-2 space-y-0.5 pt-0.5">
+              {(scratchpadRequests || []).length === 0 ? (
+                <div className="px-2 py-1 text-[10px] text-slate-500 font-mono italic">
+                  No draft requests. Click + to create one without org or env.
+                </div>
+              ) : (
+                (scratchpadRequests || [])
+                  .filter(
+                    (req) =>
+                      !searchQuery ||
+                      req.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      req.url.toLowerCase().includes(searchQuery.toLowerCase())
+                  )
+                  .map((req) => {
+                    const isSelected = activeRequestId === req.id;
+                    const statusInfo = requestStatuses?.[req.id];
+
+                    return (
+                      <div
+                        key={req.id}
+                        onClick={() => onSelectScratchpadRequest?.(req.id)}
+                        className={`w-full flex items-center justify-between px-2 py-1 rounded-lg transition-colors cursor-pointer group ${
+                          isSelected
+                            ? 'bg-amber-500/15 text-amber-200 font-semibold border border-amber-500/30 shadow-sm'
+                            : 'hover:bg-slate-800/60 text-slate-300 border border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-1.5 truncate flex-1 min-w-0">
+                          <span
+                            className={`text-[9px] font-bold font-mono px-1 py-0.2 rounded border shrink-0 ${getMethodBadgeColor(
+                              req.method
+                            )}`}
+                          >
+                            {req.method}
+                          </span>
+                          <span className="truncate text-xs">{req.name || 'Untitled Draft'}</span>
+                        </div>
+
+                        <div className="flex items-center space-x-1 shrink-0">
+                          {statusInfo && (
+                            <span
+                              className={`text-[9px] font-mono px-1 rounded ${
+                                statusInfo.statusCode >= 200 && statusInfo.statusCode < 300
+                                  ? 'bg-emerald-500/20 text-emerald-300'
+                                  : 'bg-rose-500/20 text-rose-300'
+                              }`}
+                            >
+                              {statusInfo.statusCode}
+                            </span>
+                          )}
+
+                          <div className="hidden group-hover:flex items-center space-x-0.5">
+                            {onSaveScratchpadToProject && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onSaveScratchpadToProject(req);
+                                }}
+                                title="Save/Move to Project Collection"
+                                className="p-1 text-slate-400 hover:text-emerald-400 rounded hover:bg-slate-800 transition-colors"
+                              >
+                                <FolderInput className="w-3 h-3" />
+                              </button>
+                            )}
+
+                            {onDuplicateScratchpadRequest && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDuplicateScratchpadRequest(req.id);
+                                }}
+                                title="Duplicate Draft Request"
+                                className="p-1 text-slate-400 hover:text-sky-400 rounded hover:bg-slate-800 transition-colors"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            )}
+
+                            {onRenameScratchpadRequest && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openPrompt({
+                                    title: 'Rename Draft Request',
+                                    message: 'Enter new name for draft request:',
+                                    initialValue: req.name,
+                                    confirmLabel: 'Rename',
+                                    onConfirm: (newName) => {
+                                      if (newName) onRenameScratchpadRequest(req.id, newName.trim());
+                                    },
+                                  });
+                                }}
+                                title="Rename Draft"
+                                className="p-1 text-slate-400 hover:text-amber-400 rounded hover:bg-slate-800 transition-colors"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                            )}
+
+                            {onDeleteScratchpadRequest && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openPrompt({
+                                    title: 'Delete Draft Request',
+                                    message: `Are you sure you want to delete "${req.name}"?`,
+                                    confirmLabel: 'Delete Draft',
+                                    hideInput: true,
+                                    onConfirm: () => {
+                                      onDeleteScratchpadRequest(req.id);
+                                    },
+                                  });
+                                }}
+                                title="Delete Draft"
+                                className="p-1 text-slate-400 hover:text-rose-400 rounded hover:bg-slate-800 transition-colors"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Folders List */}
         {(project?.folders || []).map((folder) => {
           const folderFiles = (project?.files || []).filter((f) => folder.fileIds?.includes(f.id));

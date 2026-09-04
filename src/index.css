@@ -425,16 +425,25 @@ body {
   color: #c084fc !important;
 }
 .theme-cyberpunk [class*="text-emerald-400"],
-.theme-cyberpunk [class*="text-emerald-500"] {
+.theme-cyberpunk [class*="text-emerald-500"],
+.theme-cyberpunk [class*="text-emerald-300"] {
   color: #ec4899 !important;
 }
-.theme-cyberpunk [class*="bg-emerald-500"] {
-  background-color: #ec4899 !important;
-  color: #090514 !important;
+.theme-cyberpunk [class*="bg-emerald-500/10"],
+.theme-cyberpunk [class*="bg-emerald-500/15"],
+.theme-cyberpunk [class*="bg-emerald-500/20"],
+.theme-cyberpunk [class*="bg-emerald-500/25"] {
+  background-color: rgba(236, 72, 153, 0.18) !important;
+  border-color: rgba(236, 72, 153, 0.35) !important;
 }
-.theme-cyberpunk [class*="bg-emerald-500"] svg {
-  fill: #090514 !important;
-  stroke: #090514 !important;
+.theme-cyberpunk button.bg-emerald-500,
+.theme-cyberpunk .bg-emerald-500:not([class*="/"]) {
+  background-color: #ec4899 !important;
+  color: #ffffff !important;
+}
+.theme-cyberpunk button.bg-emerald-500 svg,
+.theme-cyberpunk .bg-emerald-500:not([class*="/"]) svg {
+  stroke: currentColor !important;
 }
 
 /* 2. MIDNIGHT OLED THEME */
@@ -482,16 +491,25 @@ body {
   color: #71717a !important;
 }
 .theme-midnight [class*="text-emerald-400"],
-.theme-midnight [class*="text-emerald-500"] {
+.theme-midnight [class*="text-emerald-500"],
+.theme-midnight [class*="text-emerald-300"] {
   color: #a78bfa !important;
 }
-.theme-midnight [class*="bg-emerald-500"] {
+.theme-midnight [class*="bg-emerald-500/10"],
+.theme-midnight [class*="bg-emerald-500/15"],
+.theme-midnight [class*="bg-emerald-500/20"],
+.theme-midnight [class*="bg-emerald-500/25"] {
+  background-color: rgba(139, 92, 246, 0.18) !important;
+  border-color: rgba(139, 92, 246, 0.35) !important;
+}
+.theme-midnight button.bg-emerald-500,
+.theme-midnight .bg-emerald-500:not([class*="/"]) {
   background-color: #8b5cf6 !important;
   color: #ffffff !important;
 }
-.theme-midnight [class*="bg-emerald-500"] svg {
-  fill: #ffffff !important;
-  stroke: #ffffff !important;
+.theme-midnight button.bg-emerald-500 svg,
+.theme-midnight .bg-emerald-500:not([class*="/"]) svg {
+  stroke: currentColor !important;
 }
 
 /* 3. MONOKAI PRO THEME */
@@ -539,16 +557,25 @@ body {
   color: #939290 !important;
 }
 .theme-monokai [class*="text-emerald-400"],
-.theme-monokai [class*="text-emerald-500"] {
+.theme-monokai [class*="text-emerald-500"],
+.theme-monokai [class*="text-emerald-300"] {
   color: #f59e0b !important;
 }
-.theme-monokai [class*="bg-emerald-500"] {
+.theme-monokai [class*="bg-emerald-500/10"],
+.theme-monokai [class*="bg-emerald-500/15"],
+.theme-monokai [class*="bg-emerald-500/20"],
+.theme-monokai [class*="bg-emerald-500/25"] {
+  background-color: rgba(245, 158, 11, 0.18) !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+.theme-monokai button.bg-emerald-500,
+.theme-monokai .bg-emerald-500:not([class*="/"]) {
   background-color: #f59e0b !important;
   color: #191919 !important;
 }
-.theme-monokai [class*="bg-emerald-500"] svg {
-  fill: #191919 !important;
-  stroke: #191919 !important;
+.theme-monokai button.bg-emerald-500 svg,
+.theme-monokai .bg-emerald-500:not([class*="/"]) svg {
+  stroke: currentColor !important;
 }
 
 /* 4. DRACULA THEME */
@@ -596,16 +623,25 @@ body {
   color: #6272a4 !important;
 }
 .theme-dracula [class*="text-emerald-400"],
-.theme-dracula [class*="text-emerald-500"] {
+.theme-dracula [class*="text-emerald-500"],
+.theme-dracula [class*="text-emerald-300"] {
   color: #ff79c6 !important;
 }
-.theme-dracula [class*="bg-emerald-500"] {
+.theme-dracula [class*="bg-emerald-500/10"],
+.theme-dracula [class*="bg-emerald-500/15"],
+.theme-dracula [class*="bg-emerald-500/20"],
+.theme-dracula [class*="bg-emerald-500/25"] {
+  background-color: rgba(255, 121, 198, 0.18) !important;
+  border-color: rgba(255, 121, 198, 0.35) !important;
+}
+.theme-dracula button.bg-emerald-500,
+.theme-dracula .bg-emerald-500:not([class*="/"]) {
   background-color: #ff79c6 !important;
   color: #1e1f29 !important;
 }
-.theme-dracula [class*="bg-emerald-500"] svg {
-  fill: #1e1f29 !important;
-  stroke: #1e1f29 !important;
+.theme-dracula button.bg-emerald-500 svg,
+.theme-dracula .bg-emerald-500:not([class*="/"]) svg {
+  stroke: currentColor !important;
 }
 
 /* 5. NORDIC FROST THEME */
@@ -650,19 +686,28 @@ body {
 }
 .theme-nordic [class~="text-slate-500"],
 .theme-nordic [class*="text-slate-500/"] {
-  color: #4c566a !important;
+  color: #8190a6 !important;
 }
 .theme-nordic [class*="text-emerald-400"],
-.theme-nordic [class*="text-emerald-500"] {
+.theme-nordic [class*="text-emerald-500"],
+.theme-nordic [class*="text-emerald-300"] {
   color: #38bdf8 !important;
 }
-.theme-nordic [class*="bg-emerald-500"] {
+.theme-nordic [class*="bg-emerald-500/10"],
+.theme-nordic [class*="bg-emerald-500/15"],
+.theme-nordic [class*="bg-emerald-500/20"],
+.theme-nordic [class*="bg-emerald-500/25"] {
+  background-color: rgba(56, 189, 248, 0.18) !important;
+  border-color: rgba(56, 189, 248, 0.35) !important;
+}
+.theme-nordic button.bg-emerald-500,
+.theme-nordic .bg-emerald-500:not([class*="/"]) {
   background-color: #38bdf8 !important;
   color: #1b222d !important;
 }
-.theme-nordic [class*="bg-emerald-500"] svg {
-  fill: #1b222d !important;
-  stroke: #1b222d !important;
+.theme-nordic button.bg-emerald-500 svg,
+.theme-nordic .bg-emerald-500:not([class*="/"]) svg {
+  stroke: currentColor !important;
 }
 
 /* 6. SOLARIZED LIGHT THEME */
@@ -708,16 +753,25 @@ body {
   color: #657b83 !important;
 }
 .theme-solarized-light [class*="text-emerald-400"],
-.theme-solarized-light [class*="text-emerald-500"] {
+.theme-solarized-light [class*="text-emerald-500"],
+.theme-solarized-light [class*="text-emerald-300"] {
   color: #2aa198 !important;
 }
-.theme-solarized-light [class*="bg-emerald-500"] {
+.theme-solarized-light [class*="bg-emerald-500/10"],
+.theme-solarized-light [class*="bg-emerald-500/15"],
+.theme-solarized-light [class*="bg-emerald-500/20"],
+.theme-solarized-light [class*="bg-emerald-500/25"] {
+  background-color: rgba(42, 161, 152, 0.18) !important;
+  border-color: rgba(42, 161, 152, 0.35) !important;
+}
+.theme-solarized-light button.bg-emerald-500,
+.theme-solarized-light .bg-emerald-500:not([class*="/"]) {
   background-color: #2aa198 !important;
   color: #ffffff !important;
 }
-.theme-solarized-light [class*="bg-emerald-500"] svg {
-  fill: #ffffff !important;
-  stroke: #ffffff !important;
+.theme-solarized-light button.bg-emerald-500 svg,
+.theme-solarized-light .bg-emerald-500:not([class*="/"]) svg {
+  stroke: currentColor !important;
 }
 
 /* Universal Button Icon and Text High-Contrast Inheritance Rule */

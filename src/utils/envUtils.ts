@@ -288,28 +288,43 @@ export function resolveEnvVariables(
   const matchedVars: { key: string; value: string; source: EnvVariableScope; sourceName: string }[] = [];
   const missingVarsSet = new Set<string>();
 
+  let currentText = text;
   const regex = /\{\{([a-zA-Z0-9_$.-]+)\}\}/g;
-  const resolved = text.replace(regex, (match, varName) => {
-    const trimmedKey = varName.trim();
-    const details = getVariableLookupDetails(trimmedKey, ctx);
-    if (details) {
-      matchedVars.push({
-        key: trimmedKey,
-        value: details.value,
-        source: details.scope,
-        sourceName: details.sourceName,
-      });
-      return details.value;
-    } else {
-      missingVarsSet.add(trimmedKey);
-      return match;
+  const MAX_DEPTH = 5;
+  let depth = 0;
+
+  while (depth < MAX_DEPTH) {
+    let hasReplacement = false;
+    currentText = currentText.replace(regex, (match, varName) => {
+      const trimmedKey = varName.trim();
+      const details = getVariableLookupDetails(trimmedKey, ctx);
+      if (details) {
+        hasReplacement = true;
+        if (!matchedVars.some((m) => m.key === trimmedKey)) {
+          matchedVars.push({
+            key: trimmedKey,
+            value: details.value,
+            source: details.scope,
+            sourceName: details.sourceName,
+          });
+        }
+        return details.value;
+      } else {
+        missingVarsSet.add(trimmedKey);
+        return match;
+      }
+    });
+
+    if (!hasReplacement || !/\{\{([a-zA-Z0-9_$.-]+)\}\}/.test(currentText)) {
+      break;
     }
-  });
+    depth++;
+  }
 
   return {
-    resolved,
+    resolved: currentText,
     matchedVars,
-    missingVars: Array.from(missingVarsSet),
+    missingVars: Array.from(missingVarsSet).filter((k) => !matchedVars.some((m) => m.key === k)),
   };
 }
 

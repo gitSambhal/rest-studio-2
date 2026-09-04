@@ -138,7 +138,7 @@ export const QuickCurlModal: React.FC<QuickCurlModalProps> = ({
     e.preventDefault();
     if (!parseResult || parseResult.type === 'unknown' || parseResult.requests.length === 0) return;
 
-    if (parseResult.type === 'postman' || parseResult.type === 'openapi') {
+    if (parseResult.type === 'postman' || parseResult.type === 'openapi' || parseResult.type === 'insomnia') {
       if (parseResult.files.length > 0 && onImportPostman) {
         onImportPostman([], parseResult.files);
         onClose();
@@ -194,21 +194,23 @@ export const QuickCurlModal: React.FC<QuickCurlModalProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-150 ${
+      className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150 ${
         isDarkMode ? 'bg-slate-950/80 backdrop-blur-sm' : 'bg-slate-900/40 backdrop-blur-sm'
       }`}
       onClick={onClose}
     >
       <div
-        className={`border rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-150 ${
+        className={`border rounded-2xl w-full max-w-2xl max-h-[85vh] sm:max-h-[90vh] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-150 ${
           isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className={`p-4 border-b flex items-center justify-between ${
-          isDarkMode ? 'border-slate-800 bg-slate-900/90' : 'border-slate-100 bg-slate-50/90'
-        }`}>
+        <div
+          className={`p-4 border-b shrink-0 flex items-center justify-between ${
+            isDarkMode ? 'border-slate-800 bg-slate-900/90' : 'border-slate-100 bg-slate-50/90'
+          }`}
+        >
           <div className="flex items-center space-x-2.5">
             <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
               <Zap className="w-4 h-4 stroke-[2.5]" />
@@ -230,16 +232,19 @@ export const QuickCurlModal: React.FC<QuickCurlModalProps> = ({
             type="button"
             onClick={onClose}
             className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-              isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+              isDarkMode
+                ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
             }`}
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Body */}
-        <form onSubmit={handleImport} className="p-5 space-y-4">
-          {/* Quick Preset Fillers */}
+        {/* Body Form */}
+        <form onSubmit={handleImport} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+            {/* Quick Preset Fillers */}
           <div className="flex items-center justify-between">
             <label className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
               Paste Code / Snippet:
@@ -347,6 +352,7 @@ export const QuickCurlModal: React.FC<QuickCurlModalProps> = ({
                 isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-900'
               }`}
             >
+              <option value="SCRATCHPAD">⚡ Standalone Scratchpad (No Org / Env Required)</option>
               {files.map((file) => (
                 <option key={file.id} value={file.id}>
                   📄 {file.name} ({file.requests.length} endpoints)
@@ -354,11 +360,14 @@ export const QuickCurlModal: React.FC<QuickCurlModalProps> = ({
               ))}
             </select>
           </div>
+          </div>
 
-          {/* Footer Actions */}
-          <div className={`pt-3 border-t flex items-center justify-between ${
-            isDarkMode ? 'border-slate-800' : 'border-slate-100'
-          }`}>
+          {/* Footer Actions (Always Visible) */}
+          <div
+            className={`shrink-0 p-3.5 sm:p-4 border-t flex items-center justify-between ${
+              isDarkMode ? 'border-slate-800 bg-slate-900/95' : 'border-slate-100 bg-slate-50/95'
+            }`}
+          >
             <span className={`text-[11px] flex items-center space-x-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
               <span>Instant request creation from smart paste</span>

@@ -707,7 +707,10 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
     } else if (
       targetUrl.startsWith('localhost') ||
       targetUrl.startsWith('127.0.0.1') ||
-      targetUrl.startsWith('0.0.0.0')
+      targetUrl.startsWith('0.0.0.0') ||
+      targetUrl.startsWith('192.168.') ||
+      targetUrl.startsWith('10.') ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(targetUrl)
     ) {
       targetUrl = 'http://' + targetUrl;
     } else {
@@ -720,10 +723,10 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
     try {
       console.log('[RestStudio Neutralino] Executing via Neutralino Native Engine...');
       const neuRes = await executeNeutralinoFetch(method, targetUrl, headers, body);
-      if (neuRes.status > 0) {
+      if (neuRes && neuRes.status > 0) {
         return neuRes;
       }
-      if (isLocalTargetUrl(targetUrl)) {
+      if (neuRes && isLocalTargetUrl(targetUrl)) {
         return neuRes;
       }
     } catch (nErr) {

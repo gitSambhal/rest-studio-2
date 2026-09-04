@@ -13,12 +13,15 @@ export interface UITheme {
   name: string;
   category: 'dark' | 'light';
   description: string;
+  iconType: 'palette' | 'sun' | 'zap' | 'moon' | 'terminal' | 'sparkles' | 'compass' | 'book';
   previewColors: {
     bg: string;
     surface: string;
     border: string;
     primary: string;
     text: string;
+    accent: string;
+    subtext: string;
   };
 }
 
@@ -28,12 +31,15 @@ export const THEMES: UITheme[] = [
     name: 'Dark Slate',
     category: 'dark',
     description: 'Modern slate dark canvas with vibrant emerald accents',
+    iconType: 'palette',
     previewColors: {
       bg: '#090d16',
       surface: '#0f172a',
       border: '#1e293b',
       primary: '#10b981',
       text: '#f8fafc',
+      accent: '#38bdf8',
+      subtext: '#94a3b8',
     },
   },
   {
@@ -41,12 +47,15 @@ export const THEMES: UITheme[] = [
     name: 'Light Crisp',
     category: 'light',
     description: 'Clean white background with slate borders & emerald highlights',
+    iconType: 'sun',
     previewColors: {
       bg: '#f8fafc',
       surface: '#ffffff',
       border: '#e2e8f0',
       primary: '#059669',
       text: '#0f172a',
+      accent: '#0284c7',
+      subtext: '#64748b',
     },
   },
   {
@@ -54,12 +63,15 @@ export const THEMES: UITheme[] = [
     name: 'Cyberpunk Neon',
     category: 'dark',
     description: 'High-contrast violet canvas with glowing pink & cyan accents',
+    iconType: 'zap',
     previewColors: {
       bg: '#090514',
       surface: '#130b24',
       border: '#3b1568',
       primary: '#ec4899',
-      text: '#f472b6',
+      text: '#fdf2f8',
+      accent: '#06b6d4',
+      subtext: '#c084fc',
     },
   },
   {
@@ -67,12 +79,15 @@ export const THEMES: UITheme[] = [
     name: 'Midnight OLED',
     category: 'dark',
     description: 'Pure pitch black #000000 canvas with royal violet accents',
+    iconType: 'moon',
     previewColors: {
       bg: '#000000',
       surface: '#09090b',
       border: '#27272a',
       primary: '#8b5cf6',
-      text: '#e4e4e7',
+      text: '#ffffff',
+      accent: '#a78bfa',
+      subtext: '#a1a1aa',
     },
   },
   {
@@ -80,12 +95,15 @@ export const THEMES: UITheme[] = [
     name: 'Monokai Pro',
     category: 'dark',
     description: 'Warm dark charcoal canvas with amber & coral red accents',
+    iconType: 'terminal',
     previewColors: {
       bg: '#191919',
       surface: '#222222',
-      border: '#333333',
+      border: '#383838',
       primary: '#f59e0b',
-      text: '#fef08a',
+      text: '#f8f8f2',
+      accent: '#ffd866',
+      subtext: '#939290',
     },
   },
   {
@@ -93,12 +111,15 @@ export const THEMES: UITheme[] = [
     name: 'Dracula',
     category: 'dark',
     description: 'Classic dark blue-violet palette with pink & purple accents',
+    iconType: 'sparkles',
     previewColors: {
       bg: '#1e1f29',
       surface: '#282a36',
       border: '#44475a',
       primary: '#ff79c6',
       text: '#f8f8f2',
+      accent: '#bd93f9',
+      subtext: '#6272a4',
     },
   },
   {
@@ -106,12 +127,15 @@ export const THEMES: UITheme[] = [
     name: 'Nordic Frost',
     category: 'dark',
     description: 'Cool arctic blue-gray with frost cyan & teal accents',
+    iconType: 'compass',
     previewColors: {
       bg: '#1b222d',
       surface: '#242b38',
       border: '#3b4252',
       primary: '#38bdf8',
-      text: '#e5e9f0',
+      text: '#eceff4',
+      accent: '#88c0d0',
+      subtext: '#8190a6',
     },
   },
   {
@@ -119,12 +143,15 @@ export const THEMES: UITheme[] = [
     name: 'Solarized Light',
     category: 'light',
     description: 'Warm solar ivory surface with deep teal & amber accents',
+    iconType: 'book',
     previewColors: {
       bg: '#fdf6e3',
       surface: '#eee8d5',
-      border: '#cb4b16',
+      border: '#d3c6aa',
       primary: '#2aa198',
       text: '#073642',
+      accent: '#b58900',
+      subtext: '#586e75',
     },
   },
 ];

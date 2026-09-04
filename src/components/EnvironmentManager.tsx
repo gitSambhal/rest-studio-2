@@ -36,6 +36,7 @@ interface ScopeVarTableProps {
   onAddVar: () => void;
   onUpdateVar: (id: string, fields: Partial<EnvVariable>) => void;
   onDeleteVar: (id: string) => void;
+  onBatchDeleteVars?: (ids: string[]) => void;
 }
 
 const ScopeVarTable: React.FC<ScopeVarTableProps> = ({
@@ -48,10 +49,37 @@ const ScopeVarTable: React.FC<ScopeVarTableProps> = ({
   onAddVar,
   onUpdateVar,
   onDeleteVar,
+  onBatchDeleteVars,
 }) => {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === variables.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(variables.map((v) => v.id));
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedIds.length === 0) return;
+    if (onBatchDeleteVars) {
+      onBatchDeleteVars(selectedIds);
+    } else {
+      selectedIds.forEach((id) => onDeleteVar(id));
+    }
+    setSelectedIds([]);
+  };
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h4 className="font-bold text-slate-200 text-xs flex items-center space-x-2">
             <span>{title}</span>
@@ -62,92 +90,134 @@ const ScopeVarTable: React.FC<ScopeVarTableProps> = ({
           <p className="text-[11px] text-slate-400">{subtitle}</p>
         </div>
 
-        <button
-          type="button"
-          onClick={onAddVar}
-          className="flex items-center space-x-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-lg shadow transition-colors cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Add Variable</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          {selectedIds.length > 0 && (
+            <button
+              type="button"
+              onClick={handleBatchDelete}
+              className="flex items-center space-x-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-bold text-xs px-3 py-1.5 rounded-lg transition-colors cursor-pointer animate-in fade-in"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              <span>Delete Selected ({selectedIds.length})</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onAddVar}
+            className="flex items-center space-x-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-lg shadow transition-colors cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Variable</span>
+          </button>
+        </div>
       </div>
 
       <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800">
-        <div className="grid grid-cols-12 bg-slate-950 px-3 py-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider font-mono">
-          <div className="col-span-1 text-center">Use</div>
+        <div className="grid grid-cols-12 bg-slate-950 px-3 py-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider font-mono items-center">
+          <div className="col-span-1 flex items-center space-x-1 justify-center">
+            <input
+              type="checkbox"
+              checked={variables.length > 0 && selectedIds.length === variables.length}
+              onChange={handleToggleSelectAll}
+              title="Select / Deselect all variables for batch operations"
+              className="rounded bg-slate-900 border-slate-700 text-rose-500 focus:ring-0 cursor-pointer"
+            />
+          </div>
+          <div className="col-span-1 text-center">Active</div>
           <div className="col-span-4">Variable Key</div>
-          <div className="col-span-5">Value</div>
+          <div className="col-span-4">Value</div>
           <div className="col-span-2 text-center">Actions</div>
         </div>
 
-        {variables.map((variable) => (
-          <div key={variable.id} className="grid grid-cols-12 px-3 py-2 items-center gap-2 hover:bg-slate-800/30">
-            <div className="col-span-1 flex justify-center">
-              <input
-                type="checkbox"
-                checked={variable.enabled}
-                onChange={(e) => onUpdateVar(variable.id, { enabled: e.target.checked })}
-                className="rounded bg-slate-900 border-slate-700 text-emerald-500 focus:ring-0 cursor-pointer"
-              />
-            </div>
+        {variables.map((variable) => {
+          const isRowSelected = selectedIds.includes(variable.id);
 
-            <div className="col-span-4">
-              <input
-                type="text"
-                value={variable.key}
-                onChange={(e) => onUpdateVar(variable.id, { key: e.target.value })}
-                placeholder="key..."
-                className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-500/50"
-              />
-            </div>
+          return (
+            <div
+              key={variable.id}
+              className={`grid grid-cols-12 px-3 py-2 items-center gap-2 transition-colors ${
+                isRowSelected ? 'bg-rose-500/10' : 'hover:bg-slate-800/30'
+              }`}
+            >
+              <div className="col-span-1 flex justify-center">
+                <input
+                  type="checkbox"
+                  checked={isRowSelected}
+                  onChange={() => handleToggleSelect(variable.id)}
+                  title="Select for batch delete"
+                  className="rounded bg-slate-900 border-slate-700 text-rose-500 focus:ring-0 cursor-pointer"
+                />
+              </div>
 
-            <div className="col-span-5 relative">
-              <input
-                type={variable.secret && !showSecrets[variable.id] ? 'password' : 'text'}
-                value={variable.value}
-                onChange={(e) => onUpdateVar(variable.id, { value: e.target.value })}
-                placeholder="value..."
-                className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500/50 pr-8"
-              />
-              <button
-                type="button"
-                onClick={() =>
-                  setShowSecrets((prev) => ({ ...prev, [variable.id]: !prev[variable.id] }))
-                }
-                title={variable.secret ? 'Toggle visibility' : 'Mask as secret'}
-                className="absolute right-2 top-1.5 text-slate-500 hover:text-slate-300"
-              >
-                {variable.secret && !showSecrets[variable.id] ? (
-                  <Eye className="w-3.5 h-3.5" />
-                ) : (
-                  <EyeOff className="w-3.5 h-3.5" />
-                )}
-              </button>
-            </div>
+              <div className="col-span-1 flex justify-center">
+                <input
+                  type="checkbox"
+                  checked={variable.enabled}
+                  onChange={(e) => onUpdateVar(variable.id, { enabled: e.target.checked })}
+                  title="Enable or disable variable resolution"
+                  className="rounded bg-slate-900 border-slate-700 text-emerald-500 focus:ring-0 cursor-pointer"
+                />
+              </div>
 
-            <div className="col-span-2 flex items-center justify-center space-x-2">
-              <button
-                type="button"
-                onClick={() => onUpdateVar(variable.id, { secret: !variable.secret })}
-                className={`p-1 rounded text-xs ${
-                  variable.secret ? 'text-amber-400 bg-amber-500/10' : 'text-slate-500 hover:text-slate-300'
-                }`}
-                title="Toggle Secret Masking"
-              >
-                <Lock className="w-3.5 h-3.5" />
-              </button>
+              <div className="col-span-4">
+                <input
+                  type="text"
+                  value={variable.key}
+                  onChange={(e) => onUpdateVar(variable.id, { key: e.target.value })}
+                  placeholder="key..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-500/50"
+                />
+              </div>
 
-              <button
-                type="button"
-                onClick={() => onDeleteVar(variable.id)}
-                className="p-1 text-rose-400/80 hover:text-rose-300 hover:bg-rose-500/20 rounded transition-colors cursor-pointer"
-                title="Delete Variable"
-              >
-                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-              </button>
+              <div className="col-span-4 relative">
+                <input
+                  type={variable.secret && !showSecrets[variable.id] ? 'password' : 'text'}
+                  value={variable.value}
+                  onChange={(e) => onUpdateVar(variable.id, { value: e.target.value })}
+                  placeholder="value..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500/50 pr-8"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowSecrets((prev) => ({ ...prev, [variable.id]: !prev[variable.id] }))
+                  }
+                  title={variable.secret ? 'Toggle visibility' : 'Mask as secret'}
+                  className="absolute right-2 top-1.5 text-slate-500 hover:text-slate-300"
+                >
+                  {variable.secret && !showSecrets[variable.id] ? (
+                    <Eye className="w-3.5 h-3.5" />
+                  ) : (
+                    <EyeOff className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
+
+              <div className="col-span-2 flex items-center justify-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => onUpdateVar(variable.id, { secret: !variable.secret })}
+                  className={`p-1 rounded text-xs ${
+                    variable.secret ? 'text-amber-400 bg-amber-500/10' : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                  title="Toggle Secret Masking"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onDeleteVar(variable.id)}
+                  className="p-1 text-rose-400/80 hover:text-rose-300 hover:bg-rose-500/20 rounded transition-colors cursor-pointer"
+                  title="Delete Variable"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {variables.length === 0 && (
           <div className="py-8 text-center text-slate-500 text-xs font-mono">
@@ -356,6 +426,9 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
                 handleUpdateVarInTarget(localGlobalVars, setLocalGlobalVars, id, fields)
               }
               onDeleteVar={(id) => handleDeleteVarFromTarget(localGlobalVars, setLocalGlobalVars, id)}
+              onBatchDeleteVars={(ids) =>
+                setLocalGlobalVars((prev) => prev.filter((v) => !ids.includes(v.id)))
+              }
             />
           )}
 
@@ -372,6 +445,9 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
                 handleUpdateVarInTarget(localOrgVars, setLocalOrgVars, id, fields)
               }
               onDeleteVar={(id) => handleDeleteVarFromTarget(localOrgVars, setLocalOrgVars, id)}
+              onBatchDeleteVars={(ids) =>
+                setLocalOrgVars((prev) => prev.filter((v) => !ids.includes(v.id)))
+              }
             />
           )}
 
@@ -453,12 +529,12 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
                   title={`Project Environment: ${activeEnv.name}`}
                   subtitle={`Variables for active profile in ${project?.name}`}
                   badgeColor="bg-sky-500/10 text-sky-400 border-sky-500/20"
-                  variables={activeEnv.variables}
+                  variables={activeEnv.variables || []}
                   showSecrets={showSecrets}
                   setShowSecrets={setShowSecrets}
                   onAddVar={() => {
                     const newVars = [
-                      ...activeEnv.variables,
+                      ...(activeEnv.variables || []),
                       {
                         id: 'v_' + Math.random().toString(36).substring(2, 9),
                         key: '',
@@ -472,13 +548,19 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
                     );
                   }}
                   onUpdateVar={(id, fields) => {
-                    const newVars = activeEnv.variables.map((v) => (v.id === id ? { ...v, ...fields } : v));
+                    const newVars = (activeEnv.variables || []).map((v) => (v.id === id ? { ...v, ...fields } : v));
                     setEnvironments(
                       environments.map((e) => (e.id === activeEnv.id ? { ...e, variables: newVars } : e))
                     );
                   }}
                   onDeleteVar={(id) => {
-                    const newVars = activeEnv.variables.filter((v) => v.id !== id);
+                    const newVars = (activeEnv.variables || []).filter((v) => v.id !== id);
+                    setEnvironments(
+                      environments.map((e) => (e.id === activeEnv.id ? { ...e, variables: newVars } : e))
+                    );
+                  }}
+                  onBatchDeleteVars={(ids) => {
+                    const newVars = (activeEnv.variables || []).filter((v) => !ids.includes(v.id));
                     setEnvironments(
                       environments.map((e) => (e.id === activeEnv.id ? { ...e, variables: newVars } : e))
                     );

@@ -32,11 +32,16 @@ import { PromptModal } from './components/PromptModal';
 import { QuickNewRequestModal } from './components/QuickNewRequestModal';
 import { QuickCurlModal } from './components/QuickCurlModal';
 import { GitHubSyncModal } from './components/GitHubSyncModal';
+import { SaveScratchpadModal } from './components/SaveScratchpadModal';
+import { BatchWorkspaceModal } from './components/BatchWorkspaceModal';
 import {
   getSavedGitHubToken,
+  getSavedGistId,
+  getSavedAutoSync,
   getSavedGitHubUser,
   verifyGitHubToken,
   saveGitHubSession,
+  pushToGitHubGist,
   GitHubUser,
   SyncPayload,
 } from './services/githubSyncService';
@@ -86,11 +91,39 @@ export default function App() {
   );
   const activeFile = activeProject?.files?.find((f) => f.id === activeFileId) || activeProject?.files?.[0];
 
+  // Standalone Scratchpad / Drafts State (Zero Org / Zero Env required)
+  const [scratchpadRequests, setScratchpadRequests] = useState<RestRequest[]>(() => {
+    try {
+      const saved = localStorage.getItem('reststudio_scratchpad_requests');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      {
+        id: 'req_scratch_default',
+        name: 'Draft: Quick Test',
+        method: 'GET',
+        url: 'https://httpbin.org/get',
+        headers: [
+          { id: 'h_sc_1', key: 'Accept', value: 'application/json', enabled: true },
+        ],
+        queryParams: [],
+        body: { mode: 'none', rawText: '' },
+        auth: { type: 'none', bearerToken: '' },
+      },
+    ];
+  });
+
   const [activeRequestId, setActiveRequestId] = useState<string | null>(
     activeFile?.requests?.[0]?.id || null
   );
+
+  const activeScratchpadRequest = scratchpadRequests.find((r) => r.id === activeRequestId);
+  const isCurrentRequestStandalone = Boolean(activeScratchpadRequest);
   const activeRequest =
-    activeFile?.requests?.find((r) => r.id === activeRequestId) || activeFile?.requests?.[0];
+    activeScratchpadRequest ||
+    activeFile?.requests?.find((r) => r.id === activeRequestId) ||
+    activeFile?.requests?.[0] ||
+    scratchpadRequests[0];
 
   // 3. Multi-Tab System
   const [tabs, setTabs] = useState<WorkspaceTab[]>(() => {
@@ -218,6 +251,9 @@ export default function App() {
   const [isQuickNewRequestOpen, setIsQuickNewRequestOpen] = useState<boolean>(false);
   const [isQuickCurlOpen, setIsQuickCurlOpen] = useState<boolean>(false);
   const [isGitHubSyncOpen, setIsGitHubSyncOpen] = useState<boolean>(false);
+  const [isBatchWorkspaceModalOpen, setIsBatchWorkspaceModalOpen] = useState<boolean>(false);
+  const [isSaveScratchpadOpen, setIsSaveScratchpadOpen] = useState<boolean>(false);
+  const [scratchpadToSave, setScratchpadToSave] = useState<RestRequest | null>(null);
   const [initialPasteText, setInitialPasteText] = useState<string>('');
 
   // Auto-verify GitHub Token on mount to keep user profile picture & name in sync
@@ -236,64 +272,67 @@ export default function App() {
   }, []);
 
   const handleApplySyncedData = (payload: SyncPayload) => {
-    if (payload.organizations && Array.isArray(payload.organizations) && payload.organizations.length > 0) {
-      const incomingOrgs = payload.organizations;
-      setOrganizations(incomingOrgs);
-
-      // 1. Resolve target organization
-      const targetOrg =
-        incomingOrgs.find((o) => o.id === payload.activeOrgId) || incomingOrgs[0];
-      setActiveOrgId(targetOrg.id);
-
-      // 2. Resolve target project
-      const targetProject =
-        (targetOrg.projects || []).find((p) => p.id === payload.activeProjectId) ||
-        targetOrg.projects?.[0];
-      const newProjectId = targetProject?.id || '';
-      setActiveProjectId(newProjectId);
-
-      // 3. Resolve target file & request
-      const targetFile = targetProject?.files?.[0];
-      const newFileId = targetFile?.id || null;
-      setActiveFileId(newFileId);
-
-      const targetRequest = targetFile?.requests?.[0];
-      const newRequestId = targetRequest?.id || null;
-      setActiveRequestId(newRequestId);
-
-      // 4. Rebuild tabs immediately so restored requests are open and active
-      const newTabs: WorkspaceTab[] = [
-        {
-          id: 'tab_onboarding',
-          type: 'onboarding',
-          title: 'Welcome Workspace',
-        },
-      ];
-
-      if (targetFile && targetRequest) {
-        newTabs.push({
-          id: 'tab_req_' + targetRequest.id,
-          type: 'request',
-          title: targetRequest.name || 'REST Request',
-          fileId: targetFile.id,
-          requestId: targetRequest.id,
-          method: targetRequest.method || 'GET',
-        });
-        setActiveTabId('tab_req_' + targetRequest.id);
-      } else {
-        setActiveTabId('tab_onboarding');
-      }
-
-      setTabs(newTabs);
-      setActiveTabMode('editor');
-      setLastResponse(null);
-
-      // 5. Update LocalStorage immediately
-      try {
-        localStorage.setItem('restpulse_organizations', JSON.stringify(incomingOrgs));
-        localStorage.setItem('restpulse_tabs', JSON.stringify(newTabs));
-      } catch (e) {}
+    let incomingOrgs = payload.organizations;
+    if (!incomingOrgs || !Array.isArray(incomingOrgs) || incomingOrgs.length === 0) {
+      incomingOrgs = INITIAL_ORGANIZATIONS;
     }
+    setOrganizations(incomingOrgs);
+
+    // 1. Resolve target organization
+    const targetOrg =
+      incomingOrgs.find((o) => o.id === payload.activeOrgId) || incomingOrgs[0];
+    setActiveOrgId(targetOrg.id);
+
+    // 2. Resolve target project
+    const targetProject =
+      (targetOrg.projects || []).find((p) => p.id === payload.activeProjectId) ||
+      targetOrg.projects?.[0];
+    const newProjectId = targetProject?.id || '';
+    setActiveProjectId(newProjectId);
+
+    // 3. Resolve target file & request
+    const targetFile = targetProject?.files?.[0];
+    const newFileId = targetFile?.id || null;
+    setActiveFileId(newFileId);
+
+    const targetRequest = targetFile?.requests?.[0];
+    const newRequestId = targetRequest?.id || null;
+    setActiveRequestId(newRequestId);
+
+    // 4. Rebuild tabs immediately so restored requests are open and active
+    const newTabs: WorkspaceTab[] = [
+      {
+        id: 'tab_onboarding',
+        type: 'onboarding',
+        title: 'Welcome Workspace',
+      },
+    ];
+
+    if (targetFile && targetRequest) {
+      newTabs.push({
+        id: 'tab_req_' + targetRequest.id,
+        type: 'request',
+        title: targetRequest.name || 'REST Request',
+        fileId: targetFile.id,
+        requestId: targetRequest.id,
+        method: targetRequest.method || 'GET',
+      });
+      setActiveTabId('tab_req_' + targetRequest.id);
+    } else {
+      setActiveTabId('tab_onboarding');
+    }
+
+    setTabs(newTabs);
+    setActiveTabMode('editor');
+    setLastResponse(null);
+
+    // 5. Update LocalStorage immediately
+    try {
+      localStorage.setItem('reststudio_organizations', JSON.stringify(incomingOrgs));
+      localStorage.setItem('restpulse_organizations', JSON.stringify(incomingOrgs));
+      localStorage.setItem('reststudio_tabs', JSON.stringify(newTabs));
+      localStorage.setItem('restpulse_tabs', JSON.stringify(newTabs));
+    } catch (e) {}
 
     if (payload.history && Array.isArray(payload.history)) {
       setHistory(payload.history);
@@ -400,6 +439,33 @@ export default function App() {
     return [];
   });
 
+  // Background Auto-Sync effect when Auto-Sync is enabled
+  useEffect(() => {
+    const isAutoSync = getSavedAutoSync();
+    const token = getSavedGitHubToken();
+    const gistId = getSavedGistId();
+
+    if (isAutoSync && token && gistId && organizations.length > 0) {
+      const timer = setTimeout(async () => {
+        try {
+          await pushToGitHubGist(token, gistId, {
+            version: '1.0.0',
+            updatedAt: new Date().toISOString(),
+            organizations,
+            activeOrgId,
+            activeProjectId,
+            environments: activeProject?.environments || [],
+            history,
+          });
+        } catch (err) {
+          console.warn('Background auto-sync note:', err);
+        }
+      }, 3000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [organizations, activeOrgId, activeProjectId, history]);
+
   // LocalStorage Persistence
   useEffect(() => {
     try {
@@ -428,6 +494,12 @@ export default function App() {
       localStorage.setItem('restpulse_history', JSON.stringify(history));
     } catch (e) {}
   }, [history]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('reststudio_scratchpad_requests', JSON.stringify(scratchpadRequests));
+    } catch (e) {}
+  }, [scratchpadRequests]);
 
   // Keep project reference consistent when switching organization
   useEffect(() => {
@@ -741,7 +813,7 @@ export default function App() {
 
       const historyItem: RequestHistoryItem = {
         id: 'hist_' + Date.now(),
-        projectId: activeProject.id,
+        projectId: activeProject?.id || 'standalone_scratchpad',
         fileId: activeFile?.id,
         requestId: req.id,
         requestName: req.name || `${req.method} ${targetUrl}`,
@@ -837,12 +909,70 @@ export default function App() {
     setActiveTabMode('editor');
   };
 
-  const handleCreateNewTabWithDummy = () => {
-    const targetFile = activeFile || activeProject?.files?.[0];
-    if (!targetFile || !activeProject) {
-      setIsQuickNewRequestOpen(true);
-      return;
+  const handleOpenScratchpadRequestInTab = (requestId: string) => {
+    setActiveFileId(null);
+    setActiveRequestId(requestId);
+
+    const req = scratchpadRequests.find((r) => r.id === requestId);
+    const reqName = req?.name || 'Draft Request';
+    const reqMethod = req?.method || 'GET';
+
+    const existingTab = tabs?.find((t) => t.requestId === requestId);
+    if (existingTab) {
+      setTabs((prevTabs) =>
+        prevTabs.map((t) =>
+          t.requestId === requestId ? { ...t, title: reqName, method: reqMethod } : t
+        )
+      );
+      setActiveTabId(existingTab.id);
+    } else {
+      const newTab: WorkspaceTab = {
+        id: 'tab_' + Math.random().toString(36).substring(2, 9),
+        type: 'request',
+        title: reqName,
+        requestId,
+        method: reqMethod,
+      };
+      setTabs([...tabs, newTab]);
+      setActiveTabId(newTab.id);
     }
+    setActiveTabMode('editor');
+  };
+
+  const handleCreateNewTabWithDummy = () => {
+    let currentOrgs = organizations;
+    if (!currentOrgs || currentOrgs.length === 0) {
+      currentOrgs = INITIAL_ORGANIZATIONS;
+      setOrganizations(INITIAL_ORGANIZATIONS);
+    }
+
+    let org = currentOrgs.find((o) => o.id === activeOrgId) || currentOrgs[0];
+    if (!org) {
+      currentOrgs = INITIAL_ORGANIZATIONS;
+      setOrganizations(INITIAL_ORGANIZATIONS);
+      org = INITIAL_ORGANIZATIONS[0];
+    }
+    setActiveOrgId(org.id);
+
+    let project = org.projects?.find((p) => p.id === activeProjectId) || org.projects?.[0];
+    if (!project) {
+      project = {
+        id: 'proj_' + Math.random().toString(36).substring(2, 9),
+        name: 'Default Workspace Project',
+        description: 'Auto-created workspace project',
+        files: [],
+        environments: [],
+        folders: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        activeEnvId: null,
+      };
+      org.projects = [...(org.projects || []), project];
+      setOrganizations([...currentOrgs]);
+    }
+    setActiveProjectId(project.id);
+
+    let targetFile = activeFile || project.files?.[0];
 
     const dummyReq: RestRequest = {
       id: 'req_' + Math.random().toString(36).substring(2, 9),
@@ -857,12 +987,24 @@ export default function App() {
       auth: { type: 'inherit', bearerToken: '' },
     };
 
-    const updatedFiles = (activeProject.files || []).map((f) =>
-      f.id === targetFile.id ? { ...f, requests: [...(f.requests || []), dummyReq] } : f
-    );
-    updateProjectFiles(updatedFiles);
-
-    handleOpenRequestInTab(targetFile.id, dummyReq.id);
+    if (!targetFile) {
+      const newFile: RestFile = {
+        id: 'file_' + Math.random().toString(36).substring(2, 9),
+        name: 'requests.http',
+        rawContent: '',
+        requests: [dummyReq],
+        updatedAt: Date.now(),
+      };
+      const updatedFiles = [...(project.files || []), newFile];
+      updateProjectFiles(updatedFiles);
+      handleOpenRequestInTab(newFile.id, dummyReq.id);
+    } else {
+      const updatedFiles = (project.files || []).map((f) =>
+        f.id === targetFile!.id ? { ...f, requests: [...(f.requests || []), dummyReq] } : f
+      );
+      updateProjectFiles(updatedFiles);
+      handleOpenRequestInTab(targetFile.id, dummyReq.id);
+    }
   };
 
   const handleTogglePinTab = (tabId: string) => {
@@ -962,19 +1104,45 @@ export default function App() {
   };
 
   const handleLaunchWorkspace = () => {
+    // 1. Check if there is already an open request tab in `tabs`
+    const openRequestTab = tabs.find((t) => t.type === 'request');
+    if (openRequestTab) {
+      setActiveTabId(openRequestTab.id);
+      if (openRequestTab.fileId && openRequestTab.requestId) {
+        setActiveFileId(openRequestTab.fileId);
+        setActiveRequestId(openRequestTab.requestId);
+      } else if (openRequestTab.requestId) {
+        setActiveFileId(null);
+        setActiveRequestId(openRequestTab.requestId);
+      }
+      setActiveTabMode('editor');
+      return;
+    }
+
+    // 2. Check if activeProject has a file with requests
     const targetFile = activeFile || activeProject?.files?.[0];
     if (targetFile && targetFile.requests && targetFile.requests.length > 0) {
       handleOpenRequestInTab(targetFile.id, targetFile.requests[0].id);
+    } else if (scratchpadRequests.length > 0) {
+      handleOpenScratchpadRequestInTab(scratchpadRequests[0].id);
     } else {
+      // Create a dummy request/file if none exist and go to editor
       handleCreateNewTabWithDummy();
     }
   };
 
   const handleSelectSampleRequest = (sampleType: 'get_todo' | 'post_json' | 'auth' | 'github_zen') => {
-    const targetFile = activeFile || activeProject?.files?.[0];
-    if (!targetFile || !activeProject) {
-      setIsQuickNewRequestOpen(true);
-      return;
+    let targetFile = activeFile || activeProject?.files?.[0];
+    let project = activeProject;
+
+    if (!project) {
+      if (!activeOrg && organizations.length > 0) {
+        setActiveOrgId(organizations[0].id);
+      }
+      project = activeOrg?.projects?.[0] || organizations?.[0]?.projects?.[0];
+      if (project) {
+        setActiveProjectId(project.id);
+      }
     }
 
     let req: RestRequest;
@@ -1041,11 +1209,30 @@ export default function App() {
       };
     }
 
-    const updatedFiles = (activeProject.files || []).map((f) =>
-      f.id === targetFile.id ? { ...f, requests: [...(f.requests || []), req] } : f
-    );
-    updateProjectFiles(updatedFiles);
-    handleOpenRequestInTab(targetFile.id, req.id);
+    if (project) {
+      if (!targetFile) {
+        const newFile: RestFile = {
+          id: 'file_' + Math.random().toString(36).substring(2, 9),
+          name: 'samples.http',
+          rawContent: '',
+          requests: [req],
+          updatedAt: Date.now(),
+        };
+        const updatedFiles = [...(project.files || []), newFile];
+        updateProjectFiles(updatedFiles);
+        handleOpenRequestInTab(newFile.id, req.id);
+        return;
+      } else {
+        const updatedFiles = (project.files || []).map((f) =>
+          f.id === targetFile.id ? { ...f, requests: [...(f.requests || []), req] } : f
+        );
+        updateProjectFiles(updatedFiles);
+        handleOpenRequestInTab(targetFile.id, req.id);
+        return;
+      }
+    }
+
+    setActiveTabMode('editor');
   };
 
   // State Updates for Organizations / Projects / Files
@@ -1066,6 +1253,22 @@ export default function App() {
   };
 
   const handleUpdateActiveRequest = (updatedReq: RestRequest) => {
+    // Check if it's a scratchpad request
+    const isScratchpad = scratchpadRequests.some((r) => r.id === updatedReq.id);
+    if (isScratchpad) {
+      setScratchpadRequests((prev) =>
+        prev.map((r) => (r.id === updatedReq.id ? updatedReq : r))
+      );
+      setTabs((prevTabs) =>
+        prevTabs.map((t) =>
+          t.requestId === updatedReq.id
+            ? { ...t, title: updatedReq.name || 'REST Request', method: updatedReq.method }
+            : t
+        )
+      );
+      return;
+    }
+
     if (!activeFile || !activeProject) return;
     const updatedRequests = (activeFile.requests || []).map((r) => (r.id === updatedReq.id ? updatedReq : r));
     const updatedFiles = (activeProject.files || []).map((f) =>
@@ -1205,6 +1408,24 @@ export default function App() {
       fileIds: (f.fileIds || []).filter((id) => id !== fileId),
     }));
 
+    // Close any open tabs belonging to this file or any of its endpoints
+    const fileRequestIds = new Set((targetFile?.requests || []).map((r) => r.id));
+    setTabs((prevTabs) => {
+      const remainingTabs = prevTabs.filter(
+        (t) => t.fileId !== fileId && (!t.requestId || !fileRequestIds.has(t.requestId))
+      );
+      if (remainingTabs.length === 0) {
+        return [
+          {
+            id: 'tab_onboarding',
+            type: 'onboarding',
+            title: 'Welcome Workspace',
+          },
+        ];
+      }
+      return remainingTabs;
+    });
+
     setOrganizations((prev) =>
       prev.map((org) =>
         org.id === activeOrg.id
@@ -1219,26 +1440,41 @@ export default function App() {
           : org
       )
     );
-    showToast('info', 'File Deleted', `Deleted file "${targetFile?.name || 'file'}".`);
+
+    if (activeFileId === fileId) {
+      if (updatedFiles.length > 0) {
+        const nextFile = updatedFiles[0];
+        setActiveFileId(nextFile.id);
+        setActiveRequestId(nextFile.requests?.[0]?.id || null);
+      } else if (scratchpadRequests.length > 0) {
+        handleOpenScratchpadRequestInTab(scratchpadRequests[0].id);
+      } else {
+        setActiveFileId(null);
+        setActiveRequestId(null);
+      }
+    }
+
+    showToast('info', 'File Deleted', `Deleted file "${targetFile?.name || 'file'}" and closed associated tabs.`);
   };
 
   const handleMoveFileToFolder = (fileId: string, targetFolderId: string | null) => {
+    if (!activeProject) return;
     const targetFolder = (activeProject.folders || []).find((f) => f.id === targetFolderId);
     const targetFile = (activeProject.files || []).find((f) => f.id === fileId);
-    const updatedFolders = activeProject.folders.map((f) => {
+    const updatedFolders = (activeProject.folders || []).map((f) => {
       if (f.id === targetFolderId) {
-        return f.fileIds.includes(fileId) ? f : { ...f, fileIds: [...f.fileIds, fileId] };
+        return (f.fileIds || []).includes(fileId) ? f : { ...f, fileIds: [...(f.fileIds || []), fileId] };
       } else {
-        return { ...f, fileIds: f.fileIds.filter((id) => id !== fileId) };
+        return { ...f, fileIds: (f.fileIds || []).filter((id) => id !== fileId) };
       }
     });
 
     setOrganizations((prev) =>
       prev.map((org) =>
-        org.id === activeOrg.id
+        org.id === activeOrg?.id
           ? {
               ...org,
-              projects: org.projects.map((p) =>
+              projects: (org.projects || []).map((p) =>
                 p.id === activeProject.id ? { ...p, folders: updatedFolders } : p
               ),
             }
@@ -1254,6 +1490,7 @@ export default function App() {
 
   // FOLDER CRUD
   const handleCreateFolder = (folderName: string) => {
+    if (!activeProject) return;
     const newFolder = {
       id: 'folder_' + Math.random().toString(36).substring(2, 9),
       name: folderName,
@@ -1262,11 +1499,11 @@ export default function App() {
 
     setOrganizations((prev) =>
       prev.map((org) =>
-        org.id === activeOrg.id
+        org.id === activeOrg?.id
           ? {
               ...org,
-              projects: org.projects.map((p) =>
-                p.id === activeProject.id ? { ...p, folders: [...p.folders, newFolder] } : p
+              projects: (org.projects || []).map((p) =>
+                p.id === activeProject.id ? { ...p, folders: [...(p.folders || []), newFolder] } : p
               ),
             }
           : org
@@ -1276,15 +1513,16 @@ export default function App() {
   };
 
   const handleRenameFolder = (folderId: string, newName: string) => {
-    const updatedFolders = activeProject.folders.map((f) =>
+    if (!activeProject) return;
+    const updatedFolders = (activeProject.folders || []).map((f) =>
       f.id === folderId ? { ...f, name: newName } : f
     );
     setOrganizations((prev) =>
       prev.map((org) =>
-        org.id === activeOrg.id
+        org.id === activeOrg?.id
           ? {
               ...org,
-              projects: org.projects.map((p) =>
+              projects: (org.projects || []).map((p) =>
                 p.id === activeProject.id ? { ...p, folders: updatedFolders } : p
               ),
             }
@@ -1295,14 +1533,15 @@ export default function App() {
   };
 
   const handleDeleteFolder = (folderId: string) => {
+    if (!activeProject) return;
     const targetFolder = (activeProject.folders || []).find((f) => f.id === folderId);
-    const updatedFolders = activeProject.folders.filter((f) => f.id !== folderId);
+    const updatedFolders = (activeProject.folders || []).filter((f) => f.id !== folderId);
     setOrganizations((prev) =>
       prev.map((org) =>
-        org.id === activeOrg.id
+        org.id === activeOrg?.id
           ? {
               ...org,
-              projects: org.projects.map((p) =>
+              projects: (org.projects || []).map((p) =>
                 p.id === activeProject.id ? { ...p, folders: updatedFolders } : p
               ),
             }
@@ -1361,6 +1600,13 @@ export default function App() {
   };
 
   const handleImportQuickCurl = (req: RestRequest, targetFileId?: string) => {
+    if (targetFileId === 'SCRATCHPAD') {
+      setScratchpadRequests((prev) => [req, ...prev]);
+      handleOpenScratchpadRequestInTab(req.id);
+      showToast('success', 'Imported to Scratchpad', `Imported "${req.name}" into standalone scratchpad.`);
+      return;
+    }
+
     if (!activeProject) return;
 
     let targetFile = (activeProject.files || []).find((f) => f.id === targetFileId) || activeFile || activeProject.files?.[0];
@@ -1453,7 +1699,38 @@ export default function App() {
       f.id === fileId ? { ...f, requests: updatedRequests } : f
     );
     updateProjectFiles(updatedFiles);
-    showToast('info', 'Endpoint Deleted', `Deleted endpoint "${targetReq?.name || 'request'}".`);
+
+    // Close open tab for this request
+    setTabs((prevTabs) => {
+      const remaining = prevTabs.filter((t) => t.requestId !== requestId);
+      if (remaining.length === 0) {
+        return [
+          {
+            id: 'tab_onboarding',
+            type: 'onboarding',
+            title: 'Welcome Workspace',
+          },
+        ];
+      }
+      return remaining;
+    });
+
+    if (activeRequestId === requestId) {
+      if (updatedRequests.length > 0) {
+        handleOpenRequestInTab(fileId, updatedRequests[0].id);
+      } else {
+        const otherFile = updatedFiles.find((f) => f.id !== fileId && (f.requests || []).length > 0);
+        if (otherFile && otherFile.requests && otherFile.requests[0]) {
+          handleOpenRequestInTab(otherFile.id, otherFile.requests[0].id);
+        } else if (scratchpadRequests.length > 0) {
+          handleOpenScratchpadRequestInTab(scratchpadRequests[0].id);
+        } else {
+          setActiveRequestId(null);
+        }
+      }
+    }
+
+    showToast('info', 'Endpoint Deleted', `Deleted endpoint "${targetReq?.name || 'request'}" and closed its tab.`);
   };
 
   const handleMoveRequestOrder = (fileId: string, requestId: string, direction: 'up' | 'down') => {
@@ -1478,22 +1755,503 @@ export default function App() {
     updateProjectFiles(updatedFiles);
   };
 
+  // STANDALONE SCRATCHPAD CRUD
+  const handleCreateScratchpadRequest = (
+    method: HTTPMethod = 'GET',
+    name: string = 'Draft Request',
+    url: string = 'https://httpbin.org/get',
+    extraProps?: Partial<RestRequest>
+  ) => {
+    const newReq: RestRequest = {
+      id: 'req_scratch_' + Math.random().toString(36).substring(2, 9),
+      name: name || `${method} Draft`,
+      method,
+      url: url || 'https://httpbin.org/get',
+      headers: extraProps?.headers || [],
+      queryParams: extraProps?.queryParams || [],
+      body: extraProps?.body || { mode: 'none', rawText: '' },
+      auth: extraProps?.auth || { type: 'none', bearerToken: '' },
+      preRequestScript: extraProps?.preRequestScript,
+      postRequestScript: extraProps?.postRequestScript,
+      assertions: extraProps?.assertions,
+    };
+
+    setScratchpadRequests((prev) => [newReq, ...prev]);
+    handleOpenScratchpadRequestInTab(newReq.id);
+    showToast('success', 'Draft Request Created', `Created draft "${newReq.name}" (no org/env required).`);
+  };
+
+  const handleRenameScratchpadRequest = (requestId: string, newName: string) => {
+    setScratchpadRequests((prev) =>
+      prev.map((r) => (r.id === requestId ? { ...r, name: newName } : r))
+    );
+    setTabs((prevTabs) =>
+      prevTabs.map((t) =>
+        t.requestId === requestId ? { ...t, title: newName || 'Draft Request' } : t
+      )
+    );
+    showToast('success', 'Draft Renamed', `Renamed draft to "${newName}".`);
+  };
+
+  const handleDuplicateScratchpadRequest = (requestId: string) => {
+    const target = scratchpadRequests.find((r) => r.id === requestId);
+    if (!target) return;
+
+    const dupReq: RestRequest = {
+      ...target,
+      id: 'req_scratch_' + Math.random().toString(36).substring(2, 9),
+      name: `${target.name} (Copy)`,
+    };
+
+    const targetIdx = scratchpadRequests.findIndex((r) => r.id === requestId);
+    const updated = [...scratchpadRequests];
+    if (targetIdx !== -1) {
+      updated.splice(targetIdx + 1, 0, dupReq);
+    } else {
+      updated.push(dupReq);
+    }
+    setScratchpadRequests(updated);
+    handleOpenScratchpadRequestInTab(dupReq.id);
+    showToast('success', 'Draft Duplicated', `Duplicated "${target.name}".`);
+  };
+
+  const handleDeleteScratchpadRequest = (requestId: string) => {
+    const target = scratchpadRequests.find((r) => r.id === requestId);
+    const updated = scratchpadRequests.filter((r) => r.id !== requestId);
+    setScratchpadRequests(updated);
+
+    // Close tab if open
+    setTabs((prevTabs) => prevTabs.filter((t) => t.requestId !== requestId));
+    if (activeRequestId === requestId) {
+      if (updated.length > 0) {
+        handleOpenScratchpadRequestInTab(updated[0].id);
+      } else if (activeFile && activeFile.requests && activeFile.requests.length > 0) {
+        handleOpenRequestInTab(activeFile.id, activeFile.requests[0].id);
+      }
+    }
+    showToast('info', 'Draft Deleted', `Deleted draft "${target?.name || 'request'}".`);
+  };
+
+  const handleSaveScratchpadToProjectFile = (
+    targetOrgId: string,
+    targetProjectId: string,
+    targetFileId: string | 'NEW_FILE',
+    newFileName: string,
+    request: RestRequest
+  ) => {
+    setActiveOrgId(targetOrgId);
+    setActiveProjectId(targetProjectId);
+
+    const targetOrg = organizations.find((o) => o.id === targetOrgId) || organizations[0];
+    const targetProj = (targetOrg.projects || []).find((p) => p.id === targetProjectId) || targetOrg.projects?.[0];
+
+    if (!targetProj) return;
+
+    const reqToInsert: RestRequest = {
+      ...request,
+      id: 'req_' + Math.random().toString(36).substring(2, 9),
+    };
+
+    let targetFileIdToOpen = targetFileId;
+
+    if (targetFileId === 'NEW_FILE') {
+      const newFileId = 'file_' + Math.random().toString(36).substring(2, 9);
+      targetFileIdToOpen = newFileId;
+      const formattedName = newFileName.endsWith('.http') || newFileName.endsWith('.rest') ? newFileName : `${newFileName}.http`;
+      const newFile: RestFile = {
+        id: newFileId,
+        name: formattedName,
+        rawContent: `@baseUrl = {{baseUrl}}\n\n### ${reqToInsert.name}\n${reqToInsert.method} ${reqToInsert.url}\n`,
+        requests: [reqToInsert],
+        updatedAt: Date.now(),
+      };
+      const updatedFiles = [...(targetProj.files || []), newFile];
+
+      setOrganizations((prevOrgs) =>
+        prevOrgs.map((org) =>
+          org.id === targetOrgId
+            ? {
+                ...org,
+                projects: (org.projects || []).map((p) =>
+                  p.id === targetProjectId ? { ...p, files: updatedFiles, updatedAt: Date.now() } : p
+                ),
+              }
+            : org
+        )
+      );
+    } else {
+      const updatedFiles = (targetProj.files || []).map((f) => {
+        if (f.id !== targetFileId) return f;
+        return {
+          ...f,
+          requests: [...(f.requests || []), reqToInsert],
+          updatedAt: Date.now(),
+        };
+      });
+
+      setOrganizations((prevOrgs) =>
+        prevOrgs.map((org) =>
+          org.id === targetOrgId
+            ? {
+                ...org,
+                projects: (org.projects || []).map((p) =>
+                  p.id === targetProjectId ? { ...p, files: updatedFiles, updatedAt: Date.now() } : p
+                ),
+              }
+            : org
+        )
+      );
+    }
+
+    setIsSaveScratchpadOpen(false);
+    setScratchpadToSave(null);
+    handleOpenRequestInTab(targetFileIdToOpen, reqToInsert.id);
+    showToast('success', 'Saved to Project', `Saved "${reqToInsert.name}" to project collection!`);
+  };
+
+  // BATCH MULTI-DELETE WORKSPACE HANDLERS
+  const handleBatchDeleteOrganizations = (orgIds: string[]) => {
+    if (!orgIds || orgIds.length === 0) return;
+    const orgIdSet = new Set(orgIds);
+    const remainingOrgs = organizations.filter((o) => !orgIdSet.has(o.id));
+
+    if (remainingOrgs.length === 0) {
+      const defaultOrg: Organization = {
+        id: 'org_' + Math.random().toString(36).substring(2, 9),
+        name: 'Personal Workspace',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        variables: [],
+        projects: [
+          {
+            id: 'proj_' + Math.random().toString(36).substring(2, 9),
+            name: 'API Core Services',
+            description: 'Core project workspace',
+            createdAt: Date.now(),
+            folders: [],
+            files: [
+              {
+                id: 'file_' + Math.random().toString(36).substring(2, 9),
+                name: 'endpoints.http',
+                rawContent: '### GET Health Check\nGET https://httpbin.org/get',
+                requests: [
+                  {
+                    id: 'req_' + Math.random().toString(36).substring(2, 9),
+                    name: 'Health Check',
+                    method: 'GET',
+                    url: 'https://httpbin.org/get',
+                    headers: [],
+                    queryParams: [],
+                    body: { mode: 'none', rawText: '' },
+                    auth: { type: 'none', bearerToken: '' },
+                  },
+                ],
+                updatedAt: Date.now(),
+              },
+            ],
+            environments: [
+              {
+                id: 'env_dev',
+                name: 'Development',
+                variables: [{ id: 'var_base_url', key: 'BASE_URL', value: 'https://httpbin.org', enabled: true }],
+              },
+            ],
+            activeEnvId: 'env_dev',
+            updatedAt: Date.now(),
+          },
+        ],
+      };
+      setOrganizations([defaultOrg]);
+      setActiveOrgId(defaultOrg.id);
+      setActiveProjectId(defaultOrg.projects[0].id);
+      setActiveFileId(defaultOrg.projects[0].files[0].id);
+      setActiveRequestId(defaultOrg.projects[0].files[0].requests[0].id);
+      setTabs([
+        {
+          id: `tab_${defaultOrg.projects[0].files[0].requests[0].id}`,
+          type: 'request',
+          title: defaultOrg.projects[0].files[0].requests[0].name,
+          fileId: defaultOrg.projects[0].files[0].id,
+          requestId: defaultOrg.projects[0].files[0].requests[0].id,
+        },
+      ]);
+    } else {
+      setOrganizations(remainingOrgs);
+      if (orgIdSet.has(activeOrgId)) {
+        const nextOrg = remainingOrgs[0];
+        setActiveOrgId(nextOrg.id);
+        const nextProj = (nextOrg.projects || [])[0];
+        if (nextProj) {
+          setActiveProjectId(nextProj.id);
+          const nextFile = (nextProj.files || [])[0];
+          if (nextFile) {
+            setActiveFileId(nextFile.id);
+            setActiveRequestId(nextFile.requests?.[0]?.id || null);
+          } else {
+            setActiveFileId(null);
+            setActiveRequestId(null);
+          }
+        } else {
+          setActiveProjectId('');
+          setActiveFileId(null);
+          setActiveRequestId(null);
+        }
+      }
+    }
+    showToast('info', 'Organizations Deleted', `Deleted ${orgIds.length} organization(s).`);
+  };
+
+  const handleBatchDeleteProjects = (orgId: string, projectIds: string[]) => {
+    if (!projectIds || projectIds.length === 0) return;
+    const projIdSet = new Set(projectIds);
+
+    setOrganizations((prevOrgs) =>
+      prevOrgs.map((org) => {
+        if (org.id !== orgId) return org;
+        let updatedProjects = (org.projects || []).filter((p) => !projIdSet.has(p.id));
+        if (updatedProjects.length === 0) {
+          updatedProjects = [
+            {
+              id: 'proj_' + Math.random().toString(36).substring(2, 9),
+              name: 'Default Project',
+              description: 'Default project workspace',
+              createdAt: Date.now(),
+              folders: [],
+              files: [],
+              environments: [
+                {
+                  id: 'env_dev',
+                  name: 'Development',
+                  variables: [],
+                },
+              ],
+              activeEnvId: 'env_dev',
+              updatedAt: Date.now(),
+            },
+          ];
+        }
+        return {
+          ...org,
+          projects: updatedProjects,
+        };
+      })
+    );
+
+    if (orgId === activeOrgId && projIdSet.has(activeProjectId)) {
+      const currentOrg = organizations.find((o) => o.id === orgId);
+      const remainingProjects = (currentOrg?.projects || []).filter((p) => !projIdSet.has(p.id));
+      if (remainingProjects.length > 0) {
+        const nextProj = remainingProjects[0];
+        setActiveProjectId(nextProj.id);
+        const nextFile = (nextProj.files || [])[0];
+        if (nextFile) {
+          setActiveFileId(nextFile.id);
+          setActiveRequestId(nextFile.requests?.[0]?.id || null);
+        } else {
+          setActiveFileId(null);
+          setActiveRequestId(null);
+        }
+      }
+    }
+
+    showToast('info', 'Projects Deleted', `Deleted ${projectIds.length} project(s).`);
+  };
+
+  const handleBatchDeleteEnvironments = (orgId: string, projectId: string, envIds: string[]) => {
+    if (!envIds || envIds.length === 0) return;
+    const envIdSet = new Set(envIds);
+
+    setOrganizations((prevOrgs) =>
+      prevOrgs.map((org) => {
+        if (org.id !== orgId) return org;
+        return {
+          ...org,
+          projects: (org.projects || []).map((p) => {
+            if (p.id !== projectId) return p;
+            const updatedEnvs = (p.environments || []).filter((e) => !envIdSet.has(e.id));
+            const newActiveEnvId =
+              p.activeEnvId && envIdSet.has(p.activeEnvId)
+                ? updatedEnvs[0]?.id || ''
+                : p.activeEnvId;
+            return {
+              ...p,
+              environments: updatedEnvs,
+              activeEnvId: newActiveEnvId,
+            };
+          }),
+        };
+      })
+    );
+    showToast('info', 'Environments Deleted', `Deleted ${envIds.length} environment(s).`);
+  };
+
+  const handleBatchDeleteGlobalVars = (varKeys: string[]) => {
+    if (!varKeys || varKeys.length === 0) return;
+    const keySet = new Set(varKeys);
+    setGlobalVariables((prev) => prev.filter((v) => !keySet.has(v.key)));
+    showToast('info', 'Global Variables Deleted', `Deleted ${varKeys.length} global variable(s).`);
+  };
+
+  const handleBatchDeleteOrgVars = (orgId: string, varKeys: string[]) => {
+    if (!varKeys || varKeys.length === 0) return;
+    const keySet = new Set(varKeys);
+    setOrganizations((prev) =>
+      prev.map((org) => {
+        if (org.id !== orgId) return org;
+        return {
+          ...org,
+          variables: (org.variables || []).filter((v) => !keySet.has(v.key)),
+        };
+      })
+    );
+    showToast('info', 'Org Variables Deleted', `Deleted ${varKeys.length} organization variable(s).`);
+  };
+
+  const handleBatchDeleteFiles = (orgId: string, projectId: string, fileIds: string[]) => {
+    if (!fileIds || fileIds.length === 0) return;
+    const fileIdSet = new Set(fileIds);
+
+    // Close all open tabs belonging to these files or their requests
+    setTabs((prevTabs) => {
+      const remaining = prevTabs.filter((t) => !t.fileId || !fileIdSet.has(t.fileId));
+      if (remaining.length === 0) {
+        return [
+          {
+            id: 'tab_onboarding',
+            type: 'onboarding',
+            title: 'Welcome Workspace',
+          },
+        ];
+      }
+      return remaining;
+    });
+
+    setOrganizations((prevOrgs) =>
+      prevOrgs.map((org) => {
+        if (org.id !== orgId) return org;
+        return {
+          ...org,
+          projects: (org.projects || []).map((p) => {
+            if (p.id !== projectId) return p;
+            const updatedFiles = (p.files || []).filter((f) => !fileIdSet.has(f.id));
+            const updatedFolders = (p.folders || []).map((folder) => ({
+              ...folder,
+              fileIds: (folder.fileIds || []).filter((id) => !fileIdSet.has(id)),
+            }));
+            return {
+              ...p,
+              files: updatedFiles,
+              folders: updatedFolders,
+            };
+          }),
+        };
+      })
+    );
+
+    if (activeFileId && fileIdSet.has(activeFileId)) {
+      setActiveFileId(null);
+      setActiveRequestId(null);
+    }
+
+    showToast('info', 'Files Deleted', `Deleted ${fileIds.length} collection file(s) and closed tabs.`);
+  };
+
+  const handleBatchDeleteRequests = (
+    orgId: string,
+    projectId: string,
+    fileId: string,
+    requestIds: string[]
+  ) => {
+    if (!requestIds || requestIds.length === 0) return;
+    const reqIdSet = new Set(requestIds);
+
+    // Close all open tabs for these requests
+    setTabs((prevTabs) => {
+      const remaining = prevTabs.filter((t) => !t.requestId || !reqIdSet.has(t.requestId));
+      if (remaining.length === 0) {
+        return [
+          {
+            id: 'tab_onboarding',
+            type: 'onboarding',
+            title: 'Welcome Workspace',
+          },
+        ];
+      }
+      return remaining;
+    });
+
+    setOrganizations((prevOrgs) =>
+      prevOrgs.map((org) => {
+        if (org.id !== orgId) return org;
+        return {
+          ...org,
+          projects: (org.projects || []).map((p) => {
+            if (p.id !== projectId) return p;
+            return {
+              ...p,
+              files: (p.files || []).map((f) => {
+                if (f.id !== fileId) return f;
+                return {
+                  ...f,
+                  requests: (f.requests || []).filter((r) => !reqIdSet.has(r.id)),
+                };
+              }),
+            };
+          }),
+        };
+      })
+    );
+
+    if (activeRequestId && reqIdSet.has(activeRequestId)) {
+      setActiveRequestId(null);
+    }
+
+    showToast('info', 'Endpoints Deleted', `Deleted ${requestIds.length} endpoint(s) and closed tabs.`);
+  };
+
+  const handleBatchDeleteScratchpadRequests = (requestIds: string[]) => {
+    if (!requestIds || requestIds.length === 0) return;
+    const reqIdSet = new Set(requestIds);
+
+    setScratchpadRequests((prev) => prev.filter((r) => !reqIdSet.has(r.id)));
+    setTabs((prevTabs) => {
+      const remaining = prevTabs.filter((t) => !t.requestId || !reqIdSet.has(t.requestId));
+      if (remaining.length === 0) {
+        return [
+          {
+            id: 'tab_onboarding',
+            type: 'onboarding',
+            title: 'Welcome Workspace',
+          },
+        ];
+      }
+      return remaining;
+    });
+
+    if (activeRequestId && reqIdSet.has(activeRequestId)) {
+      setActiveRequestId(null);
+    }
+
+    showToast('info', 'Drafts Deleted', `Deleted ${requestIds.length} draft request(s).`);
+  };
+
   // POSTMAN IMPORT
   const handleImportPostman = (
     newFolders: { id: string; name: string; fileIds: string[] }[],
     newFiles: RestFile[]
   ) => {
+    if (!activeProject) return;
     setOrganizations((prev) =>
       prev.map((org) =>
-        org.id === activeOrg.id
+        org.id === activeOrg?.id
           ? {
               ...org,
-              projects: org.projects.map((p) =>
+              projects: (org.projects || []).map((p) =>
                 p.id === activeProject.id
                   ? {
                       ...p,
-                      folders: [...p.folders, ...newFolders],
-                      files: [...p.files, ...newFiles],
+                      folders: [...(p.folders || []), ...newFolders],
+                      files: [...(p.files || []), ...newFiles],
                       updatedAt: Date.now(),
                     }
                   : p
@@ -1503,7 +2261,7 @@ export default function App() {
       )
     );
 
-    if (newFiles.length > 0 && newFiles[0].requests.length > 0) {
+    if (newFiles.length > 0 && newFiles[0].requests && newFiles[0].requests.length > 0) {
       handleOpenRequestInTab(newFiles[0].id, newFiles[0].requests[0].id);
     }
   };
@@ -1641,12 +2399,14 @@ export default function App() {
   };
 
   // Organization Rename & Delete
-  const handleRenameOrg = (orgId: string, currentName: string) => {
+  const handleRenameOrg = (orgId: string, currentName?: string) => {
+    const targetOrg = organizations.find((o) => o.id === orgId);
+    const orgName = currentName || targetOrg?.name || 'Organization';
     setAppPromptState({
       isOpen: true,
       title: 'Rename Organization',
       message: 'Enter new name for organization:',
-      initialValue: currentName,
+      initialValue: orgName,
       placeholder: 'e.g. Acme Corp',
       confirmLabel: 'Save Name',
       onConfirm: (newName) => {
@@ -1659,48 +2419,72 @@ export default function App() {
     });
   };
 
-  const handleDeleteOrg = (orgId: string, currentName: string) => {
-    if (organizations.length <= 1) {
+  const handleDeleteOrg = (orgId: string, currentName?: string) => {
+    if (!organizations || organizations.length <= 1) {
       showToast('error', 'Delete Error', 'Cannot delete the only organization workspace.');
       return;
     }
+    const targetOrg = organizations.find((o) => o.id === orgId);
+    const orgName = currentName || targetOrg?.name || 'Organization';
     setAppPromptState({
       isOpen: true,
       title: 'Delete Organization',
-      message: `Are you sure you want to delete "${currentName}"? All projects, files, and endpoints inside this organization will be removed.`,
+      message: `Are you sure you want to delete "${orgName}"? All projects, files, and endpoints inside this organization will be removed.`,
       hideInput: true,
       confirmLabel: 'Delete Organization',
       onConfirm: () => {
         const remaining = organizations.filter((o) => o.id !== orgId);
         setOrganizations(remaining);
-        if (activeOrgId === orgId) {
-          setActiveOrgId(remaining[0].id);
-          if (remaining[0].projects.length > 0) {
-            setActiveProjectId(remaining[0].projects[0].id);
+        if (activeOrgId === orgId && remaining.length > 0) {
+          const nextOrg = remaining[0];
+          setActiveOrgId(nextOrg.id);
+          const nextProj = (nextOrg.projects || [])[0];
+          if (nextProj) {
+            setActiveProjectId(nextProj.id);
+            const nextFile = (nextProj.files || [])[0];
+            if (nextFile) {
+              setActiveFileId(nextFile.id);
+              const nextReq = (nextFile.requests || [])[0];
+              if (nextReq) {
+                setActiveRequestId(nextReq.id);
+              } else {
+                setActiveRequestId(null);
+              }
+            } else {
+              setActiveFileId(null);
+              setActiveRequestId(null);
+            }
+          } else {
+            setActiveProjectId('');
+            setActiveFileId(null);
+            setActiveRequestId(null);
           }
         }
-        showToast('info', 'Organization Deleted', `Organization "${currentName}" deleted.`);
+        showToast('info', 'Organization Deleted', `Organization "${orgName}" deleted.`);
       },
     });
   };
 
   // Project Rename & Delete
-  const handleRenameProject = (projectId: string, currentName: string) => {
+  const handleRenameProject = (projectId: string, currentName?: string) => {
+    const currentProjects = activeOrg?.projects || [];
+    const targetProj = currentProjects.find((p) => p.id === projectId);
+    const projName = currentName || targetProj?.name || 'Project';
     setAppPromptState({
       isOpen: true,
       title: 'Rename Project',
       message: 'Enter new name for project:',
-      initialValue: currentName,
+      initialValue: projName,
       placeholder: 'e.g. Microservices',
       confirmLabel: 'Save Name',
       onConfirm: (newName) => {
         if (!newName || !newName.trim()) return;
         setOrganizations((prev) =>
           prev.map((org) =>
-            org.id === activeOrg.id
+            org.id === activeOrg?.id
               ? {
                   ...org,
-                  projects: org.projects.map((p) =>
+                  projects: (org.projects || []).map((p) =>
                     p.id === projectId ? { ...p, name: newName.trim(), updatedAt: Date.now() } : p
                   ),
                 }
@@ -1712,15 +2496,18 @@ export default function App() {
     });
   };
 
-  const handleDeleteProject = (projectId: string, currentName: string) => {
+  const handleDeleteProject = (projectId: string, currentName?: string) => {
+    const currentProjects = activeOrg?.projects || [];
+    const targetProj = currentProjects.find((p) => p.id === projectId);
+    const projName = currentName || targetProj?.name || 'Project';
+
     setAppPromptState({
       isOpen: true,
       title: 'Delete Project',
-      message: `Are you sure you want to delete project "${currentName}"?`,
+      message: `Are you sure you want to delete project "${projName}"?`,
       hideInput: true,
       confirmLabel: 'Delete Project',
       onConfirm: () => {
-        const currentProjects = activeOrg?.projects || [];
         const remaining = currentProjects.filter((p) => p.id !== projectId);
 
         let finalProjects = remaining;
@@ -1769,7 +2556,7 @@ export default function App() {
 
         setOrganizations((prev) =>
           prev.map((org) =>
-            org.id === activeOrg.id
+            org.id === activeOrg?.id
               ? {
                   ...org,
                   projects: finalProjects,
@@ -1779,10 +2566,24 @@ export default function App() {
         );
 
         if (activeProjectId === projectId) {
-          setActiveProjectId(finalProjects[0].id);
+          const nextProj = finalProjects[0];
+          setActiveProjectId(nextProj.id);
+          const nextFile = (nextProj.files || [])[0];
+          if (nextFile) {
+            setActiveFileId(nextFile.id);
+            const nextReq = (nextFile.requests || [])[0];
+            if (nextReq) {
+              setActiveRequestId(nextReq.id);
+            } else {
+              setActiveRequestId(null);
+            }
+          } else {
+            setActiveFileId(null);
+            setActiveRequestId(null);
+          }
         }
 
-        showToast('info', 'Project Deleted', `Project "${currentName}" deleted.`);
+        showToast('info', 'Project Deleted', `Project "${projName}" deleted.`);
       },
     });
   };
@@ -1828,11 +2629,11 @@ export default function App() {
             onSelectEnvironment={(envId) => {
               setOrganizations((prev) =>
                 prev.map((org) =>
-                  org.id === activeOrg.id
+                  org.id === activeOrg?.id
                     ? {
                         ...org,
-                        projects: org.projects.map((p) =>
-                          p.id === activeProject.id ? { ...p, activeEnvId: envId } : p
+                        projects: (org.projects || []).map((p) =>
+                          p.id === activeProject?.id ? { ...p, activeEnvId: envId } : p
                         ),
                       }
                     : org
@@ -1854,6 +2655,7 @@ export default function App() {
             onOpenQuickNewRequest={() => setIsQuickNewRequestOpen(true)}
             onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
             onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
+            onOpenBatchWorkspaceModal={() => setIsBatchWorkspaceModalOpen(true)}
             isGitHubSynced={!!getSavedGitHubToken()}
             githubUser={githubUser}
             historyCount={history.length}
@@ -1867,6 +2669,7 @@ export default function App() {
           <TabBar
             tabs={tabs}
             activeTabId={activeTabId}
+            isDarkMode={isDarkMode}
             executingRequestIds={Object.keys(executingRequests).reduce(
               (acc, id) => ({ ...acc, [id]: true }),
               {} as Record<string, boolean>
@@ -1875,9 +2678,14 @@ export default function App() {
             onSelectTab={(tabId) => {
               setActiveTabId(tabId);
               const tabObj = tabs.find((t) => t.id === tabId);
-              if (tabObj && tabObj.fileId && tabObj.requestId) {
-                setActiveFileId(tabObj.fileId);
-                setActiveRequestId(tabObj.requestId);
+              if (tabObj) {
+                if (tabObj.fileId && tabObj.requestId) {
+                  setActiveFileId(tabObj.fileId);
+                  setActiveRequestId(tabObj.requestId);
+                } else if (tabObj.requestId) {
+                  setActiveFileId(null);
+                  setActiveRequestId(tabObj.requestId);
+                }
               }
             }}
             onCloseTab={handleCloseTab}
@@ -1903,12 +2711,22 @@ export default function App() {
               activeFileId={activeFileId}
               activeRequestId={activeRequestId}
               requestStatuses={requestStatuses}
+              scratchpadRequests={scratchpadRequests}
               onSelectFile={(fId) => {
                 setActiveFileId(fId);
                 const f = activeProject?.files?.find((file) => file.id === fId);
                 if (f && f.requests && f.requests.length > 0) handleOpenRequestInTab(fId, f.requests[0].id);
               }}
               onSelectRequest={(fId, rId) => handleOpenRequestInTab(fId, rId)}
+              onSelectScratchpadRequest={handleOpenScratchpadRequestInTab}
+              onCreateScratchpadRequest={handleCreateScratchpadRequest}
+              onRenameScratchpadRequest={handleRenameScratchpadRequest}
+              onDuplicateScratchpadRequest={handleDuplicateScratchpadRequest}
+              onDeleteScratchpadRequest={handleDeleteScratchpadRequest}
+              onSaveScratchpadToProject={(req) => {
+                setScratchpadToSave(req);
+                setIsSaveScratchpadOpen(true);
+              }}
               onCreateFile={handleCreateFile}
               onCreateFolder={handleCreateFolder}
               onRenameFolder={handleRenameFolder}
@@ -1924,6 +2742,7 @@ export default function App() {
               onMoveRequestOrder={handleMoveRequestOrder}
               onOpenQuickNewRequest={() => setIsQuickNewRequestOpen(true)}
               onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
+              onOpenBatchWorkspaceModal={() => setIsBatchWorkspaceModalOpen(true)}
             />
 
             {/* Central Workspace Canvas */}
@@ -1951,6 +2770,11 @@ export default function App() {
                           envVariables={activeEnv?.variables || []}
                           fileVariables={activeFile?.fileVariables || {}}
                           projectAuth={activeProject?.auth}
+                          isStandalone={isCurrentRequestStandalone}
+                          onSaveToProject={() => {
+                            setScratchpadToSave(activeRequest);
+                            setIsSaveScratchpadOpen(true);
+                          }}
                           onUpdateProjectAuth={handleUpdateProjectAuth}
                           onUpdateRequest={handleUpdateActiveRequest}
                           onSendRequest={handleExecuteRequest}
@@ -2058,6 +2882,7 @@ export default function App() {
                 <CollectionRunner
                   project={activeProject}
                   onExecuteRequestProxy={handleExecuteRequest}
+                  isDarkMode={isDarkMode}
                 />
               )}
 
@@ -2070,6 +2895,7 @@ export default function App() {
                     setLastResponse(item.response);
                     setActiveTabMode('editor');
                   }}
+                  isDarkMode={isDarkMode}
                 />
               )}
             </main>
@@ -2087,17 +2913,17 @@ export default function App() {
           onUpdateGlobalVariables={setGlobalVariables}
           onUpdateOrganizationVariables={(updatedOrgVars) => {
             setOrganizations((prev) =>
-              prev.map((org) => (org.id === activeOrg.id ? { ...org, variables: updatedOrgVars } : org))
+              prev.map((org) => (org.id === activeOrg?.id ? { ...org, variables: updatedOrgVars } : org))
             );
           }}
           onUpdateProjectEnvironments={(updatedEnvs, activeEnvId) => {
             setOrganizations((prev) =>
               prev.map((org) =>
-                org.id === activeOrg.id
+                org.id === activeOrg?.id
                   ? {
                       ...org,
-                      projects: org.projects.map((p) =>
-                        p.id === activeProject.id
+                      projects: (org.projects || []).map((p) =>
+                        p.id === activeProject?.id
                           ? { ...p, environments: updatedEnvs, activeEnvId: activeEnvId }
                           : p
                       ),
@@ -2157,6 +2983,7 @@ export default function App() {
         }}
         onCreateRequest={handleCreateRequest}
         onCreateNewFileAndRequest={handleCreateNewFileAndRequest}
+        onCreateScratchpadRequest={handleCreateScratchpadRequest}
       />
 
       {/* Quick Request from cURL Modal */}
@@ -2167,6 +2994,21 @@ export default function App() {
         isDarkMode={isDarkMode}
         onClose={() => setIsQuickCurlOpen(false)}
         onImportCurl={handleImportQuickCurl}
+      />
+
+      {/* Save Scratchpad Request to Project File Modal */}
+      <SaveScratchpadModal
+        isOpen={isSaveScratchpadOpen}
+        request={scratchpadToSave}
+        organizations={organizations}
+        activeOrgId={activeOrgId}
+        activeProjectId={activeProjectId}
+        isDarkMode={isDarkMode}
+        onClose={() => {
+          setIsSaveScratchpadOpen(false);
+          setScratchpadToSave(null);
+        }}
+        onSaveToProjectFile={handleSaveScratchpadToProjectFile}
       />
 
       {/* Settings & Reference Center Modal */}
@@ -2206,6 +3048,26 @@ export default function App() {
         showToast={(msg, type) => showToast(type, msg)}
         isDarkMode={isDarkMode}
         onUserChange={(u) => setGithubUser(u)}
+      />
+
+      {/* Batch Workspace & Multi-Delete Modal */}
+      <BatchWorkspaceModal
+        isOpen={isBatchWorkspaceModalOpen}
+        onClose={() => setIsBatchWorkspaceModalOpen(false)}
+        organizations={organizations}
+        activeOrgId={activeOrgId}
+        activeProjectId={activeProjectId}
+        globalVariables={globalVariables}
+        scratchpadRequests={scratchpadRequests}
+        onBatchDeleteOrganizations={handleBatchDeleteOrganizations}
+        onBatchDeleteProjects={handleBatchDeleteProjects}
+        onBatchDeleteEnvironments={handleBatchDeleteEnvironments}
+        onBatchDeleteGlobalVariables={handleBatchDeleteGlobalVars}
+        onBatchDeleteOrgVariables={handleBatchDeleteOrgVars}
+        onBatchDeleteFiles={handleBatchDeleteFiles}
+        onBatchDeleteRequests={handleBatchDeleteRequests}
+        onBatchDeleteScratchpadRequests={handleBatchDeleteScratchpadRequests}
+        isDarkMode={isDarkMode}
       />
 
       {/* Global App Prompt Modal */}

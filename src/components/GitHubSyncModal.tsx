@@ -26,6 +26,7 @@ import {
   AlertTriangle,
   HardDrive,
   CheckCircle2,
+  Trash2,
 } from 'lucide-react';
 import {
   GitHubUser,
@@ -38,6 +39,7 @@ import {
   pullFromGitHubGist,
   getGistRevisionHistory,
   restoreGistRevision,
+  deleteSnapshotRevision,
   saveGitHubSession,
   clearGitHubSession,
   getSavedGitHubToken,
@@ -124,11 +126,50 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     onConfirm: () => void | Promise<void>;
   } | null>(null);
 
-  useEffect(() => {
-    if (token && gistId && isOpen) {
-      fetchRevisions();
+  const fetchRevisions = async (authToken?: string, gId?: string) => {
+    const activeToken = authToken || token || getSavedGitHubToken();
+    const activeGistId = gId || gistId || getSavedGistId();
+
+    if (!activeToken || !activeGistId) {
+      setRevisions([]);
+      return;
     }
-  }, [token, gistId, isOpen]);
+
+    setIsLoadingRevisions(true);
+    try {
+      const historyList = await getGistRevisionHistory(activeToken, activeGistId);
+      setRevisions(historyList);
+    } catch (err) {
+      console.error('Failed to load Git history', err);
+    } finally {
+      setIsLoadingRevisions(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      const activeToken = token || getSavedGitHubToken();
+      const activeGistId = gistId || getSavedGistId();
+
+      if (activeToken) {
+        if (!token) setToken(activeToken);
+        if (activeGistId) {
+          if (!gistId) setGistId(activeGistId);
+          fetchRevisions(activeToken, activeGistId);
+        } else {
+          findOrCreateWorkspaceGist(activeToken)
+            .then((gId) => {
+              setGistId(gId);
+              if (user) saveGitHubSession(activeToken, user, gId);
+              fetchRevisions(activeToken, gId);
+            })
+            .catch((err) => {
+              console.error('Auto Gist resolution error:', err);
+            });
+        }
+      }
+    }
+  }, [isOpen, token, gistId]);
 
   if (!isOpen) return null;
 
@@ -178,7 +219,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
         showToast(`Connected as @${gitHubUser.login}! Gist ready for cloud backup.`, 'success');
       }
 
-      fetchRevisions();
+      await fetchRevisions(trimmedToken, gId);
     } catch (err: any) {
       console.error(err);
       showToast(err.message || 'Authentication failed', 'error');
@@ -212,7 +253,8 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   };
 
   const handleCreateFreshGist = async () => {
-    if (!token) return;
+    const activeToken = token || getSavedGitHubToken();
+    if (!activeToken) return;
 
     setConfirmDialog({
       title: 'Create New Private Gist',
@@ -224,14 +266,14 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
         setIsLoading(true);
         setStatusMessage('Creating brand new private Gist on GitHub...');
         try {
-          const newGId = await createFreshWorkspaceGist(token);
+          const newGId = await createFreshWorkspaceGist(activeToken);
           setGistId(newGId);
           if (user) {
-            saveGitHubSession(token, user, newGId);
+            saveGitHubSession(activeToken, user, newGId);
           }
           showToast('Created new private Gist! Pushing your current workspace now...', 'info');
           // Push local data into the new Gist
-          const updatedIso = await pushToGitHubGist(token, newGId, {
+          const updatedIso = await pushToGitHubGist(activeToken, newGId, {
             version: '1.0.0',
             updatedAt: new Date().toISOString(),
             organizations,
@@ -242,7 +284,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
           });
           setLastSyncTime(new Date(updatedIso).toLocaleTimeString());
           showToast('Workspace initialized and synced in new private Gist!', 'success');
-          fetchRevisions();
+          await fetchRevisions(activeToken, newGId);
         } catch (err: any) {
           showToast(err.message || 'Failed to create new Gist', 'error');
         } finally {
@@ -258,18 +300,35 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     setLastSyncTime(new Date().toLocaleTimeString());
     setDetectedCloudPayload(null);
     showToast('Restored and loaded cloud workspace onto this device!', 'success');
+    const activeToken = token || getSavedGitHubToken();
+    const activeGistId = gistId || getSavedGistId();
+    if (activeToken && activeGistId) {
+      fetchRevisions(activeToken, activeGistId);
+    }
   };
 
   const handleSmartMerge = async (remotePayloadToMerge?: SyncPayload) => {
-    if (!token || !gistId) return;
+    const activeToken = token || getSavedGitHubToken();
+    let activeGistId = gistId || getSavedGistId();
+
+    if (!activeToken) {
+      showToast('Please connect your GitHub account first', 'warning');
+      return;
+    }
 
     setIsLoading(true);
     setStatusMessage('Merging cloud & local collections...');
 
     try {
+      if (!activeGistId) {
+        activeGistId = await findOrCreateWorkspaceGist(activeToken);
+        setGistId(activeGistId);
+        if (user) saveGitHubSession(activeToken, user, activeGistId);
+      }
+
       let remotePayload = remotePayloadToMerge;
       if (!remotePayload) {
-        remotePayload = await pullFromGitHubGist(token, gistId);
+        remotePayload = await pullFromGitHubGist(activeToken, activeGistId);
       }
 
       const localPayload: SyncPayload = {
@@ -286,11 +345,11 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
       onApplySyncedData(merged);
 
       setStatusMessage('Saving merged workspace to GitHub Gist...');
-      const updatedIso = await pushToGitHubGist(token, gistId, merged);
+      const updatedIso = await pushToGitHubGist(activeToken, activeGistId, merged);
       setLastSyncTime(new Date(updatedIso).toLocaleTimeString());
       setDetectedCloudPayload(null);
       showToast('Smart merge successful! Both device & cloud are 100% up to date.', 'success');
-      fetchRevisions();
+      await fetchRevisions(activeToken, activeGistId);
     } catch (err: any) {
       showToast(err.message || 'Smart merge failed', 'error');
     } finally {
@@ -299,14 +358,20 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     }
   };
 
-  const executePushToCloud = async () => {
-    if (!token || !gistId) return;
+  const executePushToCloud = async (overrideToken?: string, overrideGistId?: string) => {
+    const activeToken = overrideToken || token || getSavedGitHubToken();
+    const activeGistId = overrideGistId || gistId || getSavedGistId();
+
+    if (!activeToken || !activeGistId) {
+      showToast('Cloud connection not ready. Please check GitHub settings.', 'error');
+      return;
+    }
 
     setIsLoading(true);
     setStatusMessage('Pushing local workspace & history to GitHub Gist...');
 
     try {
-      const updatedIso = await pushToGitHubGist(token, gistId, {
+      const updatedIso = await pushToGitHubGist(activeToken, activeGistId, {
         version: '1.0.0',
         updatedAt: new Date().toISOString(),
         organizations,
@@ -318,7 +383,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
 
       setLastSyncTime(new Date(updatedIso).toLocaleTimeString());
       showToast('Workspace & execution history backed up to GitHub Gist!', 'success');
-      fetchRevisions();
+      await fetchRevisions(activeToken, activeGistId);
     } catch (err: any) {
       showToast(err.message || 'Push sync failed', 'error');
     } finally {
@@ -328,47 +393,85 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   };
 
   const handlePushToCloud = async () => {
-    if (!token || !gistId) return;
+    const activeToken = token || getSavedGitHubToken();
+    let activeGistId = gistId || getSavedGistId();
 
-    // Safety check: peek remote to avoid accidental destructive wipeout
-    try {
-      const remote = await peekRemoteWorkspace(token, gistId);
-      if (remote && remote.organizations && remote.organizations.length > 0) {
-        const remoteStats = countWorkspaceEntities(remote);
-        const localStats = countWorkspaceEntities(organizations);
-
-        if (remoteStats.requestCount > localStats.requestCount) {
-          setConfirmDialog({
-            title: 'Cloud Overwrite Notice',
-            message: `The remote GitHub Gist currently contains ${remoteStats.requestCount} endpoints (${remoteStats.projectCount} projects), while this local device only has ${localStats.requestCount} endpoints.\n\nPushing will overwrite the cloud Gist with this device's data.\n\nTo preserve data from both sides, cancel and choose Smart Merge instead.`,
-            confirmLabel: 'Overwrite Cloud',
-            danger: true,
-            onConfirm: async () => {
-              setConfirmDialog(null);
-              await executePushToCloud();
-            },
-          });
-          return;
-        }
-      }
-    } catch (e) {
-      // Continue if peek fails
+    if (!activeToken) {
+      showToast('Please connect your GitHub account first', 'warning');
+      return;
     }
 
-    await executePushToCloud();
+    setIsLoading(true);
+    setStatusMessage('Checking cloud workspace status...');
+
+    try {
+      if (!activeGistId) {
+        setStatusMessage('Locating your private workspace Gist on GitHub...');
+        activeGistId = await findOrCreateWorkspaceGist(activeToken);
+        setGistId(activeGistId);
+        if (user) saveGitHubSession(activeToken, user, activeGistId);
+      }
+
+      // Safety check: peek remote to avoid accidental destructive wipeout
+      try {
+        const remote = await peekRemoteWorkspace(activeToken, activeGistId);
+        if (remote && remote.organizations && remote.organizations.length > 0) {
+          const remoteStats = countWorkspaceEntities(remote);
+          const localStats = countWorkspaceEntities(organizations);
+
+          if (remoteStats.requestCount > localStats.requestCount) {
+            setIsLoading(false);
+            setStatusMessage(null);
+
+            setConfirmDialog({
+              title: 'Cloud Overwrite Notice',
+              message: `The remote GitHub Gist currently contains ${remoteStats.requestCount} endpoints (${remoteStats.projectCount} projects), while this local device only has ${localStats.requestCount} endpoints.\n\nPushing will overwrite the cloud Gist with this device's data.\n\nTo preserve data from both sides, cancel and choose Smart Merge instead.`,
+              confirmLabel: 'Overwrite Cloud',
+              danger: true,
+              onConfirm: async () => {
+                setConfirmDialog(null);
+                await executePushToCloud(activeToken, activeGistId!);
+              },
+            });
+            return;
+          }
+        }
+      } catch (e) {
+        // Peek error continue
+      }
+
+      await executePushToCloud(activeToken, activeGistId);
+    } catch (err: any) {
+      showToast(err.message || 'Push sync failed', 'error');
+      setIsLoading(false);
+      setStatusMessage(null);
+    }
   };
 
   const handlePullFromCloud = async () => {
-    if (!token || !gistId) return;
+    const activeToken = token || getSavedGitHubToken();
+    let activeGistId = gistId || getSavedGistId();
+
+    if (!activeToken) {
+      showToast('Please connect your GitHub account first', 'warning');
+      return;
+    }
 
     setIsLoading(true);
     setStatusMessage('Pulling workspace snapshot from GitHub Gist...');
 
     try {
-      const payload = await pullFromGitHubGist(token, gistId);
+      if (!activeGistId) {
+        activeGistId = await findOrCreateWorkspaceGist(activeToken);
+        setGistId(activeGistId);
+        if (user) saveGitHubSession(activeToken, user, activeGistId);
+      }
+
+      const payload = await pullFromGitHubGist(activeToken, activeGistId);
       onApplySyncedData(payload);
       setLastSyncTime(new Date().toLocaleTimeString());
       showToast('Workspace & request history restored from GitHub Cloud!', 'success');
+      await fetchRevisions(activeToken, activeGistId);
     } catch (err: any) {
       showToast(err.message || 'Pull sync failed', 'error');
     } finally {
@@ -377,28 +480,21 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     }
   };
 
-  const fetchRevisions = async () => {
-    if (!token || !gistId) return;
-    setIsLoadingRevisions(true);
-    try {
-      const historyList = await getGistRevisionHistory(token, gistId);
-      setRevisions(historyList);
-    } catch (err) {
-      console.error('Failed to load Git history', err);
-    } finally {
-      setIsLoadingRevisions(false);
-    }
-  };
-
   const executeRestoreRevision = async (commitSha: string) => {
-    if (!token || !gistId) return;
+    const activeToken = token || getSavedGitHubToken();
+    const activeGistId = gistId || getSavedGistId();
+
+    if (!activeToken || !activeGistId) {
+      showToast('Cloud connection details missing', 'error');
+      return;
+    }
 
     setRestoringSha(commitSha);
     setIsLoading(true);
     setStatusMessage(`Restoring snapshot ${commitSha.slice(0, 7)} from GitHub...`);
 
     try {
-      const restoredPayload = await restoreGistRevision(token, gistId, commitSha);
+      const restoredPayload = await restoreGistRevision(activeToken, activeGistId, commitSha);
       
       // 1. Immediately apply the restored snapshot locally
       onApplySyncedData(restoredPayload);
@@ -407,8 +503,8 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
       try {
         setStatusMessage(`Syncing restored snapshot ${commitSha.slice(0, 7)} to GitHub Cloud...`);
         const updatedIso = await pushToGitHubGist(
-          token,
-          gistId,
+          activeToken,
+          activeGistId,
           restoredPayload,
           `RestStudio Workspace Data Sync (Restored from snapshot ${commitSha.slice(0, 7)})`
         );
@@ -424,7 +520,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
       );
 
       // Refresh revision list to reflect the restoration commit
-      await fetchRevisions();
+      await fetchRevisions(activeToken, activeGistId);
     } catch (err: any) {
       console.error('Failed to restore snapshot:', err);
       showToast(err.message || 'Failed to restore snapshot', 'error');
@@ -436,7 +532,6 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   };
 
   const handlePromptRestoreRevision = (rev: GistRevision) => {
-    if (!token || !gistId) return;
     const shortSha = rev.id.slice(0, 7);
     const dateStr = new Date(rev.committed_at).toLocaleString();
 
@@ -448,6 +543,59 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
       onConfirm: async () => {
         setConfirmDialog(null);
         await executeRestoreRevision(rev.id);
+      },
+    });
+  };
+
+  const handlePromptDeleteRevision = (rev: GistRevision) => {
+    const shortSha = rev.id.slice(0, 7);
+    const dateStr = new Date(rev.committed_at).toLocaleString();
+
+    setConfirmDialog({
+      title: `Delete Snapshot (${shortSha})`,
+      message: `Are you sure you want to delete this snapshot from ${dateStr}?\n\nThis snapshot will be removed from your snapshot history list.`,
+      confirmLabel: 'Delete Snapshot',
+      danger: true,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        deleteSnapshotRevision(rev.id);
+        if (rev.version && rev.version !== rev.id) {
+          deleteSnapshotRevision(rev.version);
+        }
+        setRevisions((prev) =>
+          prev.filter((r) => r.id !== rev.id && r.version !== rev.id && r.id !== rev.version && r.version !== rev.version)
+        );
+        const activeToken = token || getSavedGitHubToken();
+        const activeGistId = gistId || getSavedGistId();
+        if (activeToken && activeGistId) {
+          await fetchRevisions(activeToken, activeGistId);
+        }
+        showToast(`Snapshot ${shortSha} deleted and snapshot history refreshed.`, 'info');
+      },
+    });
+  };
+
+  const handlePromptDeleteAllRevisions = () => {
+    if (revisions.length === 0) return;
+
+    setConfirmDialog({
+      title: 'Clear All Saved Snapshots',
+      message: `Are you sure you want to delete all ${revisions.length} saved snapshot version points from your history list?`,
+      confirmLabel: 'Delete All Snapshots',
+      danger: true,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        revisions.forEach((r) => {
+          deleteSnapshotRevision(r.id);
+          if (r.version) deleteSnapshotRevision(r.version);
+        });
+        setRevisions([]);
+        const activeToken = token || getSavedGitHubToken();
+        const activeGistId = gistId || getSavedGistId();
+        if (activeToken && activeGistId) {
+          await fetchRevisions(activeToken, activeGistId);
+        }
+        showToast('All saved snapshots removed and snapshot history refreshed.', 'info');
       },
     });
   };
@@ -897,15 +1045,29 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                   <p className="text-xs text-slate-400">Every cloud backup creates a saved point in time. You can restore any past version easily.</p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={fetchRevisions}
-                  disabled={isLoadingRevisions}
-                  className="p-1.5 text-xs text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition-colors flex items-center space-x-1 cursor-pointer"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRevisions ? 'animate-spin' : ''}`} />
-                  <span>Refresh List</span>
-                </button>
+                <div className="flex items-center space-x-2">
+                  {revisions.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handlePromptDeleteAllRevisions}
+                      disabled={isLoadingRevisions || isLoading}
+                      className="px-2 py-1 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 rounded-lg transition-colors flex items-center space-x-1 cursor-pointer"
+                      title="Clear all saved snapshot history points"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Clear All</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => fetchRevisions()}
+                    disabled={isLoadingRevisions}
+                    className="p-1.5 text-xs text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition-colors flex items-center space-x-1 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRevisions ? 'animate-spin' : ''}`} />
+                    <span>Refresh List</span>
+                  </button>
+                </div>
               </div>
 
               {isLoadingRevisions ? (
@@ -948,6 +1110,21 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                                 Latest Backup
                               </span>
                             )}
+                            {rev.change_status && (rev.change_status.additions > 0 || rev.change_status.deletions > 0) ? (
+                              <span className="px-1.5 py-0.5 text-[9px] font-mono font-medium bg-slate-800/80 border border-slate-700/60 rounded flex items-center space-x-1">
+                                {rev.change_status.additions > 0 && (
+                                  <span className="text-emerald-400">+{rev.change_status.additions}</span>
+                                )}
+                                {rev.change_status.deletions > 0 && (
+                                  <span className="text-rose-400">-{rev.change_status.deletions}</span>
+                                )}
+                                <span className="text-slate-400">lines</span>
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 text-[9px] font-mono font-medium bg-slate-800/80 text-slate-400 border border-slate-700/60 rounded">
+                                0 lines changed
+                              </span>
+                            )}
                           </div>
                           <div className="text-[11px] text-slate-400 flex items-center space-x-2">
                             <span>Saved {new Date(rev.committed_at).toLocaleString()}</span>
@@ -956,20 +1133,32 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handlePromptRestoreRevision(rev)}
-                        disabled={restoringSha === rev.id || isLoading}
-                        className="px-3 py-1.5 text-xs font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg flex items-center space-x-1.5 transition-all cursor-pointer disabled:opacity-50"
-                        title={`Restore workspace to version ${rev.id.slice(0, 7)}`}
-                      >
-                        {restoringSha === rev.id ? (
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <RotateCcw className="w-3.5 h-3.5" />
-                        )}
-                        <span>{restoringSha === rev.id ? 'Restoring...' : idx === 0 ? 'Re-apply Version' : 'Restore Version'}</span>
-                      </button>
+                      <div className="flex items-center space-x-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handlePromptRestoreRevision(rev)}
+                          disabled={restoringSha === rev.id || isLoading}
+                          className="px-3 py-1.5 text-xs font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg flex items-center space-x-1.5 transition-all cursor-pointer disabled:opacity-50"
+                          title={`Restore workspace to version ${rev.id.slice(0, 7)}`}
+                        >
+                          {restoringSha === rev.id ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          )}
+                          <span>{restoringSha === rev.id ? 'Restoring...' : idx === 0 ? 'Re-apply Version' : 'Restore Version'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handlePromptDeleteRevision(rev)}
+                          disabled={isLoading}
+                          className="p-1.5 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-center justify-center transition-all cursor-pointer disabled:opacity-50"
+                          title={`Delete snapshot ${rev.id.slice(0, 7)}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

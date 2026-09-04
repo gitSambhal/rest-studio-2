@@ -219,7 +219,7 @@ export interface ExecutionResponse {
 
 export interface RequestHistoryItem {
   id: string;
-  projectId: string;
+  projectId?: string;
   fileId?: string;
   requestId?: string;
   requestName: string;

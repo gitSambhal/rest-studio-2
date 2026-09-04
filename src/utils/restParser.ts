@@ -19,7 +19,7 @@ export function parseRestFileContent(content: string, fileName: string = 'untitl
     for (const line of blockLines) {
       const trimmed = line.trim();
       if (trimmed.startsWith('@')) {
-        const match = trimmed.match(/^@([a-zA-Z0-9_]+)\s*=\s*(.*)$/);
+        const match = trimmed.match(/^@([a-zA-Z0-9_.-]+)\s*=\s*(.*)$/);
         if (match) {
           fileVariables[match[1]] = match[2];
           continue;
@@ -93,8 +93,9 @@ export function parseRestFileContent(content: string, fileName: string = 'untitl
     const queryParams: KeyValuePair[] = [];
     let cleanUrl = rawUrl;
     if (rawUrl.includes('?')) {
-      const [baseUrlPart, queryString] = rawUrl.split('?');
-      cleanUrl = baseUrlPart;
+      const qIdx = rawUrl.indexOf('?');
+      cleanUrl = rawUrl.substring(0, qIdx);
+      const queryString = rawUrl.substring(qIdx + 1);
       const searchParams = new URLSearchParams(queryString);
       searchParams.forEach((val, key) => {
         queryParams.push({
@@ -251,16 +252,56 @@ export function parsePostmanCollection(jsonData: any): {
 
     const method = (item.request.method || 'GET').toUpperCase() as HTTPMethod;
     let url = '';
+    const queryParams: KeyValuePair[] = [];
+
     if (typeof item.request.url === 'string') {
       url = item.request.url;
-    } else if (item.request.url && item.request.url.raw) {
-      url = item.request.url.raw;
+    } else if (item.request.url && typeof item.request.url === 'object') {
+      if (item.request.url.raw) {
+        url = item.request.url.raw;
+      } else {
+        const protocol = item.request.url.protocol || 'https';
+        const host = Array.isArray(item.request.url.host) ? item.request.url.host.join('.') : item.request.url.host || '';
+        const path = Array.isArray(item.request.url.path) ? item.request.url.path.join('/') : item.request.url.path || '';
+        url = `${protocol}://${host}${path ? '/' + path : ''}`;
+      }
+
+      // Extract structured query parameters from Postman URL object
+      if (Array.isArray(item.request.url.query)) {
+        item.request.url.query.forEach((q: any) => {
+          if (q && q.key) {
+            queryParams.push({
+              id: 'qp_' + Math.random().toString(36).substring(2, 9),
+              key: q.key,
+              value: q.value || '',
+              enabled: !q.disabled,
+            });
+          }
+        });
+      }
+    }
+
+    // If queryParams was not in url.query, parse query params from the URL string
+    if (queryParams.length === 0 && url.includes('?')) {
+      try {
+        const qIndex = url.indexOf('?');
+        const qPart = url.substring(qIndex + 1);
+        const searchParams = new URLSearchParams(qPart);
+        searchParams.forEach((value, key) => {
+          queryParams.push({
+            id: 'qp_' + Math.random().toString(36).substring(2, 9),
+            key,
+            value,
+            enabled: true,
+          });
+        });
+      } catch (_) {}
     }
 
     // Convert Postman variables {{var}} if present
     const headers: KeyValuePair[] = (item.request.header || []).map((h: any) => ({
       id: 'hdr_' + Math.random().toString(36).substring(2, 9),
-      key: h.key || '',
+      key: h.key || h.name || '',
       value: h.value || '',
       enabled: !h.disabled,
     }));
@@ -270,23 +311,55 @@ export function parsePostmanCollection(jsonData: any): {
     let bodyMode: RequestBody['mode'] = 'none';
 
     if (item.request.body) {
-      if (item.request.body.mode === 'raw') {
+      const bMode = item.request.body.mode;
+      if (bMode === 'raw') {
         bodyRaw = item.request.body.raw || '';
-        bodyMode = 'json';
-      } else if (item.request.body.mode === 'urlencoded') {
+        const rawTrim = bodyRaw.trim();
+        if ((rawTrim.startsWith('{') && rawTrim.endsWith('}')) || (rawTrim.startsWith('[') && rawTrim.endsWith(']'))) {
+          bodyMode = 'json';
+        } else {
+          bodyMode = 'raw';
+        }
+      } else if (bMode === 'urlencoded') {
         bodyMode = 'x-www-form-urlencoded';
         bodyRaw = (item.request.body.urlencoded || [])
-          .map((u: any) => `${u.key}=${u.value}`)
+          .filter((u: any) => !u.disabled)
+          .map((u: any) => `${encodeURIComponent(u.key || '')}=${encodeURIComponent(u.value || '')}`)
           .join('&');
+      } else if (bMode === 'formdata') {
+        bodyMode = 'form-data';
+        bodyRaw = (item.request.body.formdata || [])
+          .filter((f: any) => !f.disabled)
+          .map((f: any) => `${f.key}=${f.value || f.src || ''}`)
+          .join('\n');
+      } else if (bMode === 'graphql') {
+        bodyMode = 'graphql';
+        bodyRaw = typeof item.request.body.graphql === 'object' ? JSON.stringify(item.request.body.graphql, null, 2) : String(item.request.body.graphql || '');
       }
     }
 
     // Auth
     const auth: RequestAuth = { type: 'none', bearerToken: '' };
-    if (item.request.auth && item.request.auth.type === 'bearer') {
-      auth.type = 'bearer';
-      const tokenObj = (item.request.auth.bearer || []).find((b: any) => b.key === 'token');
-      auth.bearerToken = tokenObj ? tokenObj.value : '';
+    if (item.request.auth) {
+      const aType = item.request.auth.type;
+      if (aType === 'bearer') {
+        auth.type = 'bearer';
+        const tokenObj = (item.request.auth.bearer || []).find((b: any) => b.key === 'token');
+        auth.bearerToken = tokenObj ? tokenObj.value : '';
+      } else if (aType === 'basic') {
+        auth.type = 'basic';
+        const userObj = (item.request.auth.basic || []).find((b: any) => b.key === 'username');
+        const passObj = (item.request.auth.basic || []).find((b: any) => b.key === 'password');
+        auth.basicUsername = userObj ? userObj.value : '';
+        auth.basicPassword = passObj ? passObj.value : '';
+      } else if (aType === 'apikey') {
+        auth.type = 'apikey';
+        const keyObj = (item.request.auth.apikey || []).find((b: any) => b.key === 'key');
+        const valObj = (item.request.auth.apikey || []).find((b: any) => b.key === 'value');
+        auth.apiKeyKey = keyObj ? keyObj.value : 'X-API-Key';
+        auth.apiKeyValue = valObj ? valObj.value : '';
+        auth.apiKeyAddTo = 'header';
+      }
     }
 
     return {
@@ -295,7 +368,7 @@ export function parsePostmanCollection(jsonData: any): {
       method,
       url,
       headers,
-      queryParams: [],
+      queryParams,
       body: { mode: bodyMode, rawText: bodyRaw },
       auth,
     };
@@ -539,22 +612,58 @@ export function exportToPostmanCollection(projectName: string, files: RestFile[]
     },
     item: files.map((file) => ({
       name: file.name.replace(/\.(rest|http)$/i, ''),
-      item: file.requests.map((req) => ({
-        name: req.name,
-        request: {
-          method: req.method,
-          header: req.headers
-            .filter((h) => h.enabled)
-            .map((h) => ({ key: h.key, value: h.value })),
-          body:
-            req.body.mode !== 'none'
-              ? { mode: 'raw', raw: req.body.rawText }
-              : undefined,
-          url: {
-            raw: req.url,
+      item: file.requests.map((req) => {
+        let authObj: any = undefined;
+        if (req.auth.type === 'bearer' && req.auth.bearerToken) {
+          authObj = {
+            type: 'bearer',
+            bearer: [{ key: 'token', value: req.auth.bearerToken, type: 'string' }],
+          };
+        } else if (req.auth.type === 'basic' && (req.auth.basicUsername || req.auth.basicPassword)) {
+          authObj = {
+            type: 'basic',
+            basic: [
+              { key: 'username', value: req.auth.basicUsername || '', type: 'string' },
+              { key: 'password', value: req.auth.basicPassword || '', type: 'string' },
+            ],
+          };
+        } else if (req.auth.type === 'apikey' && req.auth.apiKeyValue) {
+          authObj = {
+            type: 'apikey',
+            apikey: [
+              { key: 'key', value: req.auth.apiKeyKey || 'X-API-Key', type: 'string' },
+              { key: 'value', value: req.auth.apiKeyValue, type: 'string' },
+            ],
+          };
+        }
+
+        const queryArray = (req.queryParams || [])
+          .filter((q) => q.key)
+          .map((q) => ({
+            key: q.key,
+            value: q.value,
+            disabled: !q.enabled,
+          }));
+
+        return {
+          name: req.name,
+          request: {
+            method: req.method,
+            header: (req.headers || [])
+              .filter((h) => h.enabled && h.key)
+              .map((h) => ({ key: h.key, value: h.value })),
+            body:
+              req.body.mode !== 'none'
+                ? { mode: req.body.mode === 'x-www-form-urlencoded' ? 'urlencoded' : 'raw', raw: req.body.rawText }
+                : undefined,
+            auth: authObj,
+            url: {
+              raw: req.url,
+              query: queryArray.length > 0 ? queryArray : undefined,
+            },
           },
-        },
-      })),
+        };
+      }),
     })),
   };
 
@@ -586,6 +695,15 @@ export function exportToInsomniaCollection(projectName: string, files: RestFile[
     });
 
     file.requests.forEach((req) => {
+      let authObj: any = {};
+      if (req.auth.type === 'bearer' && req.auth.bearerToken) {
+        authObj = { type: 'bearer', token: req.auth.bearerToken };
+      } else if (req.auth.type === 'basic' && (req.auth.basicUsername || req.auth.basicPassword)) {
+        authObj = { type: 'basic', username: req.auth.basicUsername, password: req.auth.basicPassword };
+      } else if (req.auth.type === 'apikey' && req.auth.apiKeyValue) {
+        authObj = { type: 'apikey', key: req.auth.apiKeyKey || 'X-API-Key', value: req.auth.apiKeyValue };
+      }
+
       resources.push({
         _id: 'req_' + Math.random().toString(36).substring(2, 9),
         _type: 'request',
@@ -606,10 +724,7 @@ export function exportToInsomniaCollection(projectName: string, files: RestFile[
                 text: req.body.rawText,
               }
             : {},
-        authentication:
-          req.auth.type === 'bearer'
-            ? { type: 'bearer', token: req.auth.bearerToken }
-            : {},
+        authentication: authObj,
         created: Date.now(),
         modified: Date.now(),
       });
@@ -1269,14 +1384,132 @@ function generateSampleFromJsonSchema(schema: any): string {
   }
 }
 
-// Simple YAML to Object parser for OpenAPI specs
+// Lightweight YAML to Object parser for OpenAPI / Swagger specs
 function parseYamlToObj(yamlText: string): any {
-  // Fallback simple YAML extractor or try parsing if JSON
   try {
     return JSON.parse(yamlText);
-  } catch (e) {
-    throw new Error('YAML parsing requires valid structure or JSON');
+  } catch (_) {
+    // Continue to parse YAML lines
   }
+
+  const lines = yamlText.split(/\r?\n/);
+  const root: any = {};
+  const stack: { indent: number; obj: any; key?: string }[] = [
+    { indent: -1, obj: root },
+  ];
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const rawLine = lines[lineIndex];
+    const lineWithoutComments = rawLine.replace(/#.*$/, '');
+    if (!lineWithoutComments.trim()) continue;
+
+    const indentMatch = rawLine.match(/^(\s*)/);
+    const indent = indentMatch ? indentMatch[1].length : 0;
+    const trimmed = lineWithoutComments.trim();
+
+    // Pop stack to match indent level
+    while (stack.length > 1 && stack[stack.length - 1].indent >= indent) {
+      stack.pop();
+    }
+
+    const currentContext = stack[stack.length - 1];
+
+    if (trimmed.startsWith('- ')) {
+      const itemContent = trimmed.substring(2).trim();
+      if (!Array.isArray(currentContext.obj)) {
+        if (currentContext.key && currentContext.obj[currentContext.key] === undefined) {
+          currentContext.obj[currentContext.key] = [];
+        }
+      }
+
+      const targetArray = Array.isArray(currentContext.obj)
+        ? currentContext.obj
+        : currentContext.key
+        ? currentContext.obj[currentContext.key]
+        : null;
+
+      if (!itemContent) {
+        const newObj = {};
+        if (targetArray) targetArray.push(newObj);
+        stack.push({ indent, obj: newObj });
+      } else if (itemContent.includes(':')) {
+        const colonIdx = itemContent.indexOf(':');
+        const k = itemContent.substring(0, colonIdx).trim().replace(/^["']|["']$/g, '');
+        const v = itemContent.substring(colonIdx + 1).trim();
+        const newObj: any = {};
+        if (v) {
+          newObj[k] = parseYamlScalar(v);
+        } else {
+          newObj[k] = {};
+        }
+        if (targetArray) targetArray.push(newObj);
+        stack.push({ indent, obj: newObj, key: k });
+      } else {
+        if (targetArray) targetArray.push(parseYamlScalar(itemContent));
+      }
+      continue;
+    }
+
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx > -1) {
+      const key = trimmed.substring(0, colonIdx).trim().replace(/^["']|["']$/g, '');
+      const valueStr = trimmed.substring(colonIdx + 1).trim();
+
+      if (valueStr === '' || valueStr === '|' || valueStr === '>') {
+        let newChild: any = {};
+        if (valueStr === '|' || valueStr === '>') {
+          let multiline = '';
+          let nextIdx = lineIndex + 1;
+          while (nextIdx < lines.length) {
+            const nextRaw = lines[nextIdx];
+            const nextIndentMatch = nextRaw.match(/^(\s*)/);
+            const nextIndent = nextIndentMatch ? nextIndentMatch[1].length : 0;
+            if (nextRaw.trim() && nextIndent <= indent) break;
+            multiline += (multiline ? '\n' : '') + nextRaw.trim();
+            nextIdx++;
+          }
+          lineIndex = nextIdx - 1;
+          newChild = multiline;
+        }
+
+        if (Array.isArray(currentContext.obj)) {
+          const itemObj: any = {};
+          itemObj[key] = newChild;
+          currentContext.obj.push(itemObj);
+          stack.push({ indent, obj: itemObj, key });
+        } else {
+          currentContext.obj[key] = newChild;
+          if (typeof newChild === 'object') {
+            stack.push({ indent, obj: newChild, key });
+          }
+        }
+      } else {
+        const parsedVal = parseYamlScalar(valueStr);
+        if (Array.isArray(currentContext.obj)) {
+          const itemObj: any = {};
+          itemObj[key] = parsedVal;
+          currentContext.obj.push(itemObj);
+        } else {
+          currentContext.obj[key] = parsedVal;
+        }
+      }
+    }
+  }
+
+  function parseYamlScalar(str: string): any {
+    const s = str.trim();
+    if (s === 'true' || s === 'True' || s === 'TRUE') return true;
+    if (s === 'false' || s === 'False' || s === 'FALSE') return false;
+    if (s === 'null' || s === '~' || s === '') return null;
+    if (/^-?\d+$/.test(s)) return parseInt(s, 10);
+    if (/^-?\d+\.\d+$/.test(s)) return parseFloat(s);
+    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+      return s.substring(1, s.length - 1);
+    }
+    return s;
+  }
+
+  return root;
 }
 
 export interface SmartPasteResult {

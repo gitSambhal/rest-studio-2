@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ExecutionResponse, TestAssertion, SavedResponseItem } from '../types';
 import { highlightJson } from '../utils/syntaxHighlighter';
+import { JsonSchemaTreeViewer } from './JsonSchemaTreeViewer';
 import {
   CheckCircle2,
   AlertCircle,
@@ -16,6 +17,7 @@ import {
   Download,
   Trash2,
   BookmarkPlus,
+  Layers,
   X,
   XCircle,
 } from 'lucide-react';
@@ -38,7 +40,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
   onSaveResponseSnapshot,
   onDeleteSavedResponseSnapshot,
 }) => {
-  const [activeTab, setActiveTab] = useState<'pretty' | 'raw' | 'headers' | 'tests' | 'logs'>('pretty');
+  const [activeTab, setActiveTab] = useState<'pretty' | 'raw' | 'schema' | 'headers' | 'tests' | 'logs'>('pretty');
   const [copied, setCopied] = useState(false);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(null);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
@@ -297,7 +299,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('pretty')}
-          className={`py-2 border-b-2 transition-colors ${
+          className={`py-2 border-b-2 transition-colors cursor-pointer ${
             activeTab === 'pretty'
               ? 'border-emerald-500 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -309,7 +311,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('raw')}
-          className={`py-2 border-b-2 transition-colors ${
+          className={`py-2 border-b-2 transition-colors cursor-pointer ${
             activeTab === 'raw'
               ? 'border-emerald-500 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -320,8 +322,26 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
 
         <button
           type="button"
+          onClick={() => setActiveTab('schema')}
+          className={`py-2 border-b-2 flex items-center space-x-1.5 transition-colors cursor-pointer ${
+            activeTab === 'schema'
+              ? 'border-emerald-500 text-emerald-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>Schema</span>
+          {isJson && (
+            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-mono">
+              Tree
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('headers')}
-          className={`py-2 border-b-2 flex items-center space-x-1 transition-colors ${
+          className={`py-2 border-b-2 flex items-center space-x-1 transition-colors cursor-pointer ${
             activeTab === 'headers'
               ? 'border-emerald-500 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -370,88 +390,94 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({
       </div>
 
       {/* Tab Content Body */}
-      <div className="flex-1 overflow-y-auto p-3 select-text">
-        {activeTab === 'pretty' && (
-          <div className="space-y-3">
-            <pre className="p-3 bg-slate-900/80 border border-slate-800/80 rounded-xl font-mono text-xs text-slate-200 overflow-x-auto leading-relaxed select-text">
-              <code>{isJson ? highlightJson(formattedBody) : formattedBody}</code>
-            </pre>
-          </div>
-        )}
-
-
-        {activeTab === 'raw' && (
-          <textarea
-            readOnly
-            value={displayResponse.body}
-            rows={15}
-            className="w-full font-mono text-xs p-3 bg-slate-900 border border-slate-800 text-slate-300 rounded-xl focus:outline-none leading-relaxed select-text"
-          />
-        )}
-
-        {activeTab === 'headers' && (
-          <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800">
-            <div className="grid grid-cols-12 bg-slate-900/80 px-3 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono">
-              <div className="col-span-4">Header Key</div>
-              <div className="col-span-8">Header Value</div>
+      {activeTab === 'schema' ? (
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <JsonSchemaTreeViewer responseBody={displayResponse.body} />
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto p-3 select-text">
+          {activeTab === 'pretty' && (
+            <div className="space-y-3">
+              <pre className="p-3 bg-slate-900/80 border border-slate-800/80 rounded-xl font-mono text-xs text-slate-200 overflow-x-auto leading-relaxed select-text">
+                <code>{isJson ? highlightJson(formattedBody) : formattedBody}</code>
+              </pre>
             </div>
+          )}
 
-            {Object.entries(displayResponse.headers || {}).map(([key, val]) => (
-              <div key={key} className="grid grid-cols-12 px-3 py-2 items-center gap-2 text-xs font-mono hover:bg-slate-900/40">
-                <div className="col-span-4 text-emerald-400 font-bold truncate">{key}</div>
-                <div className="col-span-8 text-slate-200 break-all">{val}</div>
+
+          {activeTab === 'raw' && (
+            <textarea
+              readOnly
+              value={displayResponse.body}
+              rows={15}
+              className="w-full font-mono text-xs p-3 bg-slate-900 border border-slate-800 text-slate-300 rounded-xl focus:outline-none leading-relaxed select-text"
+            />
+          )}
+
+          {activeTab === 'headers' && (
+            <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800">
+              <div className="grid grid-cols-12 bg-slate-900/80 px-3 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono">
+                <div className="col-span-4">Header Key</div>
+                <div className="col-span-8">Header Value</div>
               </div>
-            ))}
-          </div>
-        )}
 
-        {activeTab === 'tests' && (
-          <div className="space-y-3">
-            <div className="text-xs font-bold text-slate-300">Automated Assertion Results:</div>
-            <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800 font-mono text-xs">
-              {activeAssertions.map((a) => (
-                <div key={a.id} className="p-3 flex items-start justify-between bg-slate-900/60">
-                  <div className="flex items-start space-x-2">
-                    {a.passed ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    ) : (
-                      <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                    )}
-                    <div>
-                      <div className="font-bold text-slate-200">{a.message || a.type}</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">Target: {a.targetValue}</div>
+              {Object.entries(displayResponse.headers || {}).map(([key, val]) => (
+                <div key={key} className="grid grid-cols-12 px-3 py-2 items-center gap-2 text-xs font-mono hover:bg-slate-900/40">
+                  <div className="col-span-4 text-emerald-400 font-bold truncate">{key}</div>
+                  <div className="col-span-8 text-slate-200 break-all">{val}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeTab === 'tests' && (
+            <div className="space-y-3">
+              <div className="text-xs font-bold text-slate-300">Automated Assertion Results:</div>
+              <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800 font-mono text-xs">
+                {activeAssertions.map((a) => (
+                  <div key={a.id} className="p-3 flex items-start justify-between bg-slate-900/60">
+                    <div className="flex items-start space-x-2">
+                      {a.passed ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      )}
+                      <div>
+                        <div className="font-bold text-slate-200">{a.message || a.type}</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">Target: {a.targetValue}</div>
+                      </div>
                     </div>
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
+                        a.passed ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                      }`}
+                    >
+                      {a.passed ? 'PASSED' : 'FAILED'}
+                    </span>
                   </div>
-                  <span
-                    className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
-                      a.passed ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
-                    }`}
-                  >
-                    {a.passed ? 'PASSED' : 'FAILED'}
-                  </span>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {activeTab === 'logs' && (
-          <div className="space-y-3">
-            <div className="text-xs font-bold text-amber-300 flex items-center space-x-2">
-              <Terminal className="w-4 h-4" />
-              <span>Pre / Post Request Execution Console Logs:</span>
+          {activeTab === 'logs' && (
+            <div className="space-y-3">
+              <div className="text-xs font-bold text-amber-300 flex items-center space-x-2">
+                <Terminal className="w-4 h-4" />
+                <span>Pre / Post Request Execution Console Logs:</span>
+              </div>
+              <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl font-mono text-xs text-amber-200 space-y-1.5 overflow-x-auto leading-relaxed">
+                {(displayResponse.scriptLogs || []).map((log, i) => (
+                  <div key={i} className="flex items-start space-x-2">
+                    <span className="text-slate-500 select-none">[{i + 1}]</span>
+                    <span className="whitespace-pre-wrap">{log}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl font-mono text-xs text-amber-200 space-y-1.5 overflow-x-auto leading-relaxed">
-              {(displayResponse.scriptLogs || []).map((log, i) => (
-                <div key={i} className="flex items-start space-x-2">
-                  <span className="text-slate-500 select-none">[{i + 1}]</span>
-                  <span className="whitespace-pre-wrap">{log}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Save Snapshot Modal */}
       {isSaveModalOpen && (

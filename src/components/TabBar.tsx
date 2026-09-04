@@ -20,6 +20,7 @@ import {
 interface TabBarProps {
   tabs: WorkspaceTab[];
   activeTabId: string;
+  isDarkMode?: boolean;
   executingRequestIds?: Record<string, boolean>;
   requestStatuses?: Record<string, RequestStatusInfo>;
   onSelectTab: (tabId: string) => void;
@@ -50,6 +51,7 @@ const METHOD_COLORS: Record<HTTPMethod, string> = {
 export const TabBar: React.FC<TabBarProps> = ({
   tabs,
   activeTabId,
+  isDarkMode = true,
   executingRequestIds,
   requestStatuses,
   onSelectTab,
@@ -144,7 +146,11 @@ export const TabBar: React.FC<TabBarProps> = ({
   const activeContextMenuTab = contextMenu ? tabs.find((t) => t.id === contextMenu.tabId) : null;
 
   return (
-    <div className="h-10 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between px-2 overflow-x-auto scrollbar-none shrink-0 select-none relative">
+    <div className={`h-10 border-b flex items-center justify-between px-2 overflow-x-auto scrollbar-none shrink-0 select-none relative ${
+      isDarkMode
+        ? 'bg-slate-900/90 border-slate-800'
+        : 'bg-slate-100 border-slate-200'
+    }`}>
       {/* Left: Open Tabs List */}
       <div className="flex items-center space-x-1 overflow-x-auto no-scrollbar py-1">
         {tabs.map((tab) => {
@@ -172,9 +178,13 @@ export const TabBar: React.FC<TabBarProps> = ({
               }}
               className={`group relative flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all border shrink-0 w-40 ${
                 isActive
-                  ? 'bg-slate-800 text-slate-100 border-slate-700 shadow-md'
-                  : 'bg-slate-950/40 text-slate-400 border-transparent hover:bg-slate-800/50 hover:text-slate-200'
-              } ${tab.isPinned ? 'border-l-2 border-l-emerald-500 bg-slate-900/60' : ''}`}
+                  ? isDarkMode
+                    ? 'bg-slate-800 text-slate-100 border-slate-700 shadow-md'
+                    : 'bg-white text-slate-900 border-slate-300 shadow-sm'
+                  : isDarkMode
+                    ? 'bg-slate-950/40 text-slate-400 border-transparent hover:bg-slate-800/50 hover:text-slate-200'
+                    : 'bg-slate-200/50 text-slate-600 border-transparent hover:bg-slate-200 hover:text-slate-900'
+              } ${tab.isPinned ? (isDarkMode ? 'border-l-2 border-l-emerald-500 bg-slate-900/60' : 'border-l-2 border-l-emerald-500 bg-emerald-50/50') : ''}`}
             >
               {isExecutingThisTab ? (
                 <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin shrink-0" title="Request executing..." />
@@ -225,21 +235,25 @@ export const TabBar: React.FC<TabBarProps> = ({
 
       {/* Right Controls: Split Layout Toggle */}
       {onToggleSplitOrientation && (
-        <div className="flex items-center space-x-2 pl-2 border-l border-slate-800 shrink-0">
+        <div className={`flex items-center space-x-2 pl-2 border-l shrink-0 ${isDarkMode ? 'border-slate-800' : 'border-slate-300'}`}>
           <button
             type="button"
             onClick={onToggleSplitOrientation}
-            className="flex items-center space-x-1.5 px-2 py-1 bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 rounded-md text-[11px] font-mono text-slate-300 hover:text-emerald-300 transition-colors cursor-pointer"
+            className={`flex items-center space-x-1.5 px-2 py-1 border rounded-md text-[11px] font-mono transition-colors cursor-pointer ${
+              isDarkMode
+                ? 'bg-slate-800/80 hover:bg-slate-800 border-slate-700/80 text-slate-300 hover:text-emerald-300'
+                : 'bg-white hover:bg-slate-50 border-slate-300 text-slate-700 hover:text-emerald-600 shadow-sm'
+            }`}
             title={`Current Split: ${splitOrientation === 'top-bottom' ? 'Top/Bottom' : 'Left/Right'}. Click to toggle layout.`}
           >
             {splitOrientation === 'top-bottom' ? (
               <>
-                <Rows3 className="w-3.5 h-3.5 text-emerald-400" />
+                <Rows3 className="w-3.5 h-3.5 text-emerald-500" />
                 <span>Top / Bottom</span>
               </>
             ) : (
               <>
-                <Columns3 className="w-3.5 h-3.5 text-sky-400" />
+                <Columns3 className="w-3.5 h-3.5 text-sky-500" />
                 <span>Left / Right</span>
               </>
             )}
@@ -252,7 +266,11 @@ export const TabBar: React.FC<TabBarProps> = ({
         <div
           ref={menuRef}
           style={{ top: contextMenu.y + 4, left: contextMenu.x }}
-          className="fixed z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 w-52 text-xs font-sans text-slate-200 space-y-1 animate-in fade-in zoom-in-95 duration-100"
+          className={`fixed z-50 border rounded-xl shadow-2xl p-1.5 w-52 text-xs font-sans space-y-1 animate-in fade-in zoom-in-95 duration-100 ${
+            isDarkMode
+              ? 'bg-slate-900 border-slate-700 text-slate-200'
+              : 'bg-white border-slate-200 text-slate-800 shadow-slate-900/10'
+          }`}
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -261,22 +279,24 @@ export const TabBar: React.FC<TabBarProps> = ({
               if (onTogglePinTab) onTogglePinTab(contextMenu.tabId);
               setContextMenu(null);
             }}
-            className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-slate-100 transition-colors text-left cursor-pointer font-medium"
+            className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg transition-colors text-left cursor-pointer font-medium ${
+              isDarkMode ? 'hover:bg-slate-800 text-slate-200 hover:text-slate-100' : 'hover:bg-slate-100 text-slate-700 hover:text-slate-900'
+            }`}
           >
             {activeContextMenuTab?.isPinned ? (
               <>
-                <PinOff className="w-3.5 h-3.5 text-amber-400" />
+                <PinOff className="w-3.5 h-3.5 text-amber-500" />
                 <span>Unpin Tab</span>
               </>
             ) : (
               <>
-                <Pin className="w-3.5 h-3.5 text-emerald-400" />
+                <Pin className="w-3.5 h-3.5 text-emerald-500" />
                 <span>Pin Tab</span>
               </>
             )}
           </button>
 
-          <div className="h-px bg-slate-800 my-1" />
+          <div className={`h-px my-1 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
 
           <button
             type="button"
@@ -284,7 +304,9 @@ export const TabBar: React.FC<TabBarProps> = ({
               onCloseTab(contextMenu.tabId);
               setContextMenu(null);
             }}
-            className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-slate-100 transition-colors text-left cursor-pointer"
+            className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg transition-colors text-left cursor-pointer ${
+              isDarkMode ? 'hover:bg-slate-800 text-slate-200 hover:text-slate-100' : 'hover:bg-slate-100 text-slate-700 hover:text-slate-900'
+            }`}
           >
             <X className="w-3.5 h-3.5 text-slate-400" />
             <span>Close Tab</span>
@@ -301,13 +323,15 @@ export const TabBar: React.FC<TabBarProps> = ({
               }
               setContextMenu(null);
             }}
-            className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-slate-100 transition-colors text-left cursor-pointer"
+            className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg transition-colors text-left cursor-pointer ${
+              isDarkMode ? 'hover:bg-slate-800 text-slate-200 hover:text-slate-100' : 'hover:bg-slate-100 text-slate-700 hover:text-slate-900'
+            }`}
           >
-            <Maximize2 className="w-3.5 h-3.5 text-sky-400" />
+            <Maximize2 className="w-3.5 h-3.5 text-sky-500" />
             <span>Close Other Tabs</span>
           </button>
 
-          <div className="h-px bg-slate-800 my-1" />
+          <div className={`h-px my-1 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
 
           <button
             type="button"
@@ -315,9 +339,11 @@ export const TabBar: React.FC<TabBarProps> = ({
               if (onCloseTabsToRight) onCloseTabsToRight(contextMenu.tabId);
               setContextMenu(null);
             }}
-            className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-slate-100 transition-colors text-left cursor-pointer"
+            className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg transition-colors text-left cursor-pointer ${
+              isDarkMode ? 'hover:bg-slate-800 text-slate-200 hover:text-slate-100' : 'hover:bg-slate-100 text-slate-700 hover:text-slate-900'
+            }`}
           >
-            <ArrowRight className="w-3.5 h-3.5 text-purple-400" />
+            <ArrowRight className="w-3.5 h-3.5 text-purple-500" />
             <span>Close Tabs to Right</span>
           </button>
 
@@ -327,13 +353,15 @@ export const TabBar: React.FC<TabBarProps> = ({
               if (onCloseTabsToLeft) onCloseTabsToLeft(contextMenu.tabId);
               setContextMenu(null);
             }}
-            className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-slate-100 transition-colors text-left cursor-pointer"
+            className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg transition-colors text-left cursor-pointer ${
+              isDarkMode ? 'hover:bg-slate-800 text-slate-200 hover:text-slate-100' : 'hover:bg-slate-100 text-slate-700 hover:text-slate-900'
+            }`}
           >
-            <ArrowLeft className="w-3.5 h-3.5 text-purple-400" />
+            <ArrowLeft className="w-3.5 h-3.5 text-purple-500" />
             <span>Close Tabs to Left</span>
           </button>
 
-          <div className="h-px bg-slate-800 my-1" />
+          <div className={`h-px my-1 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
 
           <button
             type="button"
@@ -341,9 +369,9 @@ export const TabBar: React.FC<TabBarProps> = ({
               if (onCloseAllTabs) onCloseAllTabs();
               setContextMenu(null);
             }}
-            className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg hover:bg-rose-500/20 text-rose-300 transition-colors text-left cursor-pointer font-semibold"
+            className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg hover:bg-rose-500/20 text-rose-500 hover:text-rose-600 dark:text-rose-300 transition-colors text-left cursor-pointer font-semibold"
           >
-            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+            <Trash2 className="w-3.5 h-3.5 text-rose-500" />
             <span>Close All Tabs</span>
           </button>
         </div>

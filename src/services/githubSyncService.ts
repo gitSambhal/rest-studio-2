@@ -37,10 +37,50 @@ const STORAGE_TOKEN_KEY = 'reststudio_github_pat';
 const STORAGE_GIST_ID_KEY = 'reststudio_github_gist_id';
 const STORAGE_USER_KEY = 'reststudio_github_user';
 const STORAGE_AUTO_SYNC_KEY = 'reststudio_github_auto_sync';
+const STORAGE_DELETED_SNAPSHOTS_KEY = 'reststudio_deleted_snapshots';
+
+export function getDeletedSnapshotIds(): string[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_DELETED_SNAPSHOTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function deleteSnapshotRevision(commitSha: string): void {
+  try {
+    const existing = getDeletedSnapshotIds();
+    if (!existing.includes(commitSha)) {
+      existing.push(commitSha);
+      localStorage.setItem(STORAGE_DELETED_SNAPSHOTS_KEY, JSON.stringify(existing));
+    }
+  } catch (e) {
+    console.error('Failed to save deleted snapshot ID', e);
+  }
+}
+
+export function clearDeletedSnapshotIds(): void {
+  try {
+    localStorage.removeItem(STORAGE_DELETED_SNAPSHOTS_KEY);
+  } catch (e) {
+    console.error('Failed to clear deleted snapshot IDs', e);
+  }
+}
+
+export function getAuthHeader(token: string): string {
+  if (!token) return '';
+  if (token.startsWith('Bearer ') || token.startsWith('token ')) return token;
+  return `Bearer ${token}`;
+}
 
 export const getSavedGitHubToken = (): string | null => {
   try {
-    return localStorage.getItem(STORAGE_TOKEN_KEY) || localStorage.getItem('restpulse_github_pat');
+    return (
+      localStorage.getItem(STORAGE_TOKEN_KEY) ||
+      localStorage.getItem('restpulse_github_pat') ||
+      localStorage.getItem('reststudio_github_pat')
+    );
   } catch {
     return null;
   }
@@ -48,7 +88,11 @@ export const getSavedGitHubToken = (): string | null => {
 
 export const getSavedGistId = (): string | null => {
   try {
-    return localStorage.getItem(STORAGE_GIST_ID_KEY);
+    return (
+      localStorage.getItem(STORAGE_GIST_ID_KEY) ||
+      localStorage.getItem('restpulse_github_gist_id') ||
+      localStorage.getItem('reststudio_github_gist_id')
+    );
   } catch {
     return null;
   }
@@ -288,7 +332,7 @@ export async function peekRemoteWorkspace(
 export async function verifyGitHubToken(token: string): Promise<GitHubUser> {
   const res = await fetch('https://api.github.com/user', {
     headers: {
-      Authorization: `token ${token}`,
+      Authorization: getAuthHeader(token),
       Accept: 'application/vnd.github.v3+json',
     },
   });
@@ -316,7 +360,7 @@ export async function findOrCreateWorkspaceGist(token: string): Promise<string> 
     try {
       const checkRes = await fetch(`https://api.github.com/gists/${savedGistId}`, {
         headers: {
-          Authorization: `token ${token}`,
+          Authorization: getAuthHeader(token),
           Accept: 'application/vnd.github.v3+json',
         },
       });
@@ -336,7 +380,7 @@ export async function findOrCreateWorkspaceGist(token: string): Promise<string> 
   // 2. Fetch user's Gists to look for existing RestPulse Gist
   const gistsRes = await fetch('https://api.github.com/gists?per_page=100', {
     headers: {
-      Authorization: `token ${token}`,
+      Authorization: getAuthHeader(token),
       Accept: 'application/vnd.github.v3+json',
     },
   });
@@ -361,7 +405,7 @@ export async function findOrCreateWorkspaceGist(token: string): Promise<string> 
   const createRes = await fetch('https://api.github.com/gists', {
     method: 'POST',
     headers: {
-      Authorization: `token ${token}`,
+      Authorization: getAuthHeader(token),
       Accept: 'application/vnd.github.v3+json',
       'Content-Type': 'application/json',
     },
@@ -407,7 +451,7 @@ export async function createFreshWorkspaceGist(token: string): Promise<string> {
   const createRes = await fetch('https://api.github.com/gists', {
     method: 'POST',
     headers: {
-      Authorization: `token ${token}`,
+      Authorization: getAuthHeader(token),
       Accept: 'application/vnd.github.v3+json',
       'Content-Type': 'application/json',
     },
@@ -467,7 +511,7 @@ export async function pushToGitHubGist(
   const res = await fetch(`https://api.github.com/gists/${gistId}`, {
     method: 'PATCH',
     headers: {
-      Authorization: `token ${token}`,
+      Authorization: getAuthHeader(token),
       Accept: 'application/vnd.github.v3+json',
       'Content-Type': 'application/json',
     },
@@ -500,7 +544,7 @@ async function ensureGistInitialized(token: string, gistId: string) {
     await fetch(`https://api.github.com/gists/${gistId}`, {
       method: 'PATCH',
       headers: {
-        Authorization: `token ${token}`,
+        Authorization: getAuthHeader(token),
         Accept: 'application/vnd.github.v3+json',
         'Content-Type': 'application/json',
       },
@@ -534,6 +578,61 @@ async function ensureGistInitialized(token: string, gistId: string) {
 }
 
 /**
+ * Resolves workspace and history files from Gist file map safely
+ */
+function resolveGistFiles(files: Record<string, any>) {
+  if (!files) return { workspaceFile: null, historyFile: null };
+  const keys = Object.keys(files);
+
+  let workspaceFile =
+    files[WORKSPACE_FILE] ||
+    files['reststudio-workspace.json'] ||
+    files['restpulse-workspace.json'] ||
+    files['workspace.json'];
+
+  if (!workspaceFile) {
+    const wsKey = keys.find((k) => {
+      const lk = k.toLowerCase();
+      return (
+        lk.includes('workspace') ||
+        (lk.endsWith('.json') && !lk.includes('history'))
+      );
+    });
+    if (wsKey) workspaceFile = files[wsKey];
+  }
+
+  let historyFile =
+    files[HISTORY_FILE] ||
+    files['reststudio-history.json'] ||
+    files['restpulse-history.json'] ||
+    files['history.json'];
+
+  if (!historyFile) {
+    const hKey = keys.find((k) => k.toLowerCase().includes('history'));
+    if (hKey) historyFile = files[hKey];
+  }
+
+  return { workspaceFile, historyFile };
+}
+
+/**
+ * Robustly parses organizations array from workspace JSON payload
+ */
+function parseOrganizationsData(workspaceData: any): Organization[] {
+  if (!workspaceData) return [];
+  if (Array.isArray(workspaceData)) {
+    return workspaceData;
+  }
+  if (Array.isArray(workspaceData.organizations)) {
+    return workspaceData.organizations;
+  }
+  if (workspaceData.id && Array.isArray(workspaceData.projects)) {
+    return [workspaceData];
+  }
+  return [];
+}
+
+/**
  * Helper to extract file text either from content or raw_url safely
  */
 async function getFileContent(fileObj: any, token: string): Promise<string | null> {
@@ -561,7 +660,7 @@ async function getFileContent(fileObj: any, token: string): Promise<string | nul
     try {
       const resWithAuth = await fetch(fileObj.raw_url, {
         headers: {
-          Authorization: `token ${token}`,
+          Authorization: getAuthHeader(token),
         },
       });
       if (resWithAuth.ok) {
@@ -585,7 +684,7 @@ export async function pullFromGitHubGist(
 ): Promise<SyncPayload> {
   const res = await fetch(`https://api.github.com/gists/${gistId}`, {
     headers: {
-      Authorization: `token ${token}`,
+      Authorization: getAuthHeader(token),
       Accept: 'application/vnd.github.v3+json',
     },
   });
@@ -595,22 +694,7 @@ export async function pullFromGitHubGist(
   }
 
   const gist = await res.json();
-  const files = gist.files || {};
-  
-  // Look for exact file match or any json file with workspace properties
-  let workspaceFile = files[WORKSPACE_FILE];
-  let historyFile = files[HISTORY_FILE];
-
-  if (!workspaceFile) {
-    // Try finding by case or any json file
-    const fileKeys = Object.keys(files);
-    const candidateKey = fileKeys.find(
-      (k) => k.toLowerCase() === WORKSPACE_FILE.toLowerCase() || k.endsWith('.json')
-    );
-    if (candidateKey) {
-      workspaceFile = files[candidateKey];
-    }
-  }
+  const { workspaceFile, historyFile } = resolveGistFiles(gist.files || {});
 
   if (!workspaceFile) {
     // Auto-initialize the gist with empty workspace structure
@@ -634,6 +718,8 @@ export async function pullFromGitHubGist(
     throw new Error('Workspace file contains invalid JSON data in GitHub Gist.');
   }
 
+  const organizationsData = parseOrganizationsData(workspaceData);
+
   let historyData: RequestHistoryItem[] = [];
   if (historyFile) {
     const historyContent = await getFileContent(historyFile, token);
@@ -649,9 +735,9 @@ export async function pullFromGitHubGist(
   return {
     version: workspaceData.version || '1.0.0',
     updatedAt: workspaceData.updatedAt || gist.updated_at,
-    organizations: workspaceData.organizations || [],
-    activeOrgId: workspaceData.activeOrgId || '',
-    activeProjectId: workspaceData.activeProjectId || '',
+    organizations: organizationsData,
+    activeOrgId: workspaceData.activeOrgId || organizationsData[0]?.id || '',
+    activeProjectId: workspaceData.activeProjectId || organizationsData[0]?.projects?.[0]?.id || '',
     environments: workspaceData.environments || [],
     history: historyData,
     globalVariables: workspaceData.globalVariables || {},
@@ -665,30 +751,46 @@ export async function getGistRevisionHistory(
   token: string,
   gistId: string
 ): Promise<GistRevision[]> {
-  const res = await fetch(`https://api.github.com/gists/${gistId}/commits`, {
-    headers: {
-      Authorization: `token ${token}`,
-      Accept: 'application/vnd.github.v3+json',
-    },
-  });
+  try {
+    // The official GitHub Gist API returns commit history in gist.history when calling GET /gists/{gist_id}
+    const res = await fetch(`https://api.github.com/gists/${gistId}?t=${Date.now()}`, {
+      headers: {
+        Authorization: getAuthHeader(token),
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
 
-  if (!res.ok) {
-    throw new Error('Failed to fetch Gist revision history.');
+    if (res.ok) {
+      const gist = await res.json();
+      if (Array.isArray(gist.history) && gist.history.length > 0) {
+        const deletedIds = getDeletedSnapshotIds();
+        return gist.history
+          .map((c: any) => ({
+            id: c.version || c.id,
+            version: c.version || c.id,
+            user: {
+              login: c.user?.login || gist.owner?.login || 'GitHub User',
+              name: c.user?.name || c.user?.login || gist.owner?.login || 'GitHub User',
+              avatar_url: c.user?.avatar_url || gist.owner?.avatar_url || '',
+              html_url: c.user?.html_url || gist.owner?.html_url || '',
+            },
+            committed_at: c.committed_at || new Date().toISOString(),
+            change_status: c.change_status
+              ? {
+                  total: typeof c.change_status.total === 'number' ? c.change_status.total : 0,
+                  additions: typeof c.change_status.additions === 'number' ? c.change_status.additions : 0,
+                  deletions: typeof c.change_status.deletions === 'number' ? c.change_status.deletions : 0,
+                }
+              : { total: 0, additions: 0, deletions: 0 },
+          }))
+          .filter((rev) => !deletedIds.includes(rev.id) && !deletedIds.includes(rev.version));
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch Gist object history:', err);
   }
 
-  const commits = await res.json();
-  return commits.map((c: any) => ({
-    id: c.version,
-    version: c.version,
-    user: {
-      login: c.user?.login || 'GitHub User',
-      name: c.user?.name || c.user?.login || 'GitHub User',
-      avatar_url: c.user?.avatar_url || '',
-      html_url: c.user?.html_url || '',
-    },
-    committed_at: c.committed_at,
-    change_status: c.change_status,
-  }));
+  return [];
 }
 
 /**
@@ -701,7 +803,7 @@ export async function restoreGistRevision(
 ): Promise<SyncPayload> {
   const res = await fetch(`https://api.github.com/gists/${gistId}/${commitSha}`, {
     headers: {
-      Authorization: `token ${token}`,
+      Authorization: getAuthHeader(token),
       Accept: 'application/vnd.github.v3+json',
     },
   });
@@ -711,19 +813,7 @@ export async function restoreGistRevision(
   }
 
   const gist = await res.json();
-  const files = gist.files || {};
-  let workspaceFile = files[WORKSPACE_FILE];
-  let historyFile = files[HISTORY_FILE];
-
-  if (!workspaceFile) {
-    const fileKeys = Object.keys(files);
-    const candidateKey = fileKeys.find(
-      (k) => k.toLowerCase() === WORKSPACE_FILE.toLowerCase() || k.endsWith('.json')
-    );
-    if (candidateKey) {
-      workspaceFile = files[candidateKey];
-    }
-  }
+  const { workspaceFile, historyFile } = resolveGistFiles(gist.files || {});
 
   if (!workspaceFile) {
     throw new Error('Workspace snapshot content missing in this commit revision.');
@@ -741,15 +831,7 @@ export async function restoreGistRevision(
     throw new Error('Workspace snapshot contains invalid JSON data in GitHub.');
   }
 
-  let organizationsData: Organization[] = [];
-  if (Array.isArray(workspaceData)) {
-    organizationsData = workspaceData;
-  } else if (Array.isArray(workspaceData.organizations)) {
-    organizationsData = workspaceData.organizations;
-  } else if (workspaceData && workspaceData.id && Array.isArray(workspaceData.projects)) {
-    // Single organization object
-    organizationsData = [workspaceData];
-  }
+  const organizationsData = parseOrganizationsData(workspaceData);
 
   let historyData: RequestHistoryItem[] = [];
   if (historyFile) {
