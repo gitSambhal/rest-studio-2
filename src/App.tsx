@@ -34,6 +34,7 @@ import {
   getSavedGistId,
   getSavedAutoSync,
   getSavedGitHubUser,
+  pullFromGitHubGist,
   GitHubUser,
 } from './services/githubSyncService';
 import { SettingsTabId } from './components/SettingsModal';
@@ -294,6 +295,26 @@ export default function App() {
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [activeRequest, activeTabMode, handleExecuteRequest]);
+
+  // Auto-sync on load if enabled
+  useEffect(() => {
+    if (getSavedAutoSync()) {
+      const token = getSavedGitHubToken();
+      const gistId = getSavedGistId();
+      if (token && gistId) {
+        pullFromGitHubGist(token, gistId)
+          .then((payload) => {
+            if (payload && payload.organizations && payload.organizations.length > 0) {
+              handleApplySyncedData(payload, setHistory);
+              showToast('success', 'Auto-Synced', 'Loaded latest cloud workspace data from GitHub Gist.');
+            }
+          })
+          .catch((err) => {
+            console.error('Auto-sync on load failed:', err);
+          });
+      }
+    }
+  }, []);
 
   // Sidebar CRUD Operations
   const handleCreateFile = (fileName: string, folderId?: string) => {
@@ -908,123 +929,125 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 select-none font-sans antialiased">
       {/* Top Application Header */}
-      <Header
-        organizations={organizations}
-        activeOrg={activeOrg!}
-        onSelectOrg={(org) => {
-          setActiveOrgId(org.id);
-          if (org.projects && org.projects.length > 0) {
-            setActiveProjectId(org.projects[0].id);
-            const targetFile = org.projects[0].files?.[0];
-            if (targetFile) {
-              setActiveFileId(targetFile.id);
-              setActiveRequestId(targetFile.requests?.[0]?.id || null);
+      {activeTab?.type !== 'onboarding' && (
+        <Header
+          organizations={organizations}
+          activeOrg={activeOrg!}
+          onSelectOrg={(org) => {
+            setActiveOrgId(org.id);
+            if (org.projects && org.projects.length > 0) {
+              setActiveProjectId(org.projects[0].id);
+              const targetFile = org.projects[0].files?.[0];
+              if (targetFile) {
+                setActiveFileId(targetFile.id);
+                setActiveRequestId(targetFile.requests?.[0]?.id || null);
+              }
             }
-          }
-        }}
-        onOpenNewOrgModal={() => {
-          setAppPromptState({
-            isOpen: true,
-            title: 'Create Organization',
-            placeholder: 'e.g. Acme Corp',
-            confirmLabel: 'Create',
-            onConfirm: (name) => {
-              if (name.trim()) {
-                const newOrgId = 'org_' + Math.random().toString(36).substring(2, 9);
-                const newOrg = {
-                  id: newOrgId,
-                  name: name.trim(),
-                  projects: [
-                    {
-                      id: 'proj_' + Math.random().toString(36).substring(2, 9),
-                      name: 'Default Project',
-                      files: [],
-                      environments: [],
-                      activeEnvId: null,
-                    },
-                  ],
-                };
-                setOrganizations((prev) => [...prev, newOrg as any]);
-                setActiveOrgId(newOrgId);
-                showToast('success', 'Organization Created', `Created organization "${name.trim()}".`);
-              }
-            },
-          });
-        }}
-        projects={activeOrg?.projects || []}
-        activeProject={activeProject!}
-        onSelectProject={(project) => {
-          setActiveProjectId(project.id);
-          if (project.files && project.files.length > 0) {
-            setActiveFileId(project.files[0].id);
-            setActiveRequestId(project.files[0].requests?.[0]?.id || null);
-          }
-        }}
-        onOpenNewProjectModal={() => {
-          setAppPromptState({
-            isOpen: true,
-            title: 'Create Project',
-            placeholder: 'e.g. Backend Microservices',
-            confirmLabel: 'Create',
-            onConfirm: (name) => {
-              if (name.trim() && activeOrg) {
-                const newProjId = 'proj_' + Math.random().toString(36).substring(2, 9);
-                const newProj = {
-                  id: newProjId,
-                  name: name.trim(),
-                  files: [],
-                  environments: [],
-                  activeEnvId: null,
-                };
-                setOrganizations((prev) =>
-                  prev.map((org) =>
-                    org.id === activeOrg.id ? { ...org, projects: [...(org.projects || []), newProj as any] } : org
-                  )
-                );
-                setActiveProjectId(newProjId);
-                showToast('success', 'Project Created', `Created project "${name.trim()}".`);
-              }
-            },
-          });
-        }}
-        onSelectEnvironment={(envId) => {
-          if (!activeOrg || !activeProject) return;
-          setOrganizations((prev) =>
-            prev.map((org) =>
-              org.id === activeOrg.id
-                ? {
-                    ...org,
-                    projects: (org.projects || []).map((p) =>
-                      p.id === activeProject.id ? { ...p, activeEnvId: envId } : p
-                    ),
-                  }
-                : org
-            )
-          );
-        }}
-        onOpenEnvManager={() => setIsEnvManagerOpen(true)}
-        activeTab={activeTabMode}
-        onChangeTab={setActiveTabMode}
-        onOpenImportExport={() => setIsImportExportOpen(true)}
-        onOpenSettings={() => {
-          setSettingsTab('appearance');
-          setIsSettingsOpen(true);
-        }}
-        onOpenQuickNewRequest={() => setIsQuickNewRequestOpen(true)}
-        onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
-        onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
-        onOpenBatchWorkspaceModal={() => setIsBatchWorkspaceModalOpen(true)}
-        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-        onOpenShortcuts={() => setIsKeyboardShortcutsOpen(true)}
-        onOpenApiDocs={() => setIsApiDocsOpen(true)}
-        isGitHubSynced={Boolean(githubUser)}
-        githubUser={githubUser}
-        historyCount={history.length}
-        isDarkMode={isDarkMode}
-        onToggleDarkMode={handleToggleDarkMode}
-        currentTheme={currentTheme}
-        onSelectTheme={handleSelectTheme}
-      />
+          }}
+          onOpenNewOrgModal={() => {
+            setAppPromptState({
+              isOpen: true,
+              title: 'Create Organization',
+              placeholder: 'e.g. Acme Corp',
+              confirmLabel: 'Create',
+              onConfirm: (name) => {
+                if (name.trim()) {
+                  const newOrgId = 'org_' + Math.random().toString(36).substring(2, 9);
+                  const newOrg = {
+                    id: newOrgId,
+                    name: name.trim(),
+                    projects: [
+                      {
+                        id: 'proj_' + Math.random().toString(36).substring(2, 9),
+                        name: 'Default Project',
+                        files: [],
+                        environments: [],
+                        activeEnvId: null,
+                      },
+                    ],
+                  };
+                  setOrganizations((prev) => [...prev, newOrg as any]);
+                  setActiveOrgId(newOrgId);
+                  showToast('success', 'Organization Created', `Created organization "${name.trim()}".`);
+                }
+              },
+            });
+          }}
+          projects={activeOrg?.projects || []}
+          activeProject={activeProject!}
+          onSelectProject={(project) => {
+            setActiveProjectId(project.id);
+            if (project.files && project.files.length > 0) {
+              setActiveFileId(project.files[0].id);
+              setActiveRequestId(project.files[0].requests?.[0]?.id || null);
+            }
+          }}
+          onOpenNewProjectModal={() => {
+            setAppPromptState({
+              isOpen: true,
+              title: 'Create Project',
+              placeholder: 'e.g. Backend Microservices',
+              confirmLabel: 'Create',
+              onConfirm: (name) => {
+                if (name.trim() && activeOrg) {
+                  const newProjId = 'proj_' + Math.random().toString(36).substring(2, 9);
+                  const newProj = {
+                    id: newProjId,
+                    name: name.trim(),
+                    files: [],
+                    environments: [],
+                    activeEnvId: null,
+                  };
+                  setOrganizations((prev) =>
+                    prev.map((org) =>
+                      org.id === activeOrg.id ? { ...org, projects: [...(org.projects || []), newProj as any] } : org
+                    )
+                  );
+                  setActiveProjectId(newProjId);
+                  showToast('success', 'Project Created', `Created project "${name.trim()}".`);
+                }
+              },
+            });
+          }}
+          onSelectEnvironment={(envId) => {
+            if (!activeOrg || !activeProject) return;
+            setOrganizations((prev) =>
+              prev.map((org) =>
+                org.id === activeOrg.id
+                  ? {
+                      ...org,
+                      projects: (org.projects || []).map((p) =>
+                        p.id === activeProject.id ? { ...p, activeEnvId: envId } : p
+                      ),
+                    }
+                  : org
+              )
+            );
+          }}
+          onOpenEnvManager={() => setIsEnvManagerOpen(true)}
+          activeTab={activeTabMode}
+          onChangeTab={setActiveTabMode}
+          onOpenImportExport={() => setIsImportExportOpen(true)}
+          onOpenSettings={() => {
+            setSettingsTab('appearance');
+            setIsSettingsOpen(true);
+          }}
+          onOpenQuickNewRequest={() => setIsQuickNewRequestOpen(true)}
+          onOpenQuickCurl={() => setIsQuickCurlOpen(true)}
+          onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
+          onOpenBatchWorkspaceModal={() => setIsBatchWorkspaceModalOpen(true)}
+          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+          onOpenShortcuts={() => setIsKeyboardShortcutsOpen(true)}
+          onOpenApiDocs={() => setIsApiDocsOpen(true)}
+          isGitHubSynced={Boolean(githubUser)}
+          githubUser={githubUser}
+          historyCount={history.length}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={handleToggleDarkMode}
+          currentTheme={currentTheme}
+          onSelectTheme={handleSelectTheme}
+        />
+      )}
 
       {/* Main Workspace Frame */}
       {activeTab?.type === 'onboarding' ? (
@@ -1220,6 +1243,7 @@ export default function App() {
         isGitHubSyncOpen={isGitHubSyncOpen}
         setIsGitHubSyncOpen={setIsGitHubSyncOpen}
         history={history}
+        setHistory={setHistory}
         handleApplySyncedData={handleApplySyncedData}
         isBatchWorkspaceModalOpen={isBatchWorkspaceModalOpen}
         setIsBatchWorkspaceModalOpen={setIsBatchWorkspaceModalOpen}

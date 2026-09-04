@@ -165,8 +165,10 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   React.useEffect(() => {
     const timer = setTimeout(() => {
       const currentUrl = request.url || '';
-      const colonMatches = currentUrl.match(/:([a-zA-Z0-9_-]+)/g) || [];
-      const braceMatches = currentUrl.match(/\{([a-zA-Z0-9_-]+)\}/g) || [];
+      // Strip out all {{env_vars}} so they are not mistaken for path params
+      const cleanUrl = currentUrl.replace(/\{\{[^}]+\}\}/g, '');
+      const colonMatches = cleanUrl.match(/:([a-zA-Z0-9_-]+)/g) || [];
+      const braceMatches = cleanUrl.match(/\{([a-zA-Z0-9_-]+)\}/g) || [];
 
       const foundKeys = new Set<string>();
       colonMatches.forEach((m) => foundKeys.add(m.substring(1)));

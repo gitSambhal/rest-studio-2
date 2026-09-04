@@ -104,7 +104,8 @@ export interface AppModalsProps {
   isGitHubSyncOpen: boolean;
   setIsGitHubSyncOpen: (open: boolean) => void;
   history: RequestHistoryItem[];
-  handleApplySyncedData: (payload: SyncPayload) => void;
+  setHistory: React.Dispatch<React.SetStateAction<RequestHistoryItem[]>>;
+  handleApplySyncedData: (payload: SyncPayload, setHistory?: (history: RequestHistoryItem[]) => void) => void;
 
   // Batch Workspace
   isBatchWorkspaceModalOpen: boolean;
@@ -190,6 +191,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
   isGitHubSyncOpen,
   setIsGitHubSyncOpen,
   history,
+  setHistory,
   handleApplySyncedData,
   isBatchWorkspaceModalOpen,
   setIsBatchWorkspaceModalOpen,
@@ -369,7 +371,8 @@ export const AppModals: React.FC<AppModalsProps> = ({
           activeProjectId={activeProjectId}
           environments={activeProject?.environments || []}
           history={history}
-          onApplySyncedData={handleApplySyncedData}
+          globalVariables={globalVariables}
+          onApplySyncedData={(payload) => handleApplySyncedData(payload, setHistory)}
           showToast={(msg, type) => showToast(type, msg)}
           isDarkMode={isDarkMode}
           onUserChange={(u) => setGithubUser(u)}

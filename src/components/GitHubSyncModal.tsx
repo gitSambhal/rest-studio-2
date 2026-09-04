@@ -52,7 +52,7 @@ import {
   mergeSyncPayloads,
   peekRemoteWorkspace,
 } from '../services/githubSyncService';
-import { Organization, RequestHistoryItem, Environment } from '../types';
+import { Organization, RequestHistoryItem, Environment, EnvVariable } from '../types';
 
 interface GitHubSyncModalProps {
   isOpen: boolean;
@@ -62,6 +62,7 @@ interface GitHubSyncModalProps {
   activeProjectId: string;
   environments: Environment[];
   history: RequestHistoryItem[];
+  globalVariables?: EnvVariable[];
   onApplySyncedData: (data: SyncPayload) => void;
   showToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
   isDarkMode?: boolean;
@@ -94,6 +95,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   activeProjectId,
   environments,
   history,
+  globalVariables = [],
   onApplySyncedData,
   showToast,
   isDarkMode = true,
@@ -286,7 +288,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
           }
           showToast('Created new private Gist! Pushing your current workspace now...', 'info');
           // Push local data into the new Gist
-          const updatedIso = await pushToGitHubGist(activeToken, newGId, {
+          const payload: SyncPayload = {
             version: '1.0.0',
             updatedAt: new Date().toISOString(),
             organizations,
@@ -294,7 +296,10 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
             activeProjectId,
             environments,
             history,
-          });
+            globalVariables,
+          };
+          const updatedIso = await pushToGitHubGist(activeToken, newGId, payload);
+          onApplySyncedData(payload);
           setLastSyncTime(new Date(updatedIso).toLocaleTimeString());
           showToast('Workspace initialized and synced in new private Gist!', 'success');
           await fetchRevisions(activeToken, newGId);
@@ -384,7 +389,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     setStatusMessage('Pushing local workspace & history to GitHub Gist...');
 
     try {
-      const updatedIso = await pushToGitHubGist(activeToken, activeGistId, {
+      const payload: SyncPayload = {
         version: '1.0.0',
         updatedAt: new Date().toISOString(),
         organizations,
@@ -392,7 +397,10 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
         activeProjectId,
         environments,
         history,
-      });
+        globalVariables,
+      };
+      const updatedIso = await pushToGitHubGist(activeToken, activeGistId, payload);
+      onApplySyncedData(payload);
 
       setLastSyncTime(new Date(updatedIso).toLocaleTimeString());
       showToast('Workspace & execution history backed up to GitHub Gist!', 'success');

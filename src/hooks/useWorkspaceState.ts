@@ -6,6 +6,7 @@ import {
   RestRequest,
   EnvVariable,
   Environment,
+  RequestHistoryItem,
 } from '../types';
 import { INITIAL_ORGANIZATIONS, INITIAL_GLOBAL_VARIABLES } from '../data/initialOrganizations';
 import { SyncPayload } from '../services/githubSyncService';
@@ -219,12 +220,31 @@ export function useWorkspaceState(showToast: (type: 'success' | 'error' | 'info'
     }
   };
 
-  const handleApplySyncedData = (payload: SyncPayload) => {
+  const handleApplySyncedData = (
+    payload: SyncPayload,
+    setHistory?: (history: RequestHistoryItem[]) => void
+  ) => {
     let incomingOrgs = payload.organizations;
     if (!incomingOrgs || !Array.isArray(incomingOrgs) || incomingOrgs.length === 0) {
       incomingOrgs = INITIAL_ORGANIZATIONS;
     }
     setOrganizations(incomingOrgs);
+
+    if (payload.globalVariables && Array.isArray(payload.globalVariables)) {
+      setGlobalVariables(payload.globalVariables);
+      try {
+        localStorage.setItem('reststudio_global_vars', JSON.stringify(payload.globalVariables));
+        localStorage.setItem('restpulse_global_vars', JSON.stringify(payload.globalVariables));
+      } catch (e) {}
+    }
+
+    if (setHistory && payload.history && Array.isArray(payload.history)) {
+      setHistory(payload.history);
+      try {
+        localStorage.setItem('reststudio_history', JSON.stringify(payload.history));
+        localStorage.setItem('restpulse_history', JSON.stringify(payload.history));
+      } catch (e) {}
+    }
 
     const targetOrg =
       incomingOrgs.find((o) => o.id === payload.activeOrgId) || incomingOrgs[0];
