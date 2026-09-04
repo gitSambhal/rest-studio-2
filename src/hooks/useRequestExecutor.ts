@@ -96,6 +96,17 @@ export function useRequestExecutor({
       }
     }
 
+    // 1.5. Resolve URL Path Params (e.g. :id or {id})
+    const urlParams = req.urlParams?.filter((p) => p.enabled && p.key) || [];
+    if (urlParams.length > 0) {
+      urlParams.forEach((up) => {
+        const k = resolveEnvVariables(up.key, scopeCtx).resolved.trim();
+        const v = resolveEnvVariables(up.value, scopeCtx).resolved;
+        targetUrl = targetUrl.replace(new RegExp(`:${k}\\b`, 'g'), encodeURIComponent(v));
+        targetUrl = targetUrl.replace(new RegExp(`\\{${k}\\}`, 'g'), encodeURIComponent(v));
+      });
+    }
+
     // 2. Resolve Query Params
     const queryParams = req.queryParams?.filter((q) => q.enabled && q.key) || [];
     if (queryParams.length > 0) {

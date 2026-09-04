@@ -181,9 +181,19 @@ export function useWorkspaceState(showToast: (type: 'success' | 'error' | 'info'
                 ...p,
                 environments: (p.environments || []).map((env) => {
                   if (env.id !== activeProject.activeEnvId) return env;
+                  const existingVars = env.variables || [];
+                  const updatedVars = [...existingVars];
+                  for (const nv of newVars) {
+                    const idx = updatedVars.findIndex((v) => v.key.trim().toLowerCase() === nv.key.trim().toLowerCase());
+                    if (idx >= 0) {
+                      updatedVars[idx] = { ...updatedVars[idx], value: nv.value, enabled: nv.enabled ?? true };
+                    } else {
+                      updatedVars.push(nv);
+                    }
+                  }
                   return {
                     ...env,
-                    variables: [...(env.variables || []), ...newVars],
+                    variables: updatedVars,
                   };
                 }),
               };
@@ -191,10 +201,21 @@ export function useWorkspaceState(showToast: (type: 'success' | 'error' | 'info'
           };
         })
       );
-      showToast('success', 'Variables Extracted', `Added ${newVars.length} variable(s) to active environment.`);
+      showToast('success', 'Variables Extracted', `Upserted ${newVars.length} variable(s) in active environment.`);
     } else {
-      setGlobalVariables((prev) => [...prev, ...newVars]);
-      showToast('success', 'Global Variables Extracted', `Added ${newVars.length} variable(s) to Global Variables.`);
+      setGlobalVariables((prev) => {
+        const updated = [...prev];
+        for (const nv of newVars) {
+          const idx = updated.findIndex((v) => v.key.trim().toLowerCase() === nv.key.trim().toLowerCase());
+          if (idx >= 0) {
+            updated[idx] = { ...updated[idx], value: nv.value, enabled: nv.enabled ?? true };
+          } else {
+            updated.push(nv);
+          }
+        }
+        return updated;
+      });
+      showToast('success', 'Global Variables Extracted', `Upserted ${newVars.length} variable(s) in Global Variables.`);
     }
   };
 

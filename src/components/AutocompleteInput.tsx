@@ -35,6 +35,32 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   const [dropdownPos, setDropdownPos] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
 
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+
+  const handleScroll = (e: React.UIEvent<HTMLInputElement>) => {
+    if (backdropRef.current) {
+      backdropRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    }
+  };
+
+  const renderHighlightedText = (str: string) => {
+    if (!str) return null;
+    const parts = str.split(/(\{\{[a-zA-Z0-9_$.-]+\}\})/g);
+    return parts.map((part, i) => {
+      const match = part.match(/^\{\{([a-zA-Z0-9_$.-]+)\}\}$/);
+      if (match) {
+        return (
+          <span
+            key={i}
+            className="inline-flex items-center bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 rounded px-1 py-0.5 text-xs font-bold mx-0.5 align-baseline"
+          >
+            {part}
+          </span>
+        );
+      }
+      return <span key={i} className="text-slate-100">{part}</span>;
+    });
+  };
 
   const ctxToUse: ScopeContext = scopeCtx || {
     projectVariables: envVariables,
@@ -186,15 +212,28 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
             className={`w-full font-mono text-xs p-3 bg-slate-900 border border-slate-700 text-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 leading-relaxed transition-all ${className}`}
           />
         ) : (
-          <input
-            id={id}
-            ref={inputRef as React.RefObject<HTMLInputElement>}
-            type="text"
-            value={value}
-            placeholder={placeholder}
-            {...commonInputHandlers}
-            className={`w-full font-mono text-sm px-3 py-2 pr-9 bg-slate-900 border border-slate-700 text-slate-100 caret-emerald-400 placeholder:text-slate-500 selection:text-slate-100 selection:bg-emerald-500/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all ${className}`}
-          />
+          <div className="relative w-full flex items-center overflow-hidden rounded-lg bg-slate-900 border border-slate-700 focus-within:ring-2 focus-within:ring-emerald-500/50 focus-within:border-emerald-500 transition-all">
+            {/* Backdrop Highlight Layer */}
+            <div
+              ref={backdropRef}
+              className="absolute inset-0 px-3 py-2 pr-9 pointer-events-none flex items-center overflow-x-hidden font-mono text-sm whitespace-pre text-slate-100 z-0 select-none"
+              aria-hidden="true"
+            >
+              {renderHighlightedText(value)}
+            </div>
+
+            {/* Transparent Input Layer */}
+            <input
+              id={id}
+              ref={inputRef as React.RefObject<HTMLInputElement>}
+              type="text"
+              value={value}
+              placeholder={placeholder}
+              {...commonInputHandlers}
+              onScroll={handleScroll}
+              className={`w-full font-mono text-sm px-3 py-2 pr-9 bg-transparent text-transparent caret-emerald-400 placeholder:text-slate-500 selection:text-transparent selection:bg-emerald-500/30 focus:outline-none transition-all z-10 ${className}`}
+            />
+          </div>
         )}
 
         {/* Action Button: Insert Variable */}

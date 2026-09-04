@@ -162,6 +162,7 @@ export interface RestRequest {
   url: string;
   headers: KeyValuePair[];
   queryParams: KeyValuePair[];
+  urlParams?: KeyValuePair[];
   body: RequestBody;
   auth: RequestAuth;
   assertions?: TestAssertion[];

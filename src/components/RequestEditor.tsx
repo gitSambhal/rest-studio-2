@@ -161,6 +161,54 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     onUpdateRequest({ ...request, url: newUrl });
   };
 
+  // Auto-sync urlParams when request.url changes (debounced to prevent character-by-character spam while typing)
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      const currentUrl = request.url || '';
+      const colonMatches = currentUrl.match(/:([a-zA-Z0-9_-]+)/g) || [];
+      const braceMatches = currentUrl.match(/\{([a-zA-Z0-9_-]+)\}/g) || [];
+
+      const foundKeys = new Set<string>();
+      colonMatches.forEach((m) => foundKeys.add(m.substring(1)));
+      braceMatches.forEach((m) => foundKeys.add(m.substring(1, m.length - 1)));
+
+      const currentUrlParams = request.urlParams || [];
+      let updatedParams = [...currentUrlParams];
+      let changed = false;
+
+      // 1. Auto-remove params that are no longer in the URL
+      updatedParams = updatedParams.filter((p) => {
+        const k = p.key.trim();
+        if (!foundKeys.has(k)) {
+          changed = true;
+          return false;
+        }
+        return true;
+      });
+
+      const existingKeys = new Set(updatedParams.map((p) => p.key.trim()));
+
+      // 2. Auto-add new keys found in the URL
+      foundKeys.forEach((key) => {
+        if (!existingKeys.has(key)) {
+          updatedParams.push({
+            id: 'urlparam_' + Math.random().toString(36).substring(2, 9),
+            key,
+            value: '',
+            enabled: true,
+          });
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        onUpdateRequest({ ...request, urlParams: updatedParams });
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [request.url]);
+
   const updateMethod = (method: HTTPMethod) => {
     onUpdateRequest({ ...request, method });
   };
@@ -224,6 +272,28 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   const deleteParam = (index: number) => {
     const newParams = request.queryParams.filter((_, i) => i !== index);
     onUpdateRequest({ ...request, queryParams: newParams });
+  };
+
+  // URL Params handlers
+  const addUrlParam = () => {
+    const newParam: KeyValuePair = {
+      id: 'urlparam_' + Math.random().toString(36).substring(2, 9),
+      key: '',
+      value: '',
+      enabled: true,
+    };
+    onUpdateRequest({ ...request, urlParams: [...(request.urlParams || []), newParam] });
+  };
+
+  const updateUrlParam = (index: number, updatedItem: Partial<KeyValuePair>) => {
+    const newParams = [...(request.urlParams || [])];
+    newParams[index] = { ...newParams[index], ...updatedItem };
+    onUpdateRequest({ ...request, urlParams: newParams });
+  };
+
+  const deleteUrlParam = (index: number) => {
+    const newParams = (request.urlParams || []).filter((_, i) => i !== index);
+    onUpdateRequest({ ...request, urlParams: newParams });
   };
 
   // Header handlers
@@ -680,76 +750,153 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
       <div className="flex-1 overflow-y-auto p-4">
         {/* PARAMS TAB */}
         {activeTab === 'params' && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs text-slate-400">
-              <span>Query Parameters (Auto-populates URL query string)</span>
-              <button
-                type="button"
-                onClick={addQueryParam}
-                className="flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 font-semibold text-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Query Param</span>
-              </button>
-            </div>
-
-            <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800">
-              <div className="grid grid-cols-12 bg-slate-900/80 px-3 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                <div className="col-span-1 text-center">Use</div>
-                <div className="col-span-5">Key</div>
-                <div className="col-span-[5]">Value (Supports {"{{env_var}}"})</div>
-                <div className="col-span-1 text-center">Action</div>
+          <div className="space-y-6">
+            {/* URL Path Parameters */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span>URL Path Parameters (Replaces :param or {"{param}"} in request URL)</span>
+                <button
+                  type="button"
+                  onClick={addUrlParam}
+                  className="flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 font-semibold text-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add URL Param</span>
+                </button>
               </div>
 
-              {request.queryParams.map((param, index) => (
-                <div key={param.id} className="grid grid-cols-12 px-3 py-2 items-center gap-2 hover:bg-slate-900/40">
-                  <div className="col-span-1 flex justify-center">
-                    <input
-                      type="checkbox"
-                      checked={param.enabled}
-                      onChange={(e) => updateParam(index, { enabled: e.target.checked })}
-                      className="rounded bg-slate-900 border-slate-700 text-emerald-500 focus:ring-0 cursor-pointer"
-                    />
-                  </div>
-
-                  <div className="col-span-5">
-                    <input
-                      type="text"
-                      value={param.key}
-                      onChange={(e) => updateParam(index, { key: e.target.value })}
-                      placeholder="e.g. page, limit"
-                      className="w-full bg-slate-900/60 border border-slate-800 rounded px-2.5 py-1 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500/50"
-                    />
-                  </div>
-
-                  <div className="col-span-5">
-                    <AutocompleteInput
-                      value={param.value}
-                      onChange={(val) => updateParam(index, { value: val })}
-                      placeholder="e.g. {{page}} or 1"
-                      scopeCtx={scopeCtx}
-                      envVariables={envVariables}
-                      fileVariables={fileVariables}
-                    />
-                  </div>
-
-                  <div className="col-span-1 flex justify-center">
-                    <button
-                      type="button"
-                      onClick={() => deleteParam(index)}
-                      className="p-1 text-slate-500 hover:text-rose-400 transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+              <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800">
+                <div className="grid grid-cols-12 bg-slate-900/80 px-3 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  <div className="col-span-1 text-center">Use</div>
+                  <div className="col-span-5">Key</div>
+                  <div className="col-span-[5]">Value (Supports {"{{env_var}}"})</div>
+                  <div className="col-span-1 text-center">Action</div>
                 </div>
-              ))}
 
-              {request.queryParams.length === 0 && (
-                <div className="py-6 text-center text-slate-500 text-xs font-mono">
-                  No query parameters added yet. Click "+ Add Query Param" above.
+                {(request.urlParams || []).map((param, index) => (
+                  <div key={param.id} className="grid grid-cols-12 px-3 py-2 items-center gap-2 hover:bg-slate-900/40">
+                    <div className="col-span-1 flex justify-center">
+                      <input
+                        type="checkbox"
+                        checked={param.enabled}
+                        onChange={(e) => updateUrlParam(index, { enabled: e.target.checked })}
+                        className="rounded bg-slate-900 border-slate-700 text-emerald-500 focus:ring-0 cursor-pointer"
+                      />
+                    </div>
+
+                    <div className="col-span-5">
+                      <input
+                        type="text"
+                        value={param.key}
+                        onChange={(e) => updateUrlParam(index, { key: e.target.value })}
+                        placeholder="e.g. id, userId"
+                        className="w-full bg-slate-900/60 border border-slate-800 rounded px-2.5 py-1 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500/50"
+                      />
+                    </div>
+
+                    <div className="col-span-5">
+                      <AutocompleteInput
+                        value={param.value}
+                        onChange={(val) => updateUrlParam(index, { value: val })}
+                        placeholder="e.g. 12345 or {{userId}}"
+                        scopeCtx={scopeCtx}
+                        envVariables={envVariables}
+                        fileVariables={fileVariables}
+                      />
+                    </div>
+
+                    <div className="col-span-1 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => deleteUrlParam(index)}
+                        className="p-1 text-slate-500 hover:text-rose-400 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {(!request.urlParams || request.urlParams.length === 0) && (
+                  <div className="py-5 text-center text-slate-500 text-xs font-mono">
+                    No URL path parameters added yet. Click "+ Add URL Param" above.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Query Parameters */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span>Query Parameters (Auto-populates URL query string)</span>
+                <button
+                  type="button"
+                  onClick={addQueryParam}
+                  className="flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 font-semibold text-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Query Param</span>
+                </button>
+              </div>
+
+              <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800">
+                <div className="grid grid-cols-12 bg-slate-900/80 px-3 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  <div className="col-span-1 text-center">Use</div>
+                  <div className="col-span-5">Key</div>
+                  <div className="col-span-[5]">Value (Supports {"{{env_var}}"})</div>
+                  <div className="col-span-1 text-center">Action</div>
                 </div>
-              )}
+
+                {request.queryParams.map((param, index) => (
+                  <div key={param.id} className="grid grid-cols-12 px-3 py-2 items-center gap-2 hover:bg-slate-900/40">
+                    <div className="col-span-1 flex justify-center">
+                      <input
+                        type="checkbox"
+                        checked={param.enabled}
+                        onChange={(e) => updateParam(index, { enabled: e.target.checked })}
+                        className="rounded bg-slate-900 border-slate-700 text-emerald-500 focus:ring-0 cursor-pointer"
+                      />
+                    </div>
+
+                    <div className="col-span-5">
+                      <input
+                        type="text"
+                        value={param.key}
+                        onChange={(e) => updateParam(index, { key: e.target.value })}
+                        placeholder="e.g. page, limit"
+                        className="w-full bg-slate-900/60 border border-slate-800 rounded px-2.5 py-1 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500/50"
+                      />
+                    </div>
+
+                    <div className="col-span-5">
+                      <AutocompleteInput
+                        value={param.value}
+                        onChange={(val) => updateParam(index, { value: val })}
+                        placeholder="e.g. {{page}} or 1"
+                        scopeCtx={scopeCtx}
+                        envVariables={envVariables}
+                        fileVariables={fileVariables}
+                      />
+                    </div>
+
+                    <div className="col-span-1 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => deleteParam(index)}
+                        className="p-1 text-slate-500 hover:text-rose-400 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {request.queryParams.length === 0 && (
+                  <div className="py-6 text-center text-slate-500 text-xs font-mono">
+                    No query parameters added yet. Click "+ Add Query Param" above.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -898,44 +1045,75 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
                   )}
 
                   {projectAuth?.type === 'bearer' && (
-                    <div className="font-mono text-slate-200 space-y-1">
-                      <div><span className="text-slate-500">Auth Type:</span> Bearer Token</div>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-slate-500">Token:</span>
-                        <RenderTextWithVars
-                          text={projectAuth.bearerToken || '(empty)'}
-                          scopeCtx={scopeCtx}
-                          envVariables={envVariables}
-                          fileVariables={fileVariables}
-                          showResolvedValue={true}
-                        />
+                    <div className="font-mono text-slate-200 space-y-2">
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span>Auth Type: <strong className="text-emerald-400">Bearer Token</strong></span>
+                        <span className="text-[10px] bg-slate-900 px-2 py-0.5 rounded border border-slate-800 text-slate-400">Inherited</span>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[11px] text-slate-400">Bearer Token Value:</span>
+                        <div className="bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 font-mono break-all">
+                          <RenderTextWithVars
+                            text={projectAuth.bearerToken || '(empty)'}
+                            scopeCtx={scopeCtx}
+                            envVariables={envVariables}
+                            fileVariables={fileVariables}
+                            showResolvedValue={true}
+                          />
+                        </div>
                       </div>
                     </div>
                   )}
 
                   {projectAuth?.type === 'basic' && (
-                    <div className="font-mono text-slate-200 space-y-1">
-                      <div><span className="text-slate-500">Auth Type:</span> Basic Auth</div>
-                      <div><span className="text-slate-500">Username:</span> {projectAuth.basicUsername || '(none)'}</div>
-                      <div><span className="text-slate-500">Password:</span> {projectAuth.basicPassword ? '••••••••' : '(none)'}</div>
+                    <div className="font-mono text-slate-200 space-y-2">
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span>Auth Type: <strong className="text-emerald-400">Basic Auth</strong></span>
+                        <span className="text-[10px] bg-slate-900 px-2 py-0.5 rounded border border-slate-800 text-slate-400">Inherited</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <span className="text-[11px] text-slate-400">Username:</span>
+                          <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 font-mono">
+                            {projectAuth.basicUsername || '(none)'}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[11px] text-slate-400">Password:</span>
+                          <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 font-mono">
+                            {projectAuth.basicPassword ? '••••••••' : '(none)'}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
 
                   {projectAuth?.type === 'apikey' && (
-                    <div className="font-mono text-slate-200 space-y-1">
-                      <div><span className="text-slate-500">Auth Type:</span> API Key</div>
-                      <div><span className="text-slate-500">Key:</span> {projectAuth.apiKeyKey || '(none)'}</div>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-slate-500">Value:</span>
-                        <RenderTextWithVars
-                          text={projectAuth.apiKeyValue || '(empty)'}
-                          scopeCtx={scopeCtx}
-                          envVariables={envVariables}
-                          fileVariables={fileVariables}
-                          showResolvedValue={true}
-                        />
+                    <div className="font-mono text-slate-200 space-y-2">
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span>Auth Type: <strong className="text-emerald-400">API Key</strong> (Added to {projectAuth.apiKeyAddTo || 'header'})</span>
+                        <span className="text-[10px] bg-slate-900 px-2 py-0.5 rounded border border-slate-800 text-slate-400">Inherited</span>
                       </div>
-                      <div><span className="text-slate-500">Add To:</span> {projectAuth.apiKeyAddTo || 'header'}</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <span className="text-[11px] text-slate-400">Key:</span>
+                          <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 font-mono">
+                            {projectAuth.apiKeyKey || '(none)'}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[11px] text-slate-400">Value:</span>
+                          <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 font-mono">
+                            <RenderTextWithVars
+                              text={projectAuth.apiKeyValue || '(empty)'}
+                              scopeCtx={scopeCtx}
+                              envVariables={envVariables}
+                              fileVariables={fileVariables}
+                              showResolvedValue={true}
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
