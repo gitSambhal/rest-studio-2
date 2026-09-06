@@ -226,9 +226,14 @@ export function useWorkspaceState(showToast: (type: 'success' | 'error' | 'info'
   ) => {
     let incomingOrgs = payload.organizations;
     if (!incomingOrgs || !Array.isArray(incomingOrgs) || incomingOrgs.length === 0) {
-      incomingOrgs = INITIAL_ORGANIZATIONS;
+      // Do not overwrite local organizations with empty data
+      return;
     }
     setOrganizations(incomingOrgs);
+    try {
+      localStorage.setItem('reststudio_organizations', JSON.stringify(incomingOrgs));
+      localStorage.setItem('restpulse_organizations', JSON.stringify(incomingOrgs));
+    } catch (e) {}
 
     if (payload.globalVariables && Array.isArray(payload.globalVariables)) {
       setGlobalVariables(payload.globalVariables);

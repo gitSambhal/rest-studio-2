@@ -1,5 +1,6 @@
 import { ExecutionResponse, FormDataItem, BinaryFilePayload } from '../types';
 import { getCookieHeaderForUrl, saveCookiesFromHeaders } from './cookieJar';
+import { localNetworkManager } from '../services/LocalNetworkManager';
 
 export interface HttpRequestOptions {
   method: string;
@@ -691,10 +692,17 @@ export async function executeDirectLocalFetch(
 ): Promise<ExecutionResponse> {
   const startTime = performance.now();
 
+  // Ensure local network access permission is checked and requested via LocalNetworkManager
+  try {
+    await localNetworkManager.ensureAccess(targetUrl);
+  } catch (_) {}
+
+  const addressSpace = getTargetAddressSpace(targetUrl);
   const fetchOptions: any = {
     method: method.toUpperCase(),
     headers: { ...headers },
-    targetAddressSpace: getTargetAddressSpace(targetUrl),
+    targetAddressSpace: addressSpace,
+    privateNetworkRequestPolicy: 'allow-with-permission-prompt',
     signal,
   };
 
@@ -743,60 +751,6 @@ export async function executeDirectLocalFetch(
     const permState = await getLocalNetworkPermissionState(targetUrl);
     return buildLocalFetchError(targetUrl, permState, err?.message || 'Failed to fetch', duration);
   }
-}
-
-/**
- * Execute a request through the server-side /api/proxy (public URLs only —
- * local targets never reach this endpoint from the web app).
- */
-async function executeServerProxyFetch(
-  method: string,
-  targetUrl: string,
-  headers: Record<string, string>,
-  bodyPayload?: any,
-  formDataItems?: FormDataItem[],
-  binaryFile?: BinaryFilePayload,
-  signal?: AbortSignal
-): Promise<ExecutionResponse | null> {
-  try {
-    const proxyPayload: any = {
-      method,
-      url: targetUrl,
-      headers,
-      body: typeof bodyPayload === 'string' ? bodyPayload : undefined,
-    };
-
-    if (formDataItems && formDataItems.length > 0) {
-      proxyPayload.formDataItems = formDataItems;
-    }
-    if (binaryFile && binaryFile.fileData) {
-      proxyPayload.binaryFile = binaryFile;
-    }
-
-    const proxyRes = await fetch('/api/proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(proxyPayload),
-      signal,
-    });
-
-    const contentType = proxyRes.headers.get('content-type') || '';
-    const responseText = await proxyRes.text();
-    const isHtmlResponse = responseText.trim().toLowerCase().startsWith('<!doctype') || responseText.trim().toLowerCase().startsWith('<html') || contentType.includes('text/html');
-
-    if (proxyRes.ok && !isHtmlResponse) {
-      try {
-        const responseData: ExecutionResponse = JSON.parse(responseText);
-        if (responseData.status > 0) {
-          return responseData;
-        }
-      } catch (_) {}
-    }
-  } catch (proxyErr) {
-    console.warn('[RestStudio] Server proxy fetch error:', proxyErr);
-  }
-
-  return null;
 }
 
 /**
@@ -886,19 +840,8 @@ export async function executeHttpRequest(options: HttpRequestOptions): Promise<E
     return result;
   }
 
-  // 3. Web app: public target → direct fetch first, then server proxy fallback
+  // 3. Web app: public target → direct client fetch
   const directRes = await executeDirectClientFetch(method, targetUrl, finalHeaders, bodyPayload, signal);
-  if (directRes.status > 0 || signal?.aborted) {
-    if (directRes.headers) saveCookiesFromHeaders(targetUrl, directRes.headers);
-    return directRes;
-  }
-
-  const proxyRes = await executeServerProxyFetch(method, targetUrl, finalHeaders, bodyPayload, formDataItems, binaryFile, signal);
-  if (proxyRes) {
-    if (proxyRes.headers) saveCookiesFromHeaders(targetUrl, proxyRes.headers);
-    return proxyRes;
-  }
-
   if (directRes.headers) saveCookiesFromHeaders(targetUrl, directRes.headers);
   return directRes;
 }

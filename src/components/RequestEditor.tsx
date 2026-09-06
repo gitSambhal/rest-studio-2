@@ -37,7 +37,7 @@ import {
   Columns3,
 } from 'lucide-react';
 
-import { isLocalTargetUrl, isNeutralinoActive, isLnaPromptApplicable, getLocalNetworkPermissionState, getLnaPermissionLabel, LocalNetworkPermissionState } from '../utils/httpExecutor';
+import { isLocalTargetUrl, isNeutralinoActive, isLnaPromptApplicable, getLocalNetworkPermissionState, getLnaPermissionLabel, getTargetAddressSpace, LocalNetworkPermissionState } from '../utils/httpExecutor';
 
 interface RequestEditorProps {
   request: RestRequest;
@@ -167,8 +167,8 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
       const currentUrl = request.url || '';
       // Strip out all {{env_vars}} so they are not mistaken for path params
       const cleanUrl = currentUrl.replace(/\{\{[^}]+\}\}/g, '');
-      const colonMatches = cleanUrl.match(/:([a-zA-Z0-9_-]+)/g) || [];
-      const braceMatches = cleanUrl.match(/\{([a-zA-Z0-9_-]+)\}/g) || [];
+      const colonMatches: string[] = cleanUrl.match(/:([a-zA-Z0-9_-]+)/g) || [];
+      const braceMatches: string[] = cleanUrl.match(/\{([a-zA-Z0-9_-]+)\}/g) || [];
 
       const foundKeys = new Set<string>();
       colonMatches.forEach((m) => foundKeys.add(m.substring(1)));
@@ -571,34 +571,6 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           </div>
         </div>
 
-        {/* Local network hint: only promise a browser permission prompt when one can actually appear */}
-        {isLocalUrl && !isNeutralinoActive() && lnaState !== 'granted' && (
-          lnaPromptApplies && (lnaState === 'prompt' || lnaState === 'denied') ? (
-            <div className={`flex items-start space-x-2 text-[11px] px-3 py-2 rounded-lg border ${
-              lnaState === 'denied'
-                ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
-                : 'bg-sky-500/10 border-sky-500/30 text-sky-300'
-            }`}>
-              {lnaState === 'denied' ? (
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              ) : (
-                <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              )}
-              <span>
-                {lnaState === 'denied'
-                  ? `Local network access is blocked for this site. Click the lock icon in the address bar → Site settings → ${getLnaPermissionLabel(detectUrl)} → Allow, then retry. Chrome only asks for this permission once — it will not prompt again after a denial.`
-                  : 'This request targets your local network. Your browser will ask for permission (Local Network Access) — click Allow to proceed. No proxy or extension needed.'}
-              </span>
-            </div>
-          ) : (
-            <div className="flex items-start space-x-2 text-[11px] px-3 py-2 rounded-lg border bg-slate-500/10 border-slate-500/30 text-slate-300">
-              <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              <span>
-                No browser permission prompt applies here{lnaState === 'unsupported' ? ' (this browser has no Local Network Access)' : ' (the web app is running from a local origin)'} — the local server must respond with CORS headers, e.g. <code className="text-emerald-400">Access-Control-Allow-Origin: *</code>, for the response to be readable.
-              </span>
-            </div>
-          )
-        )}
       </div>
 
       {/* Tabs Navigation */}
