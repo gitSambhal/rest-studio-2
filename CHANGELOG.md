@@ -2,6 +2,15 @@
 
 All notable changes to **RestStudio** are documented in this file.
 
+## [1.5.8] - 2026-09-06
+### Fixed
+- **Localhost API Execution & Native Permission Flow**:
+  - Eliminated artificial HEAD preflight queries in `LocalNetworkManager` that previously triggered premature server connection failures on local POST/GET endpoints.
+  - Added `cleanHeadersForBrowserFetch` to filter out browser-forbidden request headers (such as `Cookie`, `Host`, `Connection`, `Content-Length`) that trigger client-side `TypeError: 'cookie' is a forbidden header name` exceptions before requests reach localhost.
+  - Configured `targetAddressSpace: 'loopback'` for localhost (`127.0.0.1`, `[::1]`) and `'local'` for private network LAN targets so Chrome 142+ / modern browsers display the native Local Network Access dialog and exempt the request from mixed-content restrictions.
+  - Enhanced error diagnostics with targeted guidance for iframe previews and site settings permissions.
+  - Added unit test suite `src/test/localNetworkManager.test.ts` covering header cleaning and target address space resolution.
+
 ## [1.5.7] - 2026-09-04
 ### Added
 - **Response Viewer In-Body Search & Match Navigation (Ctrl+F)**:

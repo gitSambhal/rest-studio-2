@@ -1,6 +1,6 @@
 import { ExecutionResponse, FormDataItem, BinaryFilePayload } from '../types';
 import { getCookieHeaderForUrl, saveCookiesFromHeaders } from './cookieJar';
-import { localNetworkManager } from '../services/LocalNetworkManager';
+import { localNetworkManager, cleanHeadersForBrowserFetch } from '../services/LocalNetworkManager';
 
 export interface HttpRequestOptions {
   method: string;
@@ -535,11 +535,15 @@ function buildLocalFetchError(
       ? 'The request to the local server failed. This browser does not support the Local Network Access permission prompt (Chrome 142+ / Firefox 147+).'
       : 'The local server did not respond with the CORS headers required for browser access, or it is not running.';
 
+  const inIframe = typeof window !== 'undefined' && window.self !== window.top;
+
   const solution = denied
     ? `Re-enable access: click the lock icon in the browser address bar → Site settings → ${getLnaPermissionLabel(targetUrl)} → Allow, then retry. Chrome only asks for this permission once and will not prompt again after a denial — Site settings is the only way to restore it.`
     : unsupported
       ? 'Ensure the server is running and that it sends CORS headers (Access-Control-Allow-Origin: *). For the permission prompt experience, use Google Chrome 142+.'
-      : 'Make sure the server is running and responds with CORS headers, e.g. Access-Control-Allow-Origin: * (and handle the OPTIONS preflight). Granting Local Network Access does not bypass CORS. Alternatively, use the RestStudio Desktop App for zero-config localhost access.';
+      : inIframe
+        ? 'Make sure the local server is running and responds with CORS headers (Access-Control-Allow-Origin: *). If previewed inside an iframe, open RestStudio in a new tab so Chrome can display the native Local Network Access prompt directly.'
+        : 'Make sure the server is running and responds with CORS headers, e.g. Access-Control-Allow-Origin: * (and handle the OPTIONS preflight). Granting Local Network Access allows connecting from HTTPS to HTTP localhost. Alternatively, use the RestStudio Desktop App for zero-config localhost access.';
 
   return {
     status: 0,
@@ -606,9 +610,10 @@ export async function executeDirectClientFetch(
 ): Promise<ExecutionResponse> {
   const startTime = performance.now();
 
+  const cleanedHeaders = cleanHeadersForBrowserFetch(headers);
   const fetchOptions: any = {
     method: method.toUpperCase(),
-    headers: { ...headers },
+    headers: cleanedHeaders,
     signal,
   };
 
@@ -692,38 +697,50 @@ export async function executeDirectLocalFetch(
 ): Promise<ExecutionResponse> {
   const startTime = performance.now();
 
-  // Ensure local network access permission is checked and requested via LocalNetworkManager
+  // Ensure local network access permission is checked and prepared via LocalNetworkManager
   try {
     await localNetworkManager.ensureAccess(targetUrl);
   } catch (_) {}
 
-  const addressSpace = getTargetAddressSpace(targetUrl);
-  const fetchOptions: any = {
-    method: method.toUpperCase(),
-    headers: { ...headers },
-    targetAddressSpace: addressSpace,
-    privateNetworkRequestPolicy: 'allow-with-permission-prompt',
-    signal,
-  };
-
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) && bodyPayload !== undefined && bodyPayload !== null) {
-    fetchOptions.body = bodyPayload;
-  }
+  const { fetchOptions } = localNetworkManager.prepareLocalRequest(
+    targetUrl,
+    method,
+    headers,
+    bodyPayload,
+    signal
+  );
 
   try {
-    const res = await fetch(targetUrl, fetchOptions);
-    const duration = Math.round(performance.now() - startTime);
+    let res: Response;
+    try {
+      res = await fetch(targetUrl, fetchOptions);
+    } catch (fetchErr: any) {
+      // If targetAddressSpace caused a TypeError in an unsupported browser engine, retry without it
+      if (
+        (fetchOptions as any).targetAddressSpace &&
+        fetchErr instanceof TypeError &&
+        !fetchErr.message?.toLowerCase().includes('failed to fetch')
+      ) {
+        const { targetAddressSpace, ...fallbackOptions } = fetchOptions as any;
+        res = await fetch(targetUrl, fallbackOptions);
+      } else {
+        throw fetchErr;
+      }
+    }
 
+    const duration = Math.round(performance.now() - startTime);
     const { text, size, base64Body, contentType } = await readFetchResponseBody(res);
 
     const resHeaders: Record<string, string> = {};
-    res.headers.forEach((val, key) => {
-      resHeaders[key] = val;
-    });
+    if (res.headers && typeof res.headers.forEach === 'function') {
+      res.headers.forEach((val, key) => {
+        resHeaders[key] = val;
+      });
+    }
 
     return {
       status: res.status,
-      statusText: res.statusText || 'OK',
+      statusText: res.statusText || (res.ok ? 'OK' : 'Error'),
       headers: resHeaders,
       body: text,
       base64Body,
@@ -748,7 +765,7 @@ export async function executeDirectLocalFetch(
         error: 'Request Cancelled',
       };
     }
-    const permState = await getLocalNetworkPermissionState(targetUrl);
+    const permState = await localNetworkManager.checkPermission(targetUrl);
     return buildLocalFetchError(targetUrl, permState, err?.message || 'Failed to fetch', duration);
   }
 }

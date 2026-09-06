@@ -1,7 +1,7 @@
 {
   "name": "reststudio-desktop",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.5.8",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",

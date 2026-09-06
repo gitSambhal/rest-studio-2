@@ -190,7 +190,7 @@ export function SettingsModal({
               <div className="flex items-center space-x-2">
                 <h2 className="text-base font-bold tracking-tight">Workspace Settings & Preferences</h2>
                 <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  RestStudio v1.3.0
+                  RestStudio v1.5.8
                 </span>
               </div>
               <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -494,7 +494,7 @@ export function SettingsModal({
                       <div className="flex items-center space-x-2">
                         <span className="font-bold text-sm">RestStudio API Studio</span>
                         <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          v1.3.0
+                          v1.5.8
                         </span>
                       </div>
                       <p className={`text-[11px] mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
