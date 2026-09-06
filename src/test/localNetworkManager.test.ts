@@ -88,4 +88,34 @@ describe('LocalNetworkManager & Browser Fetch Security Suite', () => {
     const hasAccess = await localNetworkManager.ensureAccess(publicUrl);
     expect(hasAccess).toBe(true);
   });
+
+  it('should ensure port numbers like :3000 are not stripped or confused with path parameters', () => {
+    const rawUrl = 'http://localhost:3000/api/users/:userId';
+    
+    // Test the regex logic used for path param extraction
+    let pathOnly = rawUrl;
+    const schemeMatch = pathOnly.match(/^[a-zA-Z]+:\/\/[^/]*(\/.*)?$/);
+    if (schemeMatch) {
+      pathOnly = schemeMatch[1] || '';
+    }
+
+    expect(pathOnly).toBe('/api/users/:userId');
+
+    const colonMatches: string[] = pathOnly.match(/:([a-zA-Z_][a-zA-Z0-9_-]*)/g) || [];
+    const keys = colonMatches.map((m) => m.substring(1));
+
+    expect(keys).toContain('userId');
+    expect(keys).not.toContain('3000');
+
+    // Test resolving path params on a URL with a port number
+    const urlObj = new URL(rawUrl);
+    expect(urlObj.port).toBe('3000');
+    expect(urlObj.hostname).toBe('localhost');
+
+    let path = urlObj.pathname;
+    path = path.replace(new RegExp(':userId\\b', 'g'), '42');
+    urlObj.pathname = path;
+
+    expect(urlObj.toString()).toBe('http://localhost:3000/api/users/42');
+  });
 });

@@ -9,7 +9,7 @@ import {
   RequestHistoryItem,
 } from '../types';
 import { INITIAL_ORGANIZATIONS, INITIAL_GLOBAL_VARIABLES } from '../data/initialOrganizations';
-import { SyncPayload } from '../services/githubSyncService';
+import { SyncPayload, countWorkspaceEntities } from '../services/githubSyncService';
 
 export function useWorkspaceState(showToast: (type: 'success' | 'error' | 'info' | 'warning', title: string, message?: string) => void) {
   // 1. Global Variables
@@ -25,26 +25,72 @@ export function useWorkspaceState(showToast: (type: 'success' | 'error' | 'info'
   const [organizations, setOrganizations] = useState<Organization[]>(() => {
     try {
       const saved = localStorage.getItem('reststudio_organizations') || localStorage.getItem('restpulse_organizations');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
     } catch (e) {
       console.error('Failed to load saved organizations:', e);
     }
     return INITIAL_ORGANIZATIONS;
   });
 
-  const [activeOrgId, setActiveOrgId] = useState<string>(
-    organizations[0]?.id || 'org_acme'
-  );
+  // Determine best initial active org, project, and file
+  const initialLoc = (() => {
+    const savedOrgId =
+      localStorage.getItem('reststudio_active_org_id') ||
+      localStorage.getItem('restpulse_active_org_id');
+    const savedProjId =
+      localStorage.getItem('reststudio_active_project_id') ||
+      localStorage.getItem('restpulse_active_project_id');
+    const savedFileId =
+      localStorage.getItem('reststudio_active_file_id') ||
+      localStorage.getItem('restpulse_active_file_id');
+
+    if (savedOrgId && savedProjId) {
+      const matchedOrg = organizations.find((o) => o.id === savedOrgId);
+      const matchedProj = matchedOrg?.projects?.find((p) => p.id === savedProjId);
+      if (matchedProj) {
+        return {
+          orgId: matchedOrg!.id,
+          projId: matchedProj.id,
+          fileId:
+            savedFileId && matchedProj.files?.some((f) => f.id === savedFileId)
+              ? savedFileId
+              : matchedProj.files?.[0]?.id || null,
+        };
+      }
+    }
+
+    // If no saved selection, find the first project that actually has collections/files
+    for (const org of organizations) {
+      for (const proj of org.projects || []) {
+        if ((proj.files || []).length > 0) {
+          return {
+            orgId: org.id,
+            projId: proj.id,
+            fileId: proj.files[0]?.id || null,
+          };
+        }
+      }
+    }
+
+    return {
+      orgId: organizations[0]?.id || 'org_acme',
+      projId: organizations[0]?.projects?.[0]?.id || 'proj_ecommerce',
+      fileId: organizations[0]?.projects?.[0]?.files?.[0]?.id || null,
+    };
+  })();
+
+  const [activeOrgId, setActiveOrgId] = useState<string>(initialLoc.orgId);
   const activeOrg = organizations?.find((o) => o.id === activeOrgId) || organizations?.[0];
 
-  const [activeProjectId, setActiveProjectId] = useState<string>(
-    activeOrg?.projects?.[0]?.id || 'proj_ecommerce'
-  );
+  const [activeProjectId, setActiveProjectId] = useState<string>(initialLoc.projId);
   const activeProject = activeOrg?.projects?.find((p) => p.id === activeProjectId) || activeOrg?.projects?.[0];
 
-  const [activeFileId, setActiveFileId] = useState<string | null>(
-    activeProject?.files?.[0]?.id || null
-  );
+  const [activeFileId, setActiveFileId] = useState<string | null>(initialLoc.fileId);
   const activeFile = activeProject?.files?.find((f) => f.id === activeFileId) || activeProject?.files?.[0];
 
   // Standalone Scratchpad / Drafts State (Zero Org / Zero Env required)
@@ -95,6 +141,23 @@ export function useWorkspaceState(showToast: (type: 'success' | 'error' | 'info'
       localStorage.setItem('restpulse_organizations', JSON.stringify(organizations));
     } catch (e) {}
   }, [organizations]);
+
+  useEffect(() => {
+    try {
+      if (activeOrgId) {
+        localStorage.setItem('reststudio_active_org_id', activeOrgId);
+        localStorage.setItem('restpulse_active_org_id', activeOrgId);
+      }
+      if (activeProjectId) {
+        localStorage.setItem('reststudio_active_project_id', activeProjectId);
+        localStorage.setItem('restpulse_active_project_id', activeProjectId);
+      }
+      if (activeFileId) {
+        localStorage.setItem('reststudio_active_file_id', activeFileId);
+        localStorage.setItem('restpulse_active_file_id', activeFileId);
+      }
+    } catch (e) {}
+  }, [activeOrgId, activeProjectId, activeFileId]);
 
   useEffect(() => {
     try {
@@ -224,11 +287,27 @@ export function useWorkspaceState(showToast: (type: 'success' | 'error' | 'info'
     payload: SyncPayload,
     setHistory?: (history: RequestHistoryItem[]) => void
   ) => {
-    let incomingOrgs = payload.organizations;
+    const incomingOrgs = payload.organizations;
     if (!incomingOrgs || !Array.isArray(incomingOrgs) || incomingOrgs.length === 0) {
       // Do not overwrite local organizations with empty data
       return;
     }
+
+    const incomingStats = countWorkspaceEntities(incomingOrgs);
+    const currentStats = countWorkspaceEntities(organizations);
+
+    // CRITICAL GUARD: If remote cloud data has 0 requests and 0 files, but local workspace HAS collections,
+    // NEVER overwrite local collections!
+    if (
+      incomingStats.requestCount === 0 &&
+      incomingStats.fileCount === 0 &&
+      (currentStats.requestCount > 0 || currentStats.fileCount > 0)
+    ) {
+      console.warn('[Sync Guard] Prevented overwriting local collections with empty cloud data.');
+      showToast('warning', 'Sync Protected', 'Prevented replacing local collections with empty cloud data.');
+      return;
+    }
+
     setOrganizations(incomingOrgs);
     try {
       localStorage.setItem('reststudio_organizations', JSON.stringify(incomingOrgs));
@@ -251,23 +330,43 @@ export function useWorkspaceState(showToast: (type: 'success' | 'error' | 'info'
       } catch (e) {}
     }
 
-    const targetOrg =
-      incomingOrgs.find((o) => o.id === payload.activeOrgId) || incomingOrgs[0];
-    setActiveOrgId(targetOrg.id);
-
-    const targetProject =
+    // Determine target org and project: prefer one that has actual files/collections
+    let targetOrg = incomingOrgs.find((o) => o.id === payload.activeOrgId) || incomingOrgs[0];
+    let targetProject =
       (targetOrg.projects || []).find((p) => p.id === payload.activeProjectId) ||
       targetOrg.projects?.[0];
-    const newProjectId = targetProject?.id || '';
-    setActiveProjectId(newProjectId);
 
+    // If candidate project is empty, look for any project that actually has collections
+    if (!targetProject || (targetProject.files || []).length === 0) {
+      for (const org of incomingOrgs) {
+        for (const proj of org.projects || []) {
+          if ((proj.files || []).length > 0) {
+            targetOrg = org;
+            targetProject = proj;
+            break;
+          }
+        }
+        if (targetProject && (targetProject.files || []).length > 0) break;
+      }
+    }
+
+    const newOrgId = targetOrg.id;
+    const newProjectId = targetProject?.id || '';
     const targetFile = targetProject?.files?.[0];
     const newFileId = targetFile?.id || null;
-    setActiveFileId(newFileId);
-
     const targetRequest = targetFile?.requests?.[0];
     const newRequestId = targetRequest?.id || null;
+
+    setActiveOrgId(newOrgId);
+    setActiveProjectId(newProjectId);
+    setActiveFileId(newFileId);
     setActiveRequestId(newRequestId);
+
+    try {
+      localStorage.setItem('reststudio_active_org_id', newOrgId);
+      localStorage.setItem('reststudio_active_project_id', newProjectId);
+      if (newFileId) localStorage.setItem('reststudio_active_file_id', newFileId);
+    } catch (e) {}
   };
 
   return {

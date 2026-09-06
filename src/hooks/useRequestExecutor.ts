@@ -97,14 +97,49 @@ export function useRequestExecutor({
     }
 
     // 1.5. Resolve URL Path Params (e.g. :id or {id})
-    const urlParams = req.urlParams?.filter((p) => p.enabled && p.key) || [];
+    // Strictly ignore numeric keys (which could be accidental port numbers like 3000)
+    const urlParams =
+      req.urlParams?.filter((p) => p.enabled && p.key && !/^\d+$/.test(p.key.trim())) || [];
     if (urlParams.length > 0) {
-      urlParams.forEach((up) => {
-        const k = resolveEnvVariables(up.key, scopeCtx).resolved.trim();
-        const v = resolveEnvVariables(up.value, scopeCtx).resolved;
-        targetUrl = targetUrl.replace(new RegExp(`:${k}\\b`, 'g'), encodeURIComponent(v));
-        targetUrl = targetUrl.replace(new RegExp(`\\{${k}\\}`, 'g'), encodeURIComponent(v));
-      });
+      try {
+        const urlObj = new URL(targetUrl);
+        let path = urlObj.pathname;
+        urlParams.forEach((up) => {
+          const k = resolveEnvVariables(up.key, scopeCtx).resolved.trim();
+          const v = resolveEnvVariables(up.value, scopeCtx).resolved;
+          if (k && !/^\d+$/.test(k)) {
+            path = path.replace(new RegExp(`:${k}\\b`, 'g'), encodeURIComponent(v));
+            path = path.replace(new RegExp(`\\{${k}\\}`, 'g'), encodeURIComponent(v));
+          }
+        });
+        urlObj.pathname = path;
+        targetUrl = urlObj.toString();
+      } catch {
+        // Fallback for non-standard URLs: only replace within the pathname after host/port
+        const authorityMatch = targetUrl.match(/^([a-zA-Z]+:\/\/[^/]+)(\/.*)?$/);
+        if (authorityMatch) {
+          const origin = authorityMatch[1];
+          let path = authorityMatch[2] || '';
+          urlParams.forEach((up) => {
+            const k = resolveEnvVariables(up.key, scopeCtx).resolved.trim();
+            const v = resolveEnvVariables(up.value, scopeCtx).resolved;
+            if (k && !/^\d+$/.test(k)) {
+              path = path.replace(new RegExp(`:${k}\\b`, 'g'), encodeURIComponent(v));
+              path = path.replace(new RegExp(`\\{${k}\\}`, 'g'), encodeURIComponent(v));
+            }
+          });
+          targetUrl = origin + path;
+        } else {
+          urlParams.forEach((up) => {
+            const k = resolveEnvVariables(up.key, scopeCtx).resolved.trim();
+            const v = resolveEnvVariables(up.value, scopeCtx).resolved;
+            if (k && !/^\d+$/.test(k)) {
+              targetUrl = targetUrl.replace(new RegExp(`:${k}\\b`, 'g'), encodeURIComponent(v));
+              targetUrl = targetUrl.replace(new RegExp(`\\{${k}\\}`, 'g'), encodeURIComponent(v));
+            }
+          });
+        }
+      }
     }
 
     // 2. Resolve Query Params

@@ -172,4 +172,92 @@ describe('GitHub Sync Service Suite', () => {
       expect(getDeletedSnapshotIds()).toEqual([]);
     });
   });
+
+  describe('Auto-Sync Empty Collections Protection Guard', () => {
+    it('should block auto-push and not make network PATCH call when autoSync is true and collections are empty', async () => {
+      const { pushToGitHubGist } = await import('../services/githubSyncService');
+
+      let fetchCalled = false;
+      const originalFetch = global.fetch;
+      global.fetch = (async () => {
+        fetchCalled = true;
+        return { ok: true, json: async () => ({}) } as Response;
+      }) as typeof fetch;
+
+      try {
+        const emptyPayload: SyncPayload = {
+          version: '1.0.0',
+          updatedAt: new Date().toISOString(),
+          organizations: [
+            {
+              id: 'org_empty',
+              name: 'Empty Org',
+              updatedAt: Date.now(),
+              variables: [],
+              projects: [
+                {
+                  id: 'proj_empty',
+                  name: 'Empty Proj',
+                  description: '',
+                  createdAt: Date.now(),
+                  activeEnvId: null,
+                  folders: [],
+                  files: [],
+                  environments: [],
+                  updatedAt: Date.now(),
+                },
+              ],
+              createdAt: Date.now(),
+            },
+          ],
+          activeOrgId: 'org_empty',
+          activeProjectId: 'proj_empty',
+          environments: [],
+          history: [],
+        };
+
+        const result = await pushToGitHubGist(
+          'mock_token',
+          'mock_gist_id',
+          emptyPayload,
+          undefined,
+          { isAutoSync: true }
+        );
+
+        expect(fetchCalled).toBe(false);
+        expect(typeof result).toBe('string');
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+
+    it('should correctly identify 0 entities with countWorkspaceEntities', () => {
+      const emptyOrgs: Organization[] = [
+        {
+          id: 'o1',
+          name: 'Empty',
+          createdAt: 0,
+          updatedAt: 0,
+          variables: [],
+          projects: [
+            {
+              id: 'p1',
+              name: 'Empty Project',
+              description: '',
+              createdAt: 0,
+              updatedAt: 0,
+              activeEnvId: null,
+              folders: [],
+              files: [],
+              environments: [],
+            },
+          ],
+        },
+      ];
+      const stats = countWorkspaceEntities(emptyOrgs);
+      expect(stats.fileCount).toBe(0);
+      expect(stats.requestCount).toBe(0);
+      expect(stats.projectCount).toBe(1);
+    });
+  });
 });

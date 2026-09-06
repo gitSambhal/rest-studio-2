@@ -6,7 +6,7 @@
  * @license Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Organization,
   Project,
@@ -36,6 +36,7 @@ import {
   getSavedGitHubUser,
   pullFromGitHubGist,
   pushToGitHubGist,
+  countWorkspaceEntities,
   GitHubUser,
 } from './services/githubSyncService';
 import { SettingsTabId } from './components/SettingsModal';
@@ -297,6 +298,11 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [activeRequest, activeTabMode, handleExecuteRequest]);
 
+  // Sync synchronization tracking refs
+  const isInitialSyncCompletedRef = useRef<boolean>(!getSavedAutoSync());
+  const isApplyingSyncedDataRef = useRef<boolean>(false);
+  const lastSyncedHashRef = useRef<string>('');
+
   // Auto-sync on load if enabled
   useEffect(() => {
     if (getSavedAutoSync()) {
@@ -305,43 +311,93 @@ export default function App() {
       if (token && gistId) {
         pullFromGitHubGist(token, gistId)
           .then((payload) => {
-            if (payload && payload.organizations && payload.organizations.length > 0) {
-              handleApplySyncedData(payload, setHistory);
-              showToast('success', 'Auto-Synced', 'Loaded latest cloud workspace data from GitHub Gist.');
+            if (payload && payload.organizations && Array.isArray(payload.organizations)) {
+              const stats = countWorkspaceEntities(payload.organizations);
+              // Only apply if cloud data is valid and non-empty
+              if (stats.requestCount > 0 || stats.fileCount > 0) {
+                isApplyingSyncedDataRef.current = true;
+                handleApplySyncedData(payload, setHistory);
+                lastSyncedHashRef.current = JSON.stringify({
+                  orgs: payload.organizations,
+                  envs: payload.environments || [],
+                  vars: payload.globalVariables || [],
+                });
+                showToast('success', 'Auto-Synced', 'Loaded cloud workspace data from GitHub Gist.');
+                setTimeout(() => {
+                  isApplyingSyncedDataRef.current = false;
+                }, 1200);
+              }
             }
           })
           .catch((err) => {
             console.error('Auto-sync on load failed:', err);
+          })
+          .finally(() => {
+            isInitialSyncCompletedRef.current = true;
           });
+      } else {
+        isInitialSyncCompletedRef.current = true;
       }
+    } else {
+      isInitialSyncCompletedRef.current = true;
     }
   }, []);
 
-  // Auto-sync push when workspace data changes
+  // Guarded Auto-sync push when workspace data changes
   useEffect(() => {
-    if (getSavedAutoSync()) {
-      const token = getSavedGitHubToken();
-      const gistId = getSavedGistId();
-      if (token && gistId) {
-        const timer = setTimeout(async () => {
-          try {
-            await pushToGitHubGist(token, gistId, {
-              version: '1.0.0',
-              updatedAt: new Date().toISOString(),
-              organizations,
-              activeOrgId,
-              activeProjectId,
-              environments: activeProject?.environments || [],
-              history,
-              globalVariables,
-            });
-          } catch (err) {
-            console.error('Background auto-push failed:', err);
-          }
-        }, 2500);
-        return () => clearTimeout(timer);
-      }
+    if (!getSavedAutoSync()) return;
+    if (!isInitialSyncCompletedRef.current) return;
+    if (isApplyingSyncedDataRef.current) return;
+
+    const token = getSavedGitHubToken();
+    const gistId = getSavedGistId();
+    if (!token || !gistId) return;
+
+    // CRITICAL PROTECTION: Never auto-push empty collections to GitHub Gist!
+    const stats = countWorkspaceEntities(organizations);
+    if (stats.requestCount === 0 && stats.fileCount === 0) {
+      console.warn('[Auto-Sync Guard] Prevented auto-pushing empty collections to GitHub Gist.');
+      return;
     }
+
+    const currentHash = JSON.stringify({
+      orgs: organizations,
+      envs: activeProject?.environments || [],
+      vars: globalVariables,
+    });
+    if (currentHash === lastSyncedHashRef.current) {
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        if (!isInitialSyncCompletedRef.current || isApplyingSyncedDataRef.current) return;
+        const freshStats = countWorkspaceEntities(organizations);
+        if (freshStats.requestCount === 0 && freshStats.fileCount === 0) return;
+
+        await pushToGitHubGist(
+          token,
+          gistId,
+          {
+            version: '1.0.0',
+            updatedAt: new Date().toISOString(),
+            organizations,
+            activeOrgId,
+            activeProjectId,
+            environments: activeProject?.environments || [],
+            history,
+            globalVariables,
+          },
+          undefined,
+          { isAutoSync: true }
+        );
+        lastSyncedHashRef.current = currentHash;
+      } catch (err) {
+        console.error('Background auto-push failed:', err);
+      }
+    }, 3000);
+
+    return () => clearTimeout(timer);
   }, [organizations, activeOrgId, activeProjectId, history, globalVariables, activeProject?.environments]);
 
   // Sidebar CRUD Operations
@@ -1098,11 +1154,27 @@ export default function App() {
             isCollapsed={isSidebarCollapsed}
             onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
             activeOrg={activeOrg}
+            organizations={organizations}
             project={activeProject!}
             activeFileId={activeFileId}
             activeRequestId={activeRequestId}
             scratchpadRequests={scratchpadRequests}
             requestStatuses={requestStatuses}
+            onSelectProject={(projId, orgId) => {
+              if (orgId) setActiveOrgId(orgId);
+              setActiveProjectId(projId);
+              const org = organizations.find((o) => o.id === (orgId || activeOrgId));
+              const proj = org?.projects?.find((p) => p.id === projId);
+              if (proj && proj.files && proj.files.length > 0) {
+                const firstFile = proj.files[0];
+                setActiveFileId(firstFile.id);
+                if (firstFile.requests && firstFile.requests.length > 0) {
+                  handleOpenRequestInTab(firstFile.id, firstFile.requests[0].id);
+                }
+              }
+            }}
+            onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
+            onOpenImport={() => setIsImportExportOpen(true)}
             onSelectFile={(fId) => {
               setActiveFileId(fId);
               const file = activeProject?.files?.find((f) => f.id === fId);

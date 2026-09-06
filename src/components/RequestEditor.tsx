@@ -167,8 +167,22 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
       const currentUrl = request.url || '';
       // Strip out all {{env_vars}} so they are not mistaken for path params
       const cleanUrl = currentUrl.replace(/\{\{[^}]+\}\}/g, '');
-      const colonMatches: string[] = cleanUrl.match(/:([a-zA-Z0-9_-]+)/g) || [];
-      const braceMatches: string[] = cleanUrl.match(/\{([a-zA-Z0-9_-]+)\}/g) || [];
+
+      // Isolate path component so origin/authority and port numbers (e.g. :3000, :8080) are never treated as path params
+      let pathOnly = cleanUrl;
+      const schemeMatch = pathOnly.match(/^[a-zA-Z]+:\/\/[^/]*(\/.*)?$/);
+      if (schemeMatch) {
+        pathOnly = schemeMatch[1] || '';
+      } else {
+        const hostPortMatch = pathOnly.match(/^([a-zA-Z0-9.-]+(:\d+)?)(\/.*)?$/);
+        if (hostPortMatch && (hostPortMatch[2] || hostPortMatch[1].includes('.'))) {
+          pathOnly = hostPortMatch[3] || '';
+        }
+      }
+
+      // Path parameters must start with an alphabetic character or underscore (never purely numeric like :3000)
+      const colonMatches: string[] = pathOnly.match(/:([a-zA-Z_][a-zA-Z0-9_-]*)/g) || [];
+      const braceMatches: string[] = pathOnly.match(/\{([a-zA-Z_][a-zA-Z0-9_-]*)\}/g) || [];
 
       const foundKeys = new Set<string>();
       colonMatches.forEach((m) => foundKeys.add(m.substring(1)));
@@ -178,9 +192,13 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
       let updatedParams = [...currentUrlParams];
       let changed = false;
 
-      // 1. Auto-remove params that are no longer in the URL
+      // 1. Auto-remove params that are no longer in the path or are purely numeric (such as port numbers)
       updatedParams = updatedParams.filter((p) => {
         const k = (p.key || '').trim();
+        if (/^\d+$/.test(k)) {
+          changed = true;
+          return false;
+        }
         if (!foundKeys.has(k)) {
           changed = true;
           return false;
@@ -190,9 +208,9 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
 
       const existingKeys = new Set(updatedParams.map((p) => (p.key || '').trim()));
 
-      // 2. Auto-add new keys found in the URL
+      // 2. Auto-add new keys found in the URL path
       foundKeys.forEach((key) => {
-        if (!existingKeys.has(key)) {
+        if (!existingKeys.has(key) && !/^\d+$/.test(key)) {
           updatedParams.push({
             id: 'urlparam_' + Math.random().toString(36).substring(2, 9),
             key,

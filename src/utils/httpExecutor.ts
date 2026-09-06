@@ -715,14 +715,14 @@ export async function executeDirectLocalFetch(
     try {
       res = await fetch(targetUrl, fetchOptions);
     } catch (fetchErr: any) {
-      // If targetAddressSpace caused a TypeError in an unsupported browser engine, retry without it
-      if (
-        (fetchOptions as any).targetAddressSpace &&
-        fetchErr instanceof TypeError &&
-        !fetchErr.message?.toLowerCase().includes('failed to fetch')
-      ) {
-        const { targetAddressSpace, ...fallbackOptions } = fetchOptions as any;
-        res = await fetch(targetUrl, fallbackOptions);
+      // If targetAddressSpace was rejected by the browser or unhandled by server preflight, retry without targetAddressSpace
+      if ((fetchOptions as any).targetAddressSpace) {
+        try {
+          const { targetAddressSpace, ...fallbackOptions } = fetchOptions as any;
+          res = await fetch(targetUrl, fallbackOptions);
+        } catch (_) {
+          throw fetchErr;
+        }
       } else {
         throw fetchErr;
       }

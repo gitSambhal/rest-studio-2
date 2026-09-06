@@ -2,6 +2,16 @@
 
 All notable changes to **RestStudio** are documented in this file.
 
+## [1.5.9] - 2026-09-06
+### Fixed
+- **URL Port Stripping & Path Parameter Extraction**:
+  - Fixed an issue where typing URLs with port numbers (e.g. `http://localhost:3000`, `http://127.0.0.1:8080`) caused `:3000` to be erroneously matched as a path parameter, generating an empty parameter that stripped the port and downgraded requests to port 80 (`http://localhost`).
+  - Isolated path extraction to the URL pathname component so origin/authority and port numbers are never treated as path params.
+  - Restricted path parameter syntax to valid identifiers starting with an alphabetic character or underscore (`/:([a-zA-Z_][a-zA-Z0-9_-]*)/`), strictly excluding numeric port numbers.
+  - Automatically cleaned up any legacy or stale numeric keys in stored request path parameters.
+  - Added URL pathname scoping in `useRequestExecutor` to ensure origin authority and ports are preserved during path param substitution.
+  - Enhanced fallback retry logic in `executeDirectLocalFetch` when `targetAddressSpace` is not accepted by browser engines or server preflights.
+
 ## [1.5.8] - 2026-09-06
 ### Fixed
 - **Localhost API Execution & Native Permission Flow**:

@@ -21,11 +21,13 @@ import {
   Terminal,
   Layers,
   BookOpen,
+  RefreshCw,
 } from 'lucide-react';
 
 interface SidebarProps {
   project: Project;
   activeOrg?: Organization;
+  organizations?: Organization[];
   activeFileId: string | null;
   activeRequestId: string | null;
   isCollapsed?: boolean;
@@ -34,6 +36,9 @@ interface SidebarProps {
   scratchpadRequests?: RestRequest[];
   onSelectFile: (fileId: string) => void;
   onSelectRequest: (fileId: string, requestId: string) => void;
+  onSelectProject?: (projectId: string, orgId?: string) => void;
+  onOpenGitHubSync?: () => void;
+  onOpenImport?: () => void;
   onSelectScratchpadRequest?: (requestId: string) => void;
   onCreateScratchpadRequest?: (method?: HTTPMethod, name?: string) => void;
   onRenameScratchpadRequest?: (requestId: string, newName: string) => void;
@@ -372,6 +377,7 @@ const RenderRestFile: React.FC<RenderRestFileProps> = ({
 export const Sidebar: React.FC<SidebarProps> = ({
   project,
   activeOrg,
+  organizations = [],
   activeFileId,
   activeRequestId,
   isCollapsed = false,
@@ -380,6 +386,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   scratchpadRequests = [],
   onSelectFile,
   onSelectRequest,
+  onSelectProject,
+  onOpenGitHubSync,
+  onOpenImport,
   onSelectScratchpadRequest,
   onCreateScratchpadRequest,
   onRenameScratchpadRequest,
@@ -920,13 +929,84 @@ export const Sidebar: React.FC<SidebarProps> = ({
             />
           ))}
 
-        {(project?.files || []).length === 0 && (
-          <div className="text-center py-8 text-slate-500 px-4">
-            <FileCode className="w-8 h-8 mx-auto mb-2 opacity-40 text-emerald-400" />
-            <p className="font-semibold text-slate-400">No collections or files yet</p>
-            <p className="text-[11px] mt-1">Click + or Import to load Postman v2.1, Insomnia, or OpenAPI collections.</p>
-          </div>
-        )}
+        {(project?.files || []).length === 0 && (() => {
+          const otherProjectsWithFiles: { org: Organization; project: Project; count: number }[] = [];
+          (organizations || []).forEach((org) => {
+            (org.projects || []).forEach((p) => {
+              if (p.id !== project?.id && (p.files || []).length > 0) {
+                let count = 0;
+                (p.files || []).forEach((f) => (count += (f.requests || []).length));
+                otherProjectsWithFiles.push({ org, project: p, count: count || p.files.length });
+              }
+            });
+          });
+
+          return (
+            <div className="text-center py-6 text-slate-500 px-3 space-y-3">
+              <FileCode className="w-7 h-7 mx-auto opacity-40 text-emerald-400" />
+              <div>
+                <p className="font-semibold text-slate-300 text-xs">No collections in this project</p>
+                <p className="text-[10px] mt-0.5 text-slate-500">
+                  Create a file, import collections, or switch to another project.
+                </p>
+              </div>
+
+              {/* Collections found in other projects */}
+              {otherProjectsWithFiles.length > 0 && (
+                <div className="pt-2 border-t border-slate-800/80 text-left">
+                  <p className="text-[10px] font-bold text-amber-400/90 uppercase tracking-wider mb-1.5">
+                    Collections in other projects:
+                  </p>
+                  <div className="space-y-1">
+                    {otherProjectsWithFiles.map((item) => (
+                      <button
+                        key={item.project.id}
+                        type="button"
+                        onClick={() => onSelectProject?.(item.project.id, item.org.id)}
+                        className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg bg-slate-800/50 hover:bg-slate-800 border border-slate-700/60 hover:border-emerald-500/40 text-left transition-colors cursor-pointer group"
+                      >
+                        <div className="truncate mr-2">
+                          <span className="text-xs text-slate-200 group-hover:text-emerald-300 font-medium block truncate">
+                            {item.project.name}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block truncate">
+                            {item.org.name}
+                          </span>
+                        </div>
+                        <span className="text-[9px] font-mono text-emerald-400/90 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 shrink-0">
+                          {item.count} reqs
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+                {onOpenGitHubSync && (
+                  <button
+                    type="button"
+                    onClick={onOpenGitHubSync}
+                    className="px-2 py-1 text-[11px] rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition-colors cursor-pointer flex items-center space-x-1"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Sync / Cloud</span>
+                  </button>
+                )}
+                {onOpenImport && (
+                  <button
+                    type="button"
+                    onClick={onOpenImport}
+                    className="px-2 py-1 text-[11px] rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors cursor-pointer flex items-center space-x-1"
+                  >
+                    <FolderInput className="w-3 h-3 text-blue-400" />
+                    <span>Import</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Footer Info */}

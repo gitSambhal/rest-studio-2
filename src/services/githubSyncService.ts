@@ -173,6 +173,61 @@ export function countWorkspaceEntities(payloadOrOrgs: SyncPayload | Organization
 }
 
 /**
+ * Resolves workspace and history files from Gist file map safely
+ */
+export function resolveGistFiles(files: Record<string, any>) {
+  if (!files) return { workspaceFile: null, historyFile: null };
+  const keys = Object.keys(files);
+
+  let workspaceFile =
+    files[WORKSPACE_FILE] ||
+    files['reststudio-workspace.json'] ||
+    files['restpulse-workspace.json'] ||
+    files['workspace.json'];
+
+  if (!workspaceFile) {
+    const wsKey = keys.find((k) => {
+      const lk = k.toLowerCase();
+      return (
+        lk.includes('workspace') ||
+        (lk.endsWith('.json') && !lk.includes('history'))
+      );
+    });
+    if (wsKey) workspaceFile = files[wsKey];
+  }
+
+  let historyFile =
+    files[HISTORY_FILE] ||
+    files['reststudio-history.json'] ||
+    files['restpulse-history.json'] ||
+    files['history.json'];
+
+  if (!historyFile) {
+    const hKey = keys.find((k) => k.toLowerCase().includes('history'));
+    if (hKey) historyFile = files[hKey];
+  }
+
+  return { workspaceFile, historyFile };
+}
+
+/**
+ * Robustly parses organizations array from workspace JSON payload
+ */
+export function parseOrganizationsData(workspaceData: any): Organization[] {
+  if (!workspaceData) return [];
+  if (Array.isArray(workspaceData)) {
+    return workspaceData;
+  }
+  if (Array.isArray(workspaceData.organizations)) {
+    return workspaceData.organizations;
+  }
+  if (workspaceData.id && Array.isArray(workspaceData.projects)) {
+    return [workspaceData];
+  }
+  return [];
+}
+
+/**
  * Intelligently merges local and remote sync payloads without losing data
  */
 export function mergeSyncPayloads(local: SyncPayload, remote: SyncPayload): SyncPayload {
@@ -366,8 +421,9 @@ export async function findOrCreateWorkspaceGist(token: string): Promise<string> 
       });
       if (checkRes.ok) {
         const gist = await checkRes.json();
-        // If the Gist exists but lacks workspace file, initialize it
-        if (!gist.files || !gist.files[WORKSPACE_FILE]) {
+        // If the Gist exists but lacks workspace file, initialize it safely
+        const { workspaceFile } = resolveGistFiles(gist.files || {});
+        if (!workspaceFile) {
           await ensureGistInitialized(token, savedGistId);
         }
         return savedGistId;
@@ -377,7 +433,7 @@ export async function findOrCreateWorkspaceGist(token: string): Promise<string> 
     }
   }
 
-  // 2. Fetch user's Gists to look for existing RestPulse Gist
+  // 2. Fetch user's Gists to look for existing RestStudio / RestPulse Gist
   const gistsRes = await fetch('https://api.github.com/gists?per_page=100', {
     headers: {
       Authorization: getAuthHeader(token),
@@ -390,11 +446,17 @@ export async function findOrCreateWorkspaceGist(token: string): Promise<string> 
     const existingGist = gists.find(
       (g: any) =>
         g.description === GIST_DESCRIPTION ||
-        (g.files && (g.files[WORKSPACE_FILE] || g.files[HISTORY_FILE]))
+        (g.description &&
+          (g.description.includes('RestStudio') ||
+            g.description.includes('RestPulse') ||
+            g.description.includes('Workspace & History Sync'))) ||
+        (g.files &&
+          (resolveGistFiles(g.files).workspaceFile || resolveGistFiles(g.files).historyFile))
     );
     if (existingGist) {
       localStorage.setItem(STORAGE_GIST_ID_KEY, existingGist.id);
-      if (!existingGist.files || !existingGist.files[WORKSPACE_FILE]) {
+      const { workspaceFile } = resolveGistFiles(existingGist.files || {});
+      if (!workspaceFile) {
         await ensureGistInitialized(token, existingGist.id);
       }
       return existingGist.id;
@@ -489,6 +551,7 @@ export async function createFreshWorkspaceGist(token: string): Promise<string> {
   localStorage.setItem(STORAGE_GIST_ID_KEY, newGist.id);
   return newGist.id;
 }
+
 /**
  * Pushes local workspace & request history to GitHub Gist
  */
@@ -496,8 +559,21 @@ export async function pushToGitHubGist(
   token: string,
   gistId: string,
   payload: SyncPayload,
-  customDescription?: string
+  customDescription?: string,
+  options?: { isAutoSync?: boolean }
 ): Promise<string> {
+  const localEntities = countWorkspaceEntities(payload.organizations);
+
+  // CRITICAL GUARD: Refuse to auto-push empty collections over GitHub Gist!
+  if (options?.isAutoSync) {
+    if (localEntities.fileCount === 0 && localEntities.requestCount === 0) {
+      console.warn(
+        '[Auto-Sync] Blocked auto-push: Refusing to push 0 collections/requests to GitHub Gist to prevent data loss.'
+      );
+      return new Date().toISOString();
+    }
+  }
+
   const workspaceData = {
     version: payload.version,
     updatedAt: payload.updatedAt,
@@ -538,9 +614,25 @@ export async function pushToGitHubGist(
 
 /**
  * Initializes missing workspace files in an existing Gist
+ * NEVER overwrites if workspace file already exists
  */
 async function ensureGistInitialized(token: string, gistId: string) {
   try {
+    const checkRes = await fetch(`https://api.github.com/gists/${gistId}`, {
+      headers: {
+        Authorization: getAuthHeader(token),
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
+    if (checkRes.ok) {
+      const gist = await checkRes.json();
+      const { workspaceFile } = resolveGistFiles(gist.files || {});
+      if (workspaceFile) {
+        // Safe: workspace file already exists, never overwrite with blank data!
+        return;
+      }
+    }
+
     await fetch(`https://api.github.com/gists/${gistId}`, {
       method: 'PATCH',
       headers: {
@@ -575,61 +667,6 @@ async function ensureGistInitialized(token: string, gistId: string) {
   } catch (e) {
     console.warn('Could not auto-initialize files in Gist:', e);
   }
-}
-
-/**
- * Resolves workspace and history files from Gist file map safely
- */
-function resolveGistFiles(files: Record<string, any>) {
-  if (!files) return { workspaceFile: null, historyFile: null };
-  const keys = Object.keys(files);
-
-  let workspaceFile =
-    files[WORKSPACE_FILE] ||
-    files['reststudio-workspace.json'] ||
-    files['restpulse-workspace.json'] ||
-    files['workspace.json'];
-
-  if (!workspaceFile) {
-    const wsKey = keys.find((k) => {
-      const lk = k.toLowerCase();
-      return (
-        lk.includes('workspace') ||
-        (lk.endsWith('.json') && !lk.includes('history'))
-      );
-    });
-    if (wsKey) workspaceFile = files[wsKey];
-  }
-
-  let historyFile =
-    files[HISTORY_FILE] ||
-    files['reststudio-history.json'] ||
-    files['restpulse-history.json'] ||
-    files['history.json'];
-
-  if (!historyFile) {
-    const hKey = keys.find((k) => k.toLowerCase().includes('history'));
-    if (hKey) historyFile = files[hKey];
-  }
-
-  return { workspaceFile, historyFile };
-}
-
-/**
- * Robustly parses organizations array from workspace JSON payload
- */
-function parseOrganizationsData(workspaceData: any): Organization[] {
-  if (!workspaceData) return [];
-  if (Array.isArray(workspaceData)) {
-    return workspaceData;
-  }
-  if (Array.isArray(workspaceData.organizations)) {
-    return workspaceData.organizations;
-  }
-  if (workspaceData.id && Array.isArray(workspaceData.projects)) {
-    return [workspaceData];
-  }
-  return [];
 }
 
 /**
@@ -680,7 +717,8 @@ async function getFileContent(fileObj: any, token: string): Promise<string | nul
  */
 export async function pullFromGitHubGist(
   token: string,
-  gistId: string
+  gistId: string,
+  allowAutoRecovery = true
 ): Promise<SyncPayload> {
   const res = await fetch(`https://api.github.com/gists/${gistId}`, {
     headers: {
@@ -719,6 +757,35 @@ export async function pullFromGitHubGist(
   }
 
   const organizationsData = parseOrganizationsData(workspaceData);
+  const currentEntities = countWorkspaceEntities(organizationsData);
+
+  // AUTO-RECOVERY GUARD:
+  // If the cloud HEAD contains 0 requests and 0 files (for instance, if an empty auto-push previously cleared it),
+  // check earlier Git revision snapshots to automatically recover the user's saved collections!
+  if (allowAutoRecovery && currentEntities.requestCount === 0 && currentEntities.fileCount === 0) {
+    try {
+      const revisions = await getGistRevisionHistory(token, gistId);
+      const currentVersion = gist.history?.[0]?.version;
+      for (const rev of revisions) {
+        if (rev.id && rev.id !== currentVersion) {
+          try {
+            const olderPayload = await restoreGistRevision(token, gistId, rev.id);
+            const olderEntities = countWorkspaceEntities(olderPayload.organizations);
+            if (olderEntities.requestCount > 0 || olderEntities.fileCount > 0) {
+              console.log(
+                `[GitHubSync Auto-Recovery] Cloud HEAD had 0 endpoints, but recovered ${olderEntities.requestCount} requests across ${olderEntities.fileCount} files from saved snapshot ${rev.id.slice(0, 7)}.`
+              );
+              return olderPayload;
+            }
+          } catch {
+            // Keep inspecting previous snapshots
+          }
+        }
+      }
+    } catch (revErr) {
+      console.warn('Failed to inspect revision history for auto-recovery:', revErr);
+    }
+  }
 
   let historyData: RequestHistoryItem[] = [];
   if (historyFile) {
