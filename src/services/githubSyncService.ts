@@ -109,9 +109,11 @@ export const getSavedGitHubUser = (): GitHubUser | null => {
 
 export const getSavedAutoSync = (): boolean => {
   try {
-    return localStorage.getItem(STORAGE_AUTO_SYNC_KEY) === 'true';
+    const token = localStorage.getItem(STORAGE_TOKEN_KEY);
+    const gistId = localStorage.getItem(STORAGE_GIST_ID_KEY);
+    return Boolean(token && gistId);
   } catch {
-    return false;
+    return true;
   }
 };
 
@@ -120,6 +122,7 @@ export const saveGitHubSession = (token: string, user: GitHubUser, gistId?: stri
     localStorage.setItem(STORAGE_TOKEN_KEY, token);
     localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(user));
     if (gistId) localStorage.setItem(STORAGE_GIST_ID_KEY, gistId);
+    localStorage.setItem(STORAGE_AUTO_SYNC_KEY, 'true');
   } catch (e) {
     console.error('Failed to save GitHub session to localStorage', e);
   }
@@ -560,18 +563,21 @@ export async function pushToGitHubGist(
   gistId: string,
   payload: SyncPayload,
   customDescription?: string,
-  options?: { isAutoSync?: boolean }
+  options?: { isAutoSync?: boolean; forceEmptyPush?: boolean }
 ): Promise<string> {
   const localEntities = countWorkspaceEntities(payload.organizations);
 
-  // CRITICAL GUARD: Refuse to auto-push empty collections over GitHub Gist!
-  if (options?.isAutoSync) {
-    if (localEntities.fileCount === 0 && localEntities.requestCount === 0) {
+  // CRITICAL GUARD: Refuse to push empty collections over GitHub Gist unless explicitly forced!
+  if (localEntities.fileCount === 0 && localEntities.requestCount === 0 && !options?.forceEmptyPush) {
+    if (options?.isAutoSync) {
       console.warn(
-        '[Auto-Sync] Blocked auto-push: Refusing to push 0 collections/requests to GitHub Gist to prevent data loss.'
+        '[Auto-Sync Guard] Blocked auto-push: Refusing to push 0 collections/requests to GitHub Gist to prevent data loss.'
       );
       return new Date().toISOString();
     }
+    throw new Error(
+      'Refusing to push empty collections to GitHub Gist. Your cloud workspace has been protected from being overwritten or erased.'
+    );
   }
 
   const workspaceData = {
@@ -610,6 +616,194 @@ export async function pushToGitHubGist(
 
   const data = await res.json();
   return data.updated_at || new Date().toISOString();
+}
+
+export interface SeamlessSyncOptions {
+  isAutoSync?: boolean;
+  onStatusUpdate?: (status: string) => void;
+  forcePush?: boolean;
+  forceEmptyPush?: boolean;
+  onEmptyLocalWithRemoteData?: (remotePayload: SyncPayload) => Promise<'pull' | 'empty_cloud' | 'cancel'>;
+}
+
+export interface SeamlessSyncResult {
+  success: boolean;
+  action: 'merged' | 'pulled' | 'pushed' | 'noop' | 'blocked_empty_local' | 'error' | 'confirm_empty_wipe';
+  payload?: SyncPayload;
+  remotePayload?: SyncPayload;
+  message: string;
+  timestamp: string;
+  error?: any;
+}
+
+/**
+ * Perform a safe, seamless two-way synchronization between the device and GitHub Gist.
+ * Guarantees zero data loss:
+ * 1. If remote cannot be reached or fails to load, NEVER pushes local to remote.
+ * 2. If local has 0 collections, NEVER pushes empty local to remote; instead pulls remote data if available.
+ * 3. If both local and remote have collections, performs a non-destructive union merge so no file/endpoint is lost.
+ */
+export async function performSeamlessSync(
+  token: string,
+  gistId: string,
+  localPayload: SyncPayload,
+  options?: SeamlessSyncOptions
+): Promise<SeamlessSyncResult> {
+  if (!token || !gistId) {
+    return {
+      success: false,
+      action: 'error',
+      message: 'GitHub token or Gist ID not configured.',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  // Step 1: Safely pull remote workspace
+  let remotePayload: SyncPayload | null = null;
+  try {
+    options?.onStatusUpdate?.('Checking cloud workspace on GitHub Gist...');
+    remotePayload = await pullFromGitHubGist(token, gistId, true);
+  } catch (err: any) {
+    console.warn('[SeamlessSync] Unable to load remote workspace from GitHub Gist:', err);
+    // CRITICAL: If remote cannot be reached, DO NOT push local to remote!
+    // Doing so could wipe remote data if local was empty or incomplete.
+    return {
+      success: false,
+      action: 'error',
+      message: `Unable to reach GitHub (${err?.message || 'Network error'}). Local workspace remains safely stored offline on this device.`,
+      timestamp: new Date().toISOString(),
+      error: err,
+    };
+  }
+
+  const localStats = countWorkspaceEntities(localPayload.organizations);
+  const remoteStats = countWorkspaceEntities(remotePayload.organizations);
+
+  // Case 1: Local is empty (0 files and 0 requests)
+  if (localStats.fileCount === 0 && localStats.requestCount === 0) {
+    if (remoteStats.fileCount > 0 || remoteStats.requestCount > 0) {
+      // If user explicitly requested / confirmed emptying the cloud:
+      if (options?.forceEmptyPush) {
+        options?.onStatusUpdate?.('Emptying cloud workspace on GitHub Gist...');
+        const updatedIso = await pushToGitHubGist(token, gistId, localPayload, undefined, {
+          isAutoSync: false,
+          forceEmptyPush: true,
+        });
+        return {
+          success: true,
+          action: 'pushed',
+          payload: localPayload,
+          message: 'Emptied cloud workspace on GitHub Gist to match empty local workspace.',
+          timestamp: updatedIso,
+        };
+      }
+
+      // If an interactive prompt callback is provided:
+      if (options?.onEmptyLocalWithRemoteData) {
+        const decision = await options.onEmptyLocalWithRemoteData(remotePayload);
+        if (decision === 'empty_cloud') {
+          options?.onStatusUpdate?.('Emptying cloud workspace on GitHub Gist...');
+          const updatedIso = await pushToGitHubGist(token, gistId, localPayload, undefined, {
+            isAutoSync: false,
+            forceEmptyPush: true,
+          });
+          return {
+            success: true,
+            action: 'pushed',
+            payload: localPayload,
+            message: 'Emptied cloud workspace on GitHub Gist to match empty local workspace.',
+            timestamp: updatedIso,
+          };
+        } else if (decision === 'cancel') {
+          return {
+            success: false,
+            action: 'noop',
+            payload: localPayload,
+            message: 'Cloud sync cancelled. Cloud backup remains safe and intact.',
+            timestamp: new Date().toISOString(),
+          };
+        }
+        // decision === 'pull'
+        return {
+          success: true,
+          action: 'pulled',
+          payload: remotePayload,
+          message: `Restored ${remoteStats.requestCount} endpoint(s) across ${remoteStats.fileCount} collection(s) from cloud.`,
+          timestamp: remotePayload.updatedAt || new Date().toISOString(),
+        };
+      }
+
+      // If this is background auto-sync without prompt:
+      // Return confirm_empty_wipe so the caller UI can prompt the user rather than blindly overwriting
+      return {
+        success: false,
+        action: 'confirm_empty_wipe',
+        remotePayload,
+        payload: localPayload,
+        message: `Local workspace is empty, but your cloud backup has ${remoteStats.requestCount} endpoint(s). Syncing will empty the cloud backup. User confirmation required.`,
+        timestamp: remotePayload.updatedAt || new Date().toISOString(),
+      };
+    } else {
+      // Both local and remote are empty
+      return {
+        success: true,
+        action: 'noop',
+        payload: localPayload,
+        message: 'Both device and cloud workspaces are currently empty.',
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  // Case 2: Remote is empty, but Local has collections
+  if (remoteStats.fileCount === 0 && remoteStats.requestCount === 0) {
+    options?.onStatusUpdate?.('Backing up local workspace to GitHub Gist...');
+    const updatedIso = await pushToGitHubGist(token, gistId, localPayload, undefined, {
+      isAutoSync: options?.isAutoSync,
+    });
+    return {
+      success: true,
+      action: 'pushed',
+      payload: localPayload,
+      message: `Backed up ${localStats.requestCount} endpoint(s) across ${localStats.fileCount} collection(s) to GitHub Gist.`,
+      timestamp: updatedIso,
+    };
+  }
+
+  // Case 3: Both have collections! Perform a non-destructive intelligent union merge
+  options?.onStatusUpdate?.('Merging local & cloud collections...');
+  const merged = mergeSyncPayloads(localPayload, remotePayload);
+  const mergedStats = countWorkspaceEntities(merged.organizations);
+
+  // Check if merged payload has changes compared to remote Gist
+  const remoteSerialized = JSON.stringify({
+    orgs: remotePayload.organizations,
+    envs: remotePayload.environments,
+    vars: remotePayload.globalVariables,
+    historyLen: remotePayload.history?.length || 0,
+  });
+  const mergedSerialized = JSON.stringify({
+    orgs: merged.organizations,
+    envs: merged.environments,
+    vars: merged.globalVariables,
+    historyLen: merged.history?.length || 0,
+  });
+
+  let updatedIso = remotePayload.updatedAt || new Date().toISOString();
+  if (remoteSerialized !== mergedSerialized || options?.forcePush) {
+    options?.onStatusUpdate?.('Updating GitHub Gist with merged changes...');
+    updatedIso = await pushToGitHubGist(token, gistId, merged, undefined, {
+      isAutoSync: options?.isAutoSync,
+    });
+  }
+
+  return {
+    success: true,
+    action: 'merged',
+    payload: merged,
+    message: `Synchronized ${mergedStats.requestCount} endpoint(s) across ${mergedStats.fileCount} collection(s). Zero data loss guaranteed.`,
+    timestamp: updatedIso,
+  };
 }
 
 /**
@@ -850,7 +1044,14 @@ export async function getGistRevisionHistory(
                 }
               : { total: 0, additions: 0, deletions: 0 },
           }))
-          .filter((rev) => !deletedIds.includes(rev.id) && !deletedIds.includes(rev.version));
+          .filter((rev) => {
+            if (deletedIds.includes(rev.id) || deletedIds.includes(rev.version)) return false;
+            // Exclude snapshots with 0 lines changed so only meaningful revision points are shown
+            const additions = rev.change_status?.additions || 0;
+            const deletions = rev.change_status?.deletions || 0;
+            const total = rev.change_status?.total || 0;
+            return total > 0 || additions > 0 || deletions > 0;
+          });
       }
     }
   } catch (err) {

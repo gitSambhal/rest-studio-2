@@ -36,8 +36,10 @@ import {
   getSavedGitHubUser,
   pullFromGitHubGist,
   pushToGitHubGist,
+  performSeamlessSync,
   countWorkspaceEntities,
   GitHubUser,
+  SyncPayload,
 } from './services/githubSyncService';
 import { SettingsTabId } from './components/SettingsModal';
 
@@ -254,6 +256,9 @@ export default function App() {
     onConfirm: () => {},
   });
 
+  // Empty workspace sync confirmation state (asks user when local is cleared before wiping cloud)
+  const [emptySyncPromptPayload, setEmptySyncPromptPayload] = useState<SyncPayload | null>(null);
+
   // 8. Global Keyboard Shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -298,39 +303,211 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [activeRequest, activeTabMode, handleExecuteRequest]);
 
-  // Sync synchronization tracking refs
+  // Sync synchronization tracking refs and status
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'paused' | 'offline' | 'error'>(() => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return 'offline';
+    const auto = getSavedAutoSync();
+    const token = getSavedGitHubToken();
+    if (!token) return 'idle';
+    return auto ? 'synced' : 'paused';
+  });
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+
   const isInitialSyncCompletedRef = useRef<boolean>(!getSavedAutoSync());
   const isApplyingSyncedDataRef = useRef<boolean>(false);
   const lastSyncedHashRef = useRef<string>('');
 
-  // Auto-sync on load if enabled
+  // Online / offline network event listener
+  useEffect(() => {
+    const handleOnline = () => {
+      setSyncStatus((prev) => (prev === 'offline' ? (getSavedAutoSync() ? 'synced' : 'paused') : prev));
+    };
+    const handleOffline = () => {
+      setSyncStatus('offline');
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Safe manual/automatic seamless sync trigger with zero data loss guarantee
+  const handleTriggerSeamlessSync = async () => {
+    const token = getSavedGitHubToken();
+    const gistId = getSavedGistId();
+    if (!token || !gistId) {
+      setIsGitHubSyncOpen(true);
+      return;
+    }
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setSyncStatus('offline');
+      showToast('error', 'Network Offline', 'Cannot sync with GitHub while offline.');
+      return;
+    }
+
+    setSyncStatus('syncing');
+    try {
+      const localPayload: SyncPayload = {
+        version: '1.0.0',
+        updatedAt: new Date().toISOString(),
+        organizations,
+        activeOrgId,
+        activeProjectId,
+        environments: activeProject?.environments || [],
+        history,
+        globalVariables,
+      };
+
+      const result = await performSeamlessSync(token, gistId, localPayload);
+
+      if (result.action === 'confirm_empty_wipe' && result.remotePayload) {
+        setSyncStatus('paused');
+        setEmptySyncPromptPayload(result.remotePayload);
+        return;
+      }
+
+      if (result.success) {
+        if (result.payload && (result.action === 'pulled' || result.action === 'merged')) {
+          isApplyingSyncedDataRef.current = true;
+          handleApplySyncedData(result.payload, setHistory);
+          lastSyncedHashRef.current = JSON.stringify({
+            orgs: result.payload.organizations,
+            envs: result.payload.environments || [],
+            vars: result.payload.globalVariables || [],
+          });
+          setTimeout(() => {
+            isApplyingSyncedDataRef.current = false;
+          }, 1200);
+        }
+        setSyncStatus('synced');
+        setLastSyncTime(new Date(result.timestamp).toLocaleTimeString());
+        showToast('success', 'Cloud Synchronized', result.message);
+      } else {
+        setSyncStatus('error');
+        showToast('error', 'Sync Warning', result.message);
+      }
+    } catch (err: any) {
+      setSyncStatus('error');
+      showToast('error', 'Sync Failed', err?.message || 'Failed to sync with GitHub Gist');
+    }
+  };
+
+  // Handlers for empty local workspace sync resolution
+  const handleRestoreFromCloud = () => {
+    if (!emptySyncPromptPayload) return;
+    const remote = emptySyncPromptPayload;
+    isApplyingSyncedDataRef.current = true;
+    handleApplySyncedData(remote, setHistory);
+    lastSyncedHashRef.current = JSON.stringify({
+      orgs: remote.organizations,
+      envs: remote.environments || [],
+      vars: remote.globalVariables || [],
+    });
+    setSyncStatus('synced');
+    setLastSyncTime(new Date().toLocaleTimeString());
+    setEmptySyncPromptPayload(null);
+    const count = countWorkspaceEntities(remote.organizations).requestCount;
+    showToast('success', 'Restored from Cloud', `Restored ${count} endpoint(s) from GitHub Gist to this device.`);
+    setTimeout(() => {
+      isApplyingSyncedDataRef.current = false;
+    }, 1200);
+  };
+
+  const handleConfirmEmptyCloud = async () => {
+    const token = getSavedGitHubToken();
+    const gistId = getSavedGistId();
+    if (!token || !gistId) return;
+
+    setEmptySyncPromptPayload(null);
+    setSyncStatus('syncing');
+    try {
+      const emptyPayload: SyncPayload = {
+        version: '1.0.0',
+        updatedAt: new Date().toISOString(),
+        organizations,
+        activeOrgId,
+        activeProjectId,
+        environments: activeProject?.environments || [],
+        history: [],
+        globalVariables: [],
+      };
+      const updatedIso = await pushToGitHubGist(token, gistId, emptyPayload, undefined, {
+        forceEmptyPush: true,
+      });
+      lastSyncedHashRef.current = JSON.stringify({
+        orgs: organizations,
+        envs: activeProject?.environments || [],
+        vars: globalVariables,
+      });
+      setSyncStatus('synced');
+      setLastSyncTime(new Date(updatedIso).toLocaleTimeString());
+      showToast('info', 'Cloud Workspace Cleared', 'Emptied cloud workspace on GitHub Gist to match local workspace.');
+    } catch (err: any) {
+      setSyncStatus('error');
+      showToast('error', 'Failed to Empty Cloud', err?.message || 'Could not empty cloud workspace.');
+    }
+  };
+
+  const handleCancelEmptySync = () => {
+    setEmptySyncPromptPayload(null);
+    setSyncStatus('paused');
+    showToast('info', 'Sync Cancelled', 'Remote cloud workspace was left untouched.');
+  };
+
+  // Safe initial seamless sync on load if auto-sync is enabled
   useEffect(() => {
     if (getSavedAutoSync()) {
       const token = getSavedGitHubToken();
       const gistId = getSavedGistId();
       if (token && gistId) {
-        pullFromGitHubGist(token, gistId)
-          .then((payload) => {
-            if (payload && payload.organizations && Array.isArray(payload.organizations)) {
-              const stats = countWorkspaceEntities(payload.organizations);
-              // Only apply if cloud data is valid and non-empty
-              if (stats.requestCount > 0 || stats.fileCount > 0) {
+        setSyncStatus('syncing');
+        const localPayload: SyncPayload = {
+          version: '1.0.0',
+          updatedAt: new Date().toISOString(),
+          organizations,
+          activeOrgId,
+          activeProjectId,
+          environments: activeProject?.environments || [],
+          history,
+          globalVariables,
+        };
+
+        performSeamlessSync(token, gistId, localPayload)
+          .then((result) => {
+            if (result.action === 'confirm_empty_wipe' && result.remotePayload) {
+              setSyncStatus('paused');
+              setEmptySyncPromptPayload(result.remotePayload);
+              return;
+            }
+
+            if (result.success) {
+              if (result.payload && (result.action === 'pulled' || result.action === 'merged')) {
                 isApplyingSyncedDataRef.current = true;
-                handleApplySyncedData(payload, setHistory);
+                handleApplySyncedData(result.payload, setHistory);
                 lastSyncedHashRef.current = JSON.stringify({
-                  orgs: payload.organizations,
-                  envs: payload.environments || [],
-                  vars: payload.globalVariables || [],
+                  orgs: result.payload.organizations,
+                  envs: result.payload.environments || [],
+                  vars: result.payload.globalVariables || [],
                 });
-                showToast('success', 'Auto-Synced', 'Loaded cloud workspace data from GitHub Gist.');
                 setTimeout(() => {
                   isApplyingSyncedDataRef.current = false;
                 }, 1200);
               }
+              setSyncStatus('synced');
+              setLastSyncTime(new Date(result.timestamp).toLocaleTimeString());
+              if (result.action === 'pulled' || result.action === 'merged') {
+                showToast('success', 'Workspace Synced', result.message);
+              }
+            } else {
+              setSyncStatus('error');
             }
           })
           .catch((err) => {
             console.error('Auto-sync on load failed:', err);
+            setSyncStatus('error');
           })
           .finally(() => {
             isInitialSyncCompletedRef.current = true;
@@ -356,7 +533,7 @@ export default function App() {
     // CRITICAL PROTECTION: Never auto-push empty collections to GitHub Gist!
     const stats = countWorkspaceEntities(organizations);
     if (stats.requestCount === 0 && stats.fileCount === 0) {
-      console.warn('[Auto-Sync Guard] Prevented auto-pushing empty collections to GitHub Gist.');
+      setSyncStatus((prev) => (prev !== 'paused' ? 'paused' : prev));
       return;
     }
 
@@ -375,6 +552,7 @@ export default function App() {
         const freshStats = countWorkspaceEntities(organizations);
         if (freshStats.requestCount === 0 && freshStats.fileCount === 0) return;
 
+        setSyncStatus('syncing');
         await pushToGitHubGist(
           token,
           gistId,
@@ -392,8 +570,11 @@ export default function App() {
           { isAutoSync: true }
         );
         lastSyncedHashRef.current = currentHash;
+        setSyncStatus('synced');
+        setLastSyncTime(new Date().toLocaleTimeString());
       } catch (err) {
         console.error('Background auto-push failed:', err);
+        setSyncStatus('error');
       }
     }, 3000);
 
@@ -1125,6 +1306,9 @@ export default function App() {
           onOpenApiDocs={() => setIsApiDocsOpen(true)}
           isGitHubSynced={Boolean(githubUser)}
           githubUser={githubUser}
+          syncStatus={syncStatus}
+          onTriggerSync={handleTriggerSeamlessSync}
+          lastSyncTime={lastSyncTime}
           historyCount={history.length}
           isDarkMode={isDarkMode}
           onToggleDarkMode={handleToggleDarkMode}
@@ -1345,6 +1529,12 @@ export default function App() {
         history={history}
         setHistory={setHistory}
         handleApplySyncedData={handleApplySyncedData}
+        syncStatus={syncStatus}
+        onTriggerSeamlessSync={handleTriggerSeamlessSync}
+        emptySyncPromptPayload={emptySyncPromptPayload}
+        onRestoreFromCloud={handleRestoreFromCloud}
+        onConfirmEmptyCloud={handleConfirmEmptyCloud}
+        onCancelEmptySync={handleCancelEmptySync}
         isBatchWorkspaceModalOpen={isBatchWorkspaceModalOpen}
         setIsBatchWorkspaceModalOpen={setIsBatchWorkspaceModalOpen}
         scratchpadRequests={scratchpadRequests}

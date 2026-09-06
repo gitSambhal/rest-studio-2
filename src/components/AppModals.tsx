@@ -21,6 +21,7 @@ import { PromptModal } from './PromptModal';
 import { CommandPaletteModal } from './CommandPaletteModal';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { ApiDocumentationModal } from './ApiDocumentationModal';
+import { EmptyWorkspaceSyncModal } from './EmptyWorkspaceSyncModal';
 import { GitHubUser, SyncPayload } from '../services/githubSyncService';
 import { UIThemeId } from '../utils/themeManager';
 import { parseRestFileContent } from '../utils/restParser';
@@ -106,6 +107,12 @@ export interface AppModalsProps {
   history: RequestHistoryItem[];
   setHistory: React.Dispatch<React.SetStateAction<RequestHistoryItem[]>>;
   handleApplySyncedData: (payload: SyncPayload, setHistory?: (history: RequestHistoryItem[]) => void) => void;
+  syncStatus?: 'idle' | 'syncing' | 'synced' | 'paused' | 'offline' | 'error';
+  onTriggerSeamlessSync?: () => Promise<void>;
+  emptySyncPromptPayload?: SyncPayload | null;
+  onRestoreFromCloud?: () => void;
+  onConfirmEmptyCloud?: () => void;
+  onCancelEmptySync?: () => void;
 
   // Batch Workspace
   isBatchWorkspaceModalOpen: boolean;
@@ -193,6 +200,8 @@ export const AppModals: React.FC<AppModalsProps> = ({
   history,
   setHistory,
   handleApplySyncedData,
+  syncStatus,
+  onTriggerSeamlessSync,
   isBatchWorkspaceModalOpen,
   setIsBatchWorkspaceModalOpen,
   scratchpadRequests,
@@ -217,6 +226,10 @@ export const AppModals: React.FC<AppModalsProps> = ({
   isApiDocsOpen,
   setIsApiDocsOpen,
   activeRequestId,
+  emptySyncPromptPayload,
+  onRestoreFromCloud,
+  onConfirmEmptyCloud,
+  onCancelEmptySync,
 }) => {
   return (
     <AnimatePresence>
@@ -376,6 +389,8 @@ export const AppModals: React.FC<AppModalsProps> = ({
           showToast={(msg, type) => showToast(type, msg)}
           isDarkMode={isDarkMode}
           onUserChange={(u) => setGithubUser(u)}
+          syncStatus={syncStatus}
+          onTriggerSeamlessSync={onTriggerSeamlessSync}
         />
       )}
 
@@ -486,6 +501,18 @@ export const AppModals: React.FC<AppModalsProps> = ({
           activeRequestId={activeRequestId}
           onSelectRequest={handleOpenRequestInTab}
           isDarkMode={isDarkMode}
+        />
+      )}
+
+      {/* Empty Workspace Cloud Sync Resolution Modal */}
+      {emptySyncPromptPayload && onRestoreFromCloud && onConfirmEmptyCloud && onCancelEmptySync && (
+        <EmptyWorkspaceSyncModal
+          isOpen={Boolean(emptySyncPromptPayload)}
+          remotePayload={emptySyncPromptPayload}
+          isDarkMode={isDarkMode}
+          onRestoreFromCloud={onRestoreFromCloud}
+          onConfirmEmptyCloud={onConfirmEmptyCloud}
+          onCancel={onCancelEmptySync}
         />
       )}
     </AnimatePresence>

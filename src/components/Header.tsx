@@ -34,6 +34,8 @@ import {
   Search,
   Keyboard,
   BookOpen,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -69,6 +71,13 @@ interface HeaderProps {
   isGitHubSynced?: boolean;
   githubUser?: GitHubUser | null;
   historyCount: number;
+
+  syncStatus?: 'idle' | 'syncing' | 'synced' | 'paused' | 'offline' | 'error';
+  syncLastTime?: string | null;
+  lastSyncTime?: string | null;
+  syncErrorMessage?: string | null;
+  onRetrySync?: () => void;
+  onTriggerSync?: () => void;
 
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
@@ -106,11 +115,18 @@ export const Header: React.FC<HeaderProps> = ({
   isGitHubSynced = false,
   githubUser: propGithubUser,
   historyCount,
+  syncStatus = 'idle',
+  syncLastTime,
+  lastSyncTime,
+  syncErrorMessage,
+  onRetrySync,
+  onTriggerSync,
   isDarkMode,
   onToggleDarkMode,
   currentTheme = 'dark',
   onSelectTheme,
 }) => {
+  const effectiveSyncTime = lastSyncTime || syncLastTime;
 
   const activeEnv = activeProject?.environments?.find((e) => e.id === activeProject?.activeEnvId);
 
@@ -693,6 +709,68 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
+          {/* Cloud Sync Status Indicator */}
+          {onOpenGitHubSync && (
+            <button
+              type="button"
+              onClick={onOpenGitHubSync}
+              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-xs shrink-0 ${
+                syncStatus === 'syncing'
+                  ? 'bg-sky-500/15 border-sky-500/40 text-sky-400 ring-1 ring-sky-500/30'
+                  : syncStatus === 'synced'
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25'
+                  : syncStatus === 'paused' || syncStatus === 'offline' || syncStatus === 'error'
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-400 hover:bg-amber-500/25'
+                  : isGitHubSynced
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+                  : isDarkMode
+                  ? 'bg-slate-800/80 hover:bg-slate-700 border-slate-700/80 text-slate-300 hover:text-slate-100'
+                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700 hover:text-slate-900'
+              }`}
+              title={
+                syncStatus === 'syncing'
+                  ? 'Synchronizing workspace with GitHub Gist...'
+                  : syncStatus === 'synced'
+                  ? `Cloud Synced • Zero data loss protection active${effectiveSyncTime ? ` • Last synced at ${effectiveSyncTime}` : ''}`
+                  : syncStatus === 'paused'
+                  ? syncErrorMessage || 'Local workspace is empty while cloud backup has data. Click to restore collections or confirm emptying cloud.'
+                  : syncStatus === 'offline'
+                  ? 'Offline mode: Changes saved safely to local storage. Will auto-sync when online.'
+                  : isGitHubSynced
+                  ? 'GitHub Cloud Sync Active • Click to manage'
+                  : 'Connect GitHub Cloud Sync'
+              }
+            >
+              {syncStatus === 'syncing' ? (
+                <RefreshCw className="w-3.5 h-3.5 text-sky-400 animate-spin shrink-0" />
+              ) : syncStatus === 'synced' ? (
+                <Cloud className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              ) : syncStatus === 'paused' || syncStatus === 'offline' || syncStatus === 'error' ? (
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              ) : (
+                <Cloud className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              )}
+
+              <span className="hidden xl:inline">
+                {syncStatus === 'syncing'
+                  ? 'Syncing...'
+                  : syncStatus === 'synced'
+                  ? 'Cloud Synced'
+                  : syncStatus === 'paused'
+                  ? 'Sync Paused'
+                  : syncStatus === 'offline'
+                  ? 'Offline'
+                  : isGitHubSynced
+                  ? 'Cloud Synced'
+                  : 'Cloud Sync'}
+              </span>
+
+              {syncStatus === 'synced' && (
+                <Check className="w-3 h-3 text-emerald-400 shrink-0 hidden 2xl:inline" />
+              )}
+            </button>
+          )}
+
           {/* 4. Tools Menu Dropdown (Gist Sync, Batch Manager, Theme, Shortcuts) */}
           <div className="relative shrink-0" ref={toolsRef}>
             <button
@@ -956,6 +1034,51 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Compact Responsive Toolbar + Overflow Menu on Constrained Screens (< XL) */}
         <div className="flex xl:hidden items-center space-x-1 shrink-0">
+          {/* Mobile Cloud Sync Status Button */}
+          {onOpenGitHubSync && (
+            <button
+              type="button"
+              onClick={onOpenGitHubSync}
+              className={`flex items-center justify-center p-1.5 rounded-lg border transition-all cursor-pointer shadow-sm shrink-0 ${
+                syncStatus === 'syncing'
+                  ? 'bg-sky-500/15 border-sky-500/40 text-sky-400'
+                  : syncStatus === 'synced'
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                  : syncStatus === 'paused' || syncStatus === 'offline' || syncStatus === 'error'
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
+                  : isGitHubSynced
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  : isDarkMode
+                  ? 'bg-slate-800/90 hover:bg-slate-700 border-slate-700 text-slate-300'
+                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+              }`}
+              title={
+                syncStatus === 'syncing'
+                  ? 'Syncing with GitHub...'
+                  : syncStatus === 'synced'
+                  ? `Cloud Synced • Zero data loss protection active${syncLastTime ? ` • Last synced at ${syncLastTime}` : ''}`
+                  : syncStatus === 'paused'
+                  ? syncErrorMessage || 'Sync Paused: Local workspace protected'
+                  : syncStatus === 'offline'
+                  ? 'Offline: Changes saved locally'
+                  : isGitHubSynced
+                  ? 'Cloud Synced'
+                  : 'Connect Cloud Sync'
+              }
+              aria-label="Cloud sync status"
+            >
+              {syncStatus === 'syncing' ? (
+                <RefreshCw className="w-4 h-4 text-sky-400 animate-spin" />
+              ) : syncStatus === 'synced' ? (
+                <Cloud className="w-4 h-4 text-emerald-400" />
+              ) : syncStatus === 'paused' || syncStatus === 'offline' || syncStatus === 'error' ? (
+                <AlertTriangle className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Cloud className="w-4 h-4 text-slate-400" />
+              )}
+            </button>
+          )}
+
           {/* Dedicated Hamburger / Overflow Menu Button */}
           <div className="relative shrink-0" ref={overflowRef}>
             <button

@@ -38,6 +38,7 @@ import {
   createFreshWorkspaceGist,
   pushToGitHubGist,
   pullFromGitHubGist,
+  performSeamlessSync,
   getGistRevisionHistory,
   restoreGistRevision,
   deleteSnapshotRevision,
@@ -46,13 +47,12 @@ import {
   getSavedGitHubToken,
   getSavedGistId,
   getSavedGitHubUser,
-  getSavedAutoSync,
-  setAutoSyncSetting,
   countWorkspaceEntities,
   mergeSyncPayloads,
   peekRemoteWorkspace,
 } from '../services/githubSyncService';
 import { Organization, RequestHistoryItem, Environment, EnvVariable } from '../types';
+import { EmptyWorkspaceSyncModal } from './EmptyWorkspaceSyncModal';
 
 interface GitHubSyncModalProps {
   isOpen: boolean;
@@ -67,6 +67,8 @@ interface GitHubSyncModalProps {
   showToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
   isDarkMode?: boolean;
   onUserChange?: (user: GitHubUser | null) => void;
+  syncStatus?: 'idle' | 'syncing' | 'synced' | 'paused' | 'offline' | 'error';
+  onTriggerSeamlessSync?: () => Promise<void>;
 }
 
 interface CloudComparisonState {
@@ -100,13 +102,14 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   showToast,
   isDarkMode = true,
   onUserChange,
+  syncStatus = 'idle',
+  onTriggerSeamlessSync,
 }) => {
   const [activeTab, setActiveTab] = useState<'sync' | 'history' | 'guide'>('sync');
   const [tokenInput, setTokenInput] = useState('');
   const [user, setUser] = useState<GitHubUser | null>(() => getSavedGitHubUser());
   const [token, setToken] = useState<string | null>(() => getSavedGitHubToken());
   const [gistId, setGistId] = useState<string | null>(() => getSavedGistId());
-  const [autoSync, setAutoSync] = useState<boolean>(() => getSavedAutoSync());
 
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -118,6 +121,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
 
   // Cloud detection & conflict resolution state
   const [detectedCloudPayload, setDetectedCloudPayload] = useState<CloudComparisonState | null>(null);
+  const [emptySyncConflictPayload, setEmptySyncConflictPayload] = useState<SyncPayload | null>(null);
 
   // In-app confirmation dialog state to replace iframe-incompatible window.confirm
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -255,18 +259,6 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     showToast('Disconnected from GitHub Sync', 'info');
   };
 
-  const handleToggleAutoSync = () => {
-    const next = !autoSync;
-    setAutoSync(next);
-    setAutoSyncSetting(next);
-    showToast(
-      next
-        ? 'Auto-Sync enabled! Workspace will safely sync without overwriting remote data.'
-        : 'Auto-Sync disabled',
-      'info'
-    );
-  };
-
   const handleCreateFreshGist = async () => {
     const activeToken = token || getSavedGitHubToken();
     if (!activeToken) return;
@@ -376,6 +368,116 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     }
   };
 
+  const handleSeamlessSync = async () => {
+    if (onTriggerSeamlessSync) {
+      await onTriggerSeamlessSync();
+      return;
+    }
+
+    const activeToken = token || getSavedGitHubToken();
+    let activeGistId = gistId || getSavedGistId();
+
+    if (!activeToken) {
+      showToast('Please connect your GitHub account first', 'warning');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage('Checking cloud workspace on GitHub Gist...');
+
+    try {
+      if (!activeGistId) {
+        activeGistId = await findOrCreateWorkspaceGist(activeToken);
+        setGistId(activeGistId);
+        if (user) saveGitHubSession(activeToken, user, activeGistId);
+      }
+
+      const localPayload: SyncPayload = {
+        version: '1.0.0',
+        updatedAt: new Date().toISOString(),
+        organizations,
+        activeOrgId,
+        activeProjectId,
+        environments,
+        history,
+        globalVariables,
+      };
+
+      const result = await performSeamlessSync(activeToken, activeGistId, localPayload, {
+        onStatusUpdate: (msg) => setStatusMessage(msg),
+      });
+
+      if (result.action === 'confirm_empty_wipe' && result.remotePayload) {
+        setEmptySyncConflictPayload(result.remotePayload);
+        return;
+      }
+
+      if (result.success) {
+        if (result.payload && (result.action === 'pulled' || result.action === 'merged')) {
+          onApplySyncedData(result.payload);
+        }
+        setLastSyncTime(new Date(result.timestamp).toLocaleTimeString());
+        setDetectedCloudPayload(null);
+        showToast(result.message, 'success');
+        await fetchRevisions(activeToken, activeGistId);
+      } else {
+        showToast(result.message, 'error');
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Synchronization failed', 'error');
+    } finally {
+      setIsLoading(false);
+      setStatusMessage(null);
+    }
+  };
+
+  const handleRestoreFromEmptyConflict = () => {
+    if (!emptySyncConflictPayload) return;
+    onApplySyncedData(emptySyncConflictPayload);
+    setLastSyncTime(new Date().toLocaleTimeString());
+    showToast('Restored and loaded cloud workspace onto this device!', 'success');
+    setEmptySyncConflictPayload(null);
+    const activeToken = token || getSavedGitHubToken();
+    const activeGistId = gistId || getSavedGistId();
+    if (activeToken && activeGistId) {
+      fetchRevisions(activeToken, activeGistId);
+    }
+  };
+
+  const handleConfirmEmptyCloudFromConflict = async () => {
+    const activeToken = token || getSavedGitHubToken();
+    const activeGistId = gistId || getSavedGistId();
+    if (!activeToken || !activeGistId) return;
+
+    setEmptySyncConflictPayload(null);
+    setIsLoading(true);
+    setStatusMessage('Emptying cloud workspace on GitHub Gist...');
+    try {
+      const emptyPayload: SyncPayload = {
+        version: '1.0.0',
+        updatedAt: new Date().toISOString(),
+        organizations,
+        activeOrgId,
+        activeProjectId,
+        environments,
+        history: [],
+        globalVariables,
+      };
+      const updatedIso = await pushToGitHubGist(activeToken, activeGistId, emptyPayload, undefined, {
+        forceEmptyPush: true,
+      });
+      onApplySyncedData(emptyPayload);
+      setLastSyncTime(new Date(updatedIso).toLocaleTimeString());
+      showToast('Emptied cloud workspace on GitHub Gist to match this device.', 'info');
+      await fetchRevisions(activeToken, activeGistId);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to empty cloud workspace', 'error');
+    } finally {
+      setIsLoading(false);
+      setStatusMessage(null);
+    }
+  };
+
   const executePushToCloud = async (overrideToken?: string, overrideGistId?: string) => {
     const activeToken = overrideToken || token || getSavedGitHubToken();
     const activeGistId = overrideGistId || gistId || getSavedGistId();
@@ -383,6 +485,28 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     if (!activeToken || !activeGistId) {
       showToast('Cloud connection not ready. Please check GitHub settings.', 'error');
       return;
+    }
+
+    // Ask user when cleaned locally to sync with cloud that it will empty the cloud
+    const localEntities = countWorkspaceEntities(organizations);
+    if (localEntities.fileCount === 0 && localEntities.requestCount === 0) {
+      try {
+        setIsLoading(true);
+        setStatusMessage('Checking remote cloud collections...');
+        const remote = await pullFromGitHubGist(activeToken, activeGistId);
+        const remoteEntities = countWorkspaceEntities(remote.organizations);
+        if (remoteEntities.fileCount > 0 || remoteEntities.requestCount > 0) {
+          setIsLoading(false);
+          setStatusMessage(null);
+          setEmptySyncConflictPayload(remote);
+          return;
+        }
+      } catch {
+        // Fall through safely if remote cannot be inspected
+      } finally {
+        setIsLoading(false);
+        setStatusMessage(null);
+      }
     }
 
     setIsLoading(true);
@@ -879,9 +1003,9 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                   </div>
 
                   {/* Device Workspace Summary Status */}
-                  <div className="p-3 rounded-xl bg-slate-950/40 border border-slate-800 flex items-center justify-between text-xs">
-                    <div className="flex items-center space-x-2 text-slate-300">
-                      <HardDrive className="w-4 h-4 text-emerald-400" />
+                  <div className="p-4 rounded-xl bg-slate-950/40 border border-slate-800 flex items-center justify-between text-xs">
+                    <div className="flex items-center space-x-2.5 text-slate-300">
+                      <HardDrive className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span>
                         Device Workspace: <strong className="text-white">{currentLocalStats.requestCount} endpoints</strong> across{' '}
                         <strong className="text-white">{currentLocalStats.projectCount} projects</strong>
@@ -893,194 +1017,151 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                       </span>
                     )}
                   </div>
-
-                  {/* Smart Merge Option */}
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => handleSmartMerge()}
-                      disabled={isLoading}
-                      className="w-full p-4 rounded-xl bg-slate-950/40 hover:bg-slate-800/60 border border-slate-800 hover:border-indigo-500/40 text-left transition-all cursor-pointer group flex items-center justify-between"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
-                          <GitMerge className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
-                        </div>
-                        <div>
-                          <div className="font-bold text-xs text-slate-200">Smart Merge Cloud & Device Data</div>
-                          <p className="text-[11px] text-slate-400">
-                            Combines endpoints from your GitHub cloud backup and this device without losing anything.
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono text-indigo-400 font-semibold px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
-                        Smart Merge
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* Auto-Sync Banner */}
-                  <div className="p-4 rounded-xl bg-slate-950/40 border border-slate-800 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <Zap className={`w-5 h-5 ${autoSync ? 'text-emerald-400' : 'text-slate-500'}`} />
-                      <div>
-                        <div className="font-bold text-xs text-slate-200">Automatic Background Backup</div>
-                        <p className="text-[11px] text-slate-400">
-                          Automatically backs up your workspace to GitHub whenever you create or edit endpoints.
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleToggleAutoSync}
-                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                        autoSync ? 'bg-emerald-500' : 'bg-slate-800'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          autoSync ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  </div>
                 </div>
               )}
             </div>
           )}
 
           {/* TAB 2: SAVED VERSION SNAPSHOTS */}
-          {activeTab === 'history' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                    Saved Workspace Snapshots
-                  </h4>
-                  <p className="text-xs text-slate-400">Every cloud backup creates a saved point in time. You can restore any past version easily.</p>
-                </div>
+          {activeTab === 'history' && (() => {
+            const filteredRevisions = revisions.filter(
+              (rev) =>
+                (rev.change_status?.additions ?? 0) > 0 ||
+                (rev.change_status?.deletions ?? 0) > 0 ||
+                (rev.change_status?.total ?? 0) > 0
+            );
 
-                <div className="flex items-center space-x-2">
-                  {revisions.length > 0 && (
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                      Saved Workspace Snapshots
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Meaningful cloud backups and modification history. You can restore any past version easily.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    {filteredRevisions.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handlePromptDeleteAllRevisions}
+                        disabled={isLoadingRevisions || isLoading}
+                        className="px-2 py-1 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 rounded-lg transition-colors flex items-center space-x-1 cursor-pointer"
+                        title="Clear all saved snapshot history points"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Clear All</span>
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={handlePromptDeleteAllRevisions}
-                      disabled={isLoadingRevisions || isLoading}
-                      className="px-2 py-1 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 rounded-lg transition-colors flex items-center space-x-1 cursor-pointer"
-                      title="Clear all saved snapshot history points"
+                      onClick={() => fetchRevisions()}
+                      disabled={isLoadingRevisions}
+                      className="p-1.5 text-xs text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition-colors flex items-center space-x-1 cursor-pointer"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Clear All</span>
+                      <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRevisions ? 'animate-spin' : ''}`} />
+                      <span>Refresh List</span>
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => fetchRevisions()}
-                    disabled={isLoadingRevisions}
-                    className="p-1.5 text-xs text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition-colors flex items-center space-x-1 cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRevisions ? 'animate-spin' : ''}`} />
-                    <span>Refresh List</span>
-                  </button>
+                  </div>
                 </div>
-              </div>
 
-              {isLoadingRevisions ? (
-                <div className="p-8 text-center text-xs text-slate-400 space-y-2">
-                  <RefreshCw className="w-5 h-5 animate-spin mx-auto text-emerald-400" />
-                  <p>Loading saved snapshots from GitHub...</p>
-                </div>
-              ) : revisions.length === 0 ? (
-                <div className="p-8 text-center rounded-xl bg-slate-950/40 border border-slate-800 space-y-2">
-                  <Clock className="w-6 h-6 text-slate-600 mx-auto" />
-                  <p className="text-xs text-slate-400">No saved snapshots found yet.</p>
-                  <p className="text-[11px] text-slate-500">Back up your workspace to create your first saved snapshot point.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {revisions.map((rev, idx) => (
-                    <div
-                      key={rev.id}
-                      className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
-                        idx === 0
-                          ? 'bg-emerald-500/10 border-emerald-500/30'
-                          : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div
-                          className={`w-8 h-8 rounded-lg flex items-center justify-center font-mono text-[10px] font-bold ${
-                            idx === 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-emerald-400'
-                          }`}
-                        >
-                          v{revisions.length - idx}
+                {isLoadingRevisions ? (
+                  <div className="p-8 text-center text-xs text-slate-400 space-y-2">
+                    <RefreshCw className="w-5 h-5 animate-spin mx-auto text-emerald-400" />
+                    <p>Loading saved snapshots from GitHub...</p>
+                  </div>
+                ) : filteredRevisions.length === 0 ? (
+                  <div className="p-8 text-center rounded-xl bg-slate-950/40 border border-slate-800 space-y-2">
+                    <Clock className="w-6 h-6 text-slate-600 mx-auto" />
+                    <p className="text-xs text-slate-400">No snapshot history found yet.</p>
+                    <p className="text-[11px] text-slate-500">
+                      Modified endpoints and cloud backups will create snapshot history points automatically.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredRevisions.map((rev, idx) => (
+                      <div
+                        key={rev.id}
+                        className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
+                          idx === 0
+                            ? 'bg-emerald-500/10 border-emerald-500/30'
+                            : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center font-mono text-[10px] font-bold ${
+                              idx === 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-emerald-400'
+                            }`}
+                          >
+                            v{filteredRevisions.length - idx}
+                          </div>
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-semibold text-xs text-slate-200">
+                                Snapshot {rev.id.slice(0, 7)}
+                              </span>
+                              {idx === 0 && (
+                                <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded">
+                                  Latest Backup
+                                </span>
+                              )}
+                              {rev.change_status && (rev.change_status.additions > 0 || rev.change_status.deletions > 0) && (
+                                <span className="px-1.5 py-0.5 text-[9px] font-mono font-medium bg-slate-800/80 border border-slate-700/60 rounded flex items-center space-x-1">
+                                  {rev.change_status.additions > 0 && (
+                                    <span className="text-emerald-400">+{rev.change_status.additions}</span>
+                                  )}
+                                  {rev.change_status.deletions > 0 && (
+                                    <span className="text-rose-400">-{rev.change_status.deletions}</span>
+                                  )}
+                                  <span className="text-slate-400">lines</span>
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-400 flex items-center space-x-2">
+                              <span>Saved {new Date(rev.committed_at).toLocaleString()}</span>
+                              <span>• by {rev.user?.login || user?.login || 'you'}</span>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="font-semibold text-xs text-slate-200">
-                              Snapshot {rev.id.slice(0, 7)}
-                            </span>
-                            {idx === 0 && (
-                              <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded">
-                                Latest Backup
-                              </span>
-                            )}
-                            {rev.change_status && (rev.change_status.additions > 0 || rev.change_status.deletions > 0) ? (
-                              <span className="px-1.5 py-0.5 text-[9px] font-mono font-medium bg-slate-800/80 border border-slate-700/60 rounded flex items-center space-x-1">
-                                {rev.change_status.additions > 0 && (
-                                  <span className="text-emerald-400">+{rev.change_status.additions}</span>
-                                )}
-                                {rev.change_status.deletions > 0 && (
-                                  <span className="text-rose-400">-{rev.change_status.deletions}</span>
-                                )}
-                                <span className="text-slate-400">lines</span>
-                              </span>
+
+                        <div className="flex items-center space-x-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handlePromptRestoreRevision(rev)}
+                            disabled={restoringSha === rev.id || isLoading}
+                            className="px-3 py-1.5 text-xs font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg flex items-center space-x-1.5 transition-all cursor-pointer disabled:opacity-50"
+                            title={`Restore workspace to version ${rev.id.slice(0, 7)}`}
+                          >
+                            {restoringSha === rev.id ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                             ) : (
-                              <span className="px-1.5 py-0.5 text-[9px] font-mono font-medium bg-slate-800/80 text-slate-400 border border-slate-700/60 rounded">
-                                0 lines changed
-                              </span>
+                              <RotateCcw className="w-3.5 h-3.5" />
                             )}
-                          </div>
-                          <div className="text-[11px] text-slate-400 flex items-center space-x-2">
-                            <span>Saved {new Date(rev.committed_at).toLocaleString()}</span>
-                            <span>• by {rev.user?.login || user?.login || 'you'}</span>
-                          </div>
+                            <span>{restoringSha === rev.id ? 'Restoring...' : idx === 0 ? 'Re-apply Version' : 'Restore Version'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handlePromptDeleteRevision(rev)}
+                            disabled={isLoading}
+                            className="p-1.5 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-center justify-center transition-all cursor-pointer disabled:opacity-50"
+                            title={`Delete snapshot ${rev.id.slice(0, 7)}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
-
-                      <div className="flex items-center space-x-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handlePromptRestoreRevision(rev)}
-                          disabled={restoringSha === rev.id || isLoading}
-                          className="px-3 py-1.5 text-xs font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg flex items-center space-x-1.5 transition-all cursor-pointer disabled:opacity-50"
-                          title={`Restore workspace to version ${rev.id.slice(0, 7)}`}
-                        >
-                          {restoringSha === rev.id ? (
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <RotateCcw className="w-3.5 h-3.5" />
-                          )}
-                          <span>{restoringSha === rev.id ? 'Restoring...' : idx === 0 ? 'Re-apply Version' : 'Restore Version'}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handlePromptDeleteRevision(rev)}
-                          disabled={isLoading}
-                          className="p-1.5 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-center justify-center transition-all cursor-pointer disabled:opacity-50"
-                          title={`Delete snapshot ${rev.id.slice(0, 7)}`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* TAB 3: HOW IT WORKS GUIDE */}
           {activeTab === 'guide' && (
@@ -1197,6 +1278,15 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
             </motion.div>
           )}
         </AnimatePresence>
+        {/* Empty Workspace Cloud Sync Resolution Modal */}
+        <EmptyWorkspaceSyncModal
+          isOpen={Boolean(emptySyncConflictPayload)}
+          remotePayload={emptySyncConflictPayload}
+          isDarkMode={isDarkMode}
+          onRestoreFromCloud={handleRestoreFromEmptyConflict}
+          onConfirmEmptyCloud={handleConfirmEmptyCloudFromConflict}
+          onCancel={() => setEmptySyncConflictPayload(null)}
+        />
       </motion.div>
     </motion.div>
   );

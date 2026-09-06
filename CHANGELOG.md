@@ -2,6 +2,47 @@
 
 All notable changes to **RestStudio** are documented in this file.
 
+## [1.6.3] - 2026-09-06
+### Changed
+- **Streamlined Cloud Sync Interface**:
+  - Removed all redundant action cards and verbose banners from the Cloud Sync Control tab:
+    - Removed "Zero Data Loss Protection Active" banner.
+    - Removed "1-Click Seamless Cloud Sync" button.
+    - Removed "Smart Merge" action button.
+    - Removed "Backup to Cloud" action button.
+    - Removed "Automatic Cloud Sync" status card.
+  - The Cloud Sync view is now a clean, minimal status dashboard displaying connected account information and real-time device workspace statistics with automatic background synchronization.
+
+## [1.6.2] - 2026-09-06
+### Changed
+- **Zero-Configuration Automatic Cloud Sync**:
+  - Cloud synchronization is now fully automated whenever GitHub is connected with no manual toggle switches or cluttered settings required in the Cloud Sync Control interface.
+  - Replaced the toggle switch with an ambient "Always Active" status banner.
+- **Snapshot Version History Cleansing**:
+  - Filtered out all "0 lines changed" empty snapshots from the Saved Version Snapshots history list.
+  - Snapshot points now strictly display meaningful revisions that contain actual additions, deletions, or data modifications.
+
+## [1.6.1] - 2026-09-06
+### Added
+- **Interactive Resolution for Empty Local Workspace Cloud Sync**:
+  - Implemented `EmptyWorkspaceSyncModal` component prompting the user when an empty local workspace is synchronized to a cloud backup with existing collections.
+  - Added clear visual comparison between local device (0 collections/requests) and remote GitHub Gist cloud backup (request count, collection count, and last updated timestamp).
+  - Provided explicit action choices:
+    - **Restore Collections from Cloud (Recommended)**: Recovers all remote requests and collections back to the local device without losing any cloud endpoints.
+    - **Overwrite & Empty Cloud Backup (Destructive)**: Allows deliberately wiping cloud collections to match a cleared local device, guarded by typing `"EMPTY"` confirmation to prevent accidental data loss.
+    - **Cancel / Do Nothing**: Safely preserves both local and cloud states unchanged and pauses synchronization.
+  - Integrated resolution modal across all sync entry points: Header Cloud Sync button, GitHub Sync Modal (Push & Seamless Sync), and background auto-sync pause indicator.
+### Added
+- **Zero-Data-Loss GitHub Cloud Sync Engine**:
+  - Implemented `performSeamlessSync` service coordinating bidirectional cloud state resolution without data loss.
+  - Added strict safety guards preventing empty local workspaces (0 collections / 0 requests) from overwriting or wiping remote GitHub Gist cloud backups.
+  - Implemented automatic remote pull and restore when local storage is empty or uninitialized, instantly recovering cloud workspace collections.
+  - Implemented non-destructive recursive union merging combining local endpoints with remote cloud endpoints by ID, URL, and method.
+- **Enhanced Cloud Sync Status & Visual Indicators**:
+  - Added real-time Cloud Sync status indicator badge in the top navigation header with distinct states: `syncing` (animated spinner), `synced` (emerald check), `paused` (guarded status), `offline` (network indicator), and `error`.
+  - Added quick 1-click Seamless Sync action button in the GitHub Sync modal with zero data loss guarantee badge.
+  - Added offline and online network listeners to prevent spurious synchronization errors when the device is disconnected.
+
 ## [1.5.9] - 2026-09-06
 ### Fixed
 - **URL Port Stripping & Path Parameter Extraction**:
