@@ -713,7 +713,13 @@ export const Header: React.FC<HeaderProps> = ({
           {onOpenGitHubSync && (
             <button
               type="button"
-              onClick={onOpenGitHubSync}
+              onClick={() => {
+                if (syncStatus === 'paused' && onTriggerSync) {
+                  onTriggerSync();
+                } else {
+                  onOpenGitHubSync();
+                }
+              }}
               className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-xs shrink-0 ${
                 syncStatus === 'syncing'
                   ? 'bg-sky-500/15 border-sky-500/40 text-sky-400 ring-1 ring-sky-500/30'
@@ -1038,7 +1044,13 @@ export const Header: React.FC<HeaderProps> = ({
           {onOpenGitHubSync && (
             <button
               type="button"
-              onClick={onOpenGitHubSync}
+              onClick={() => {
+                if (syncStatus === 'paused' && onTriggerSync) {
+                  onTriggerSync();
+                } else {
+                  onOpenGitHubSync();
+                }
+              }}
               className={`flex items-center justify-center p-1.5 rounded-lg border transition-all cursor-pointer shadow-sm shrink-0 ${
                 syncStatus === 'syncing'
                   ? 'bg-sky-500/15 border-sky-500/40 text-sky-400'

@@ -1017,6 +1017,65 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                       </span>
                     )}
                   </div>
+
+                  {/* Empty Local Workspace Resolution Banner */}
+                  {currentLocalStats.requestCount === 0 && (
+                    <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-3">
+                      <div className="flex items-center space-x-2 text-amber-300 font-bold text-xs">
+                        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>Local Workspace is Empty</span>
+                      </div>
+                      <p className="text-xs text-slate-300">
+                        Your device workspace currently has no endpoints. You can restore your cloud backup onto this device or confirm emptying your cloud workspace.
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleSmartMerge()}
+                          disabled={isLoading}
+                          className="px-3 py-1.5 bg-emerald-500 text-slate-950 font-bold text-xs rounded-lg hover:bg-emerald-400 transition-colors cursor-pointer flex items-center space-x-1.5 shadow-sm"
+                        >
+                          <CloudDownload className="w-3.5 h-3.5" />
+                          <span>Restore from Cloud</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const activeToken = token || getSavedGitHubToken();
+                            const activeGistId = gistId || getSavedGistId();
+                            if (!activeToken || !activeGistId) return;
+                            setIsLoading(true);
+                            try {
+                              const emptyPayload: SyncPayload = {
+                                version: '1.0.0',
+                                updatedAt: new Date().toISOString(),
+                                organizations: [],
+                                activeOrgId: '',
+                                activeProjectId: '',
+                                environments: [],
+                                history: [],
+                              };
+                              const updatedIso = await pushToGitHubGist(activeToken, activeGistId, emptyPayload, undefined, {
+                                forceEmptyPush: true,
+                              });
+                              setLastSyncTime(new Date(updatedIso).toLocaleTimeString());
+                              showToast('Cloud workspace emptied successfully.', 'info');
+                              await fetchRevisions(activeToken, activeGistId);
+                            } catch (e: any) {
+                              showToast(e.message || 'Failed to empty cloud', 'error');
+                            } finally {
+                              setIsLoading(false);
+                            }
+                          }}
+                          disabled={isLoading}
+                          className="px-3 py-1.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center space-x-1.5"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Empty Cloud Backup</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

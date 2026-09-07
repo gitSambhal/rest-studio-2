@@ -35,6 +35,7 @@ import {
   getSavedAutoSync,
   getSavedGitHubUser,
   pullFromGitHubGist,
+  peekRemoteWorkspace,
   pushToGitHubGist,
   performSeamlessSync,
   countWorkspaceEntities,
@@ -530,10 +531,24 @@ export default function App() {
     const gistId = getSavedGistId();
     if (!token || !gistId) return;
 
-    // CRITICAL PROTECTION: Never auto-push empty collections to GitHub Gist!
+    // CRITICAL PROTECTION: If local workspace is emptied, prompt user to resolve sync
     const stats = countWorkspaceEntities(organizations);
     if (stats.requestCount === 0 && stats.fileCount === 0) {
-      setSyncStatus((prev) => (prev !== 'paused' ? 'paused' : prev));
+      peekRemoteWorkspace(token, gistId)
+        .then((remote) => {
+          if (remote) {
+            const remoteStats = countWorkspaceEntities(remote.organizations);
+            if (remoteStats.requestCount > 0 || remoteStats.fileCount > 0) {
+              setSyncStatus('paused');
+              setEmptySyncPromptPayload(remote);
+              return;
+            }
+          }
+          setSyncStatus('synced');
+        })
+        .catch(() => {
+          setSyncStatus('paused');
+        });
       return;
     }
 

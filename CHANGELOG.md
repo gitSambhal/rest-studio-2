@@ -2,6 +2,13 @@
 
 All notable changes to **RestStudio** are documented in this file.
 
+## [1.6.4] - 2026-09-06
+### Fixed
+- **Proactive Empty Local Workspace Resolution**:
+  - Whenever the local workspace is cleared of all endpoints, the system automatically checks the remote cloud backup and immediately presents an interactive resolution prompt (*"Empty Cloud Backup"* or *"Restore from Cloud"*).
+  - Clicking the **"Sync Paused"** badge in the Header instantly triggers the interactive sync resolution modal so users never get stuck in a paused state.
+  - Added direct 1-click **Restore from Cloud** and **Empty Cloud Backup** resolution options inside the GitHub Sync modal when local endpoints are 0.
+
 ## [1.6.3] - 2026-09-06
 ### Changed
 - **Streamlined Cloud Sync Interface**:
